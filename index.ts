@@ -1,23 +1,26 @@
+import { runShader } from "./lib";
+
 const NUM_RAYS = 20000;
 const NUM_TRIANGLES = 3000;
 const NUM_INTERSECTIONS = 20000;
 
 // 6 floats (x, y, z, dx, dy, dz).
 const RAY_BUFFER_LENGTH = NUM_RAYS * 6;
-const RAY_BUFFER_SIZE = RAY_BUFFER_LENGTH * 4; // bytes.
 
 // 9 floats (x1, y1, z1, x2, y2, z2, x3, y3, z3).
 const TRIANGLE_BUFFER_LENGTH = NUM_TRIANGLES * 9;
-const TRIANGLE_BUFFER_SIZE = TRIANGLE_BUFFER_LENGTH * 4; // bytes.
 
 // 1 float (distance).
 const RESULT_BUFFER_LENGTH = NUM_RAYS * 1;
-const RESULT_BUFFER_SIZE = RESULT_BUFFER_LENGTH * 4;
 
 // The advice from https://webgpufundamentals.org/webgpu/lessons/webgpu-compute-shaders.html
 // is to always use a workgroup size of 64, as this is what most GPUs are best at.
 const WORKGROUP_SIZE = 64;
 
+/**
+ *
+ * @returns uniform random number between -1 and 1.
+ */
 function rand() {
   return Math.random() * 2 - 1;
 }
@@ -82,10 +85,6 @@ for (let i = 0; i < NUM_TRIANGLES; ++i) {
   triangleData[ind + 8] = z3 - z1;
 }
 
-// Create the result data - this is initially infinity (i.e. no intersection).
-let resultData = new Float32Array(RESULT_BUFFER_LENGTH).fill(Infinity);
-
-// Define shader code.
 const shader = /* wgsl */ `
   struct Ray {
     x: f32,
@@ -118,9 +117,12 @@ const shader = /* wgsl */ `
   ) {
     let index = global_id.x;
 
+    let triangleCount = i32(arrayLength(&triangleBuffer));
+    let rayCount = u32(arrayLength(&rayBuffer));
+
     // Avoid accessing the buffer out of bounds - this could happen
     // if NUM_RAYS and WORKGROUP_SIZE don't line up.
-    if (index >= ${NUM_RAYS}) {
+    if (index >= rayCount) {
       return;
     }
 
@@ -134,8 +136,6 @@ const shader = /* wgsl */ `
     let eps1 = 1 + eps;
 
     let raydirection = vec3f(ray.dx, ray.dy, ray.dz);
-
-    let triangleCount = i32(arrayLength(&triangleBuffer));
 
     for (var n = 0; n < ${NUM_INTERSECTIONS}; n++) {
       for (var i = 0; i < triangleCount; i++) {
@@ -169,160 +169,45 @@ const shader = /* wgsl */ `
   }
 `;
 
-async function getGPUDevice(): Promise<GPUDevice | null> {
-  // Ensure that the browser supports the GPU API.
-  if (!navigator.gpu) {
-    alert("GPU/browser not supported");
-    return null;
-  }
+// Create the result data - this is initially infinity (i.e. no intersection).
+let resultData = new Float32Array(RESULT_BUFFER_LENGTH).fill(Infinity);
 
-  // Get the GPU adapter, from which a GPU device may be requested.
-  const adapter = await navigator.gpu.requestAdapter();
-  if (!adapter) {
-    console.error("No adapter");
-    return null;
-  }
-
-  // Get the GPU device.
-  const device = await adapter.requestDevice();
-
-  // Handle disconnect from the GPU device.
-  device.lost.then((info) => {
-    console.error(`WebGPU device was lost: ${info.message}`);
-
-    // Reason will be 'destroyed' if we intentionally destroy the device.
-    if (info.reason !== "destroyed") {
-      // TODO: try again.
-      console.log("Can restart if we want");
-    }
-  });
-
-  return device;
-}
-
+// Adapted from MDN WebGPU API documentation.
 async function run() {
-  const device = await getGPUDevice();
-
-  if (!device) {
-    console.log("Aborted due to null GPUDevice.");
-    return;
-  }
-
-  // Buffers passed to GPU shader.
-  const rayBuffer = device.createBuffer({
-    size: RAY_BUFFER_SIZE,
-    usage:
-      GPUBufferUsage.STORAGE |
-      GPUBufferUsage.COPY_SRC |
-      GPUBufferUsage.COPY_DST,
-  });
-  const triangleBuffer = device.createBuffer({
-    size: TRIANGLE_BUFFER_SIZE,
-    usage:
-      GPUBufferUsage.STORAGE |
-      GPUBufferUsage.COPY_SRC |
-      GPUBufferUsage.COPY_DST,
-  });
-  const resultBuffer = device.createBuffer({
-    size: RESULT_BUFFER_SIZE,
-    usage:
-      GPUBufferUsage.STORAGE |
-      GPUBufferUsage.COPY_SRC |
-      GPUBufferUsage.COPY_DST,
-  });
-
-  // Bind group layout and bind group define how the buffers are passed to the shader.
-  const bindGroupLayout = device.createBindGroupLayout({
-    entries: [
+  const result = await runShader(
+    shader,
+    [
       {
-        binding: 0,
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: { type: "storage" },
+        data: rayData,
+        readonly: false,
+        output: false,
       },
       {
-        binding: 1,
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: { type: "read-only-storage" },
+        data: triangleData,
+        readonly: true,
+        output: false,
       },
       {
-        binding: 2,
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: { type: "storage" },
+        data: resultData,
+        readonly: false,
+        output: true,
       },
     ],
-  });
-  const bindGroup = device.createBindGroup({
-    layout: bindGroupLayout,
-    entries: [
-      { binding: 0, resource: { buffer: rayBuffer } },
-      { binding: 1, resource: { buffer: triangleBuffer } },
-      { binding: 2, resource: { buffer: resultBuffer } },
-    ],
-  });
-
-  // Create the GPU shader and compute pipeline.
-  const shaderModule = device.createShaderModule({
-    code: shader,
-  });
-  const computePipeline = device.createComputePipeline({
-    layout: device.createPipelineLayout({
-      bindGroupLayouts: [bindGroupLayout],
-    }),
-    compute: { module: shaderModule, entryPoint: "main" },
-  });
-
-  // Schedule copying data into buffers.
-  device.queue.writeBuffer(rayBuffer, 0, rayData);
-  device.queue.writeBuffer(triangleBuffer, 0, triangleData);
-  device.queue.writeBuffer(resultBuffer, 0, resultData);
-
-  // Schedule the GPU shader pass.
-  const commandEncoder = device.createCommandEncoder();
-  const passEncoder = commandEncoder.beginComputePass();
-
-  passEncoder.setPipeline(computePipeline);
-  passEncoder.setBindGroup(0, bindGroup);
-
-  passEncoder.dispatchWorkgroups(Math.ceil(NUM_RAYS / WORKGROUP_SIZE));
-  passEncoder.end();
-
-  // Schedule copying output buffer to staging buffer (which can be read in JS).
-  const stagingBuffer = device.createBuffer({
-    size: RESULT_BUFFER_SIZE,
-    usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
-  });
-  commandEncoder.copyBufferToBuffer(
-    resultBuffer,
-    0,
-    stagingBuffer,
-    0,
-    RESULT_BUFFER_SIZE,
+    NUM_RAYS,
+    WORKGROUP_SIZE,
   );
 
-  console.time("run");
-
-  // Execute the scheduled commands.
-  device.queue.submit([commandEncoder.finish()]);
-
-  // Map result buffer back to staging buffer (which can be read in JS).
-  await stagingBuffer.mapAsync(GPUMapMode.READ, 0, RESULT_BUFFER_SIZE);
-
-  console.timeEnd("run");
-
-  // Get the data from the staging buffer.
-  const arrayDataOutput = stagingBuffer.getMappedRange().slice();
-  stagingBuffer.unmap();
-
-  // Convert to the correct type, and display the output.
-  const distances = new Float32Array(arrayDataOutput);
-  console.log(distances);
+  console.log(result);
 }
 
 document.addEventListener("DOMContentLoaded", () => {
   const btn = document
     .querySelector("#start")
-    ?.addEventListener("click", (e) => {
+    ?.addEventListener("click", async (e) => {
       (e.target as HTMLButtonElement).innerHTML = "Running";
-      run();
+      (e.target as HTMLButtonElement).disabled = true;
+      await run();
+      (e.target as HTMLButtonElement).innerHTML = "Run";
+      (e.target as HTMLButtonElement).disabled = false;
     });
 });

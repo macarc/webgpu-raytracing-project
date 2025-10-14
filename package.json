@@ -8,8 +8,8 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "esbuild . --outfile=public/index.js",
-    "build-watch": "esbuild . --watch --outfile=public/index.js"
+    "build": "esbuild . --bundle --outfile=public/index.js",
+    "build-watch": "esbuild . --watch --bundle --outfile=public/index.js"
   },
   "devDependencies": {
     "@webgpu/types": "^0.1.65",
