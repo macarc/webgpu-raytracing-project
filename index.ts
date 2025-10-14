@@ -22,24 +22,37 @@ function rand() {
   return Math.random() * 2 - 1;
 }
 
+// TODO: this works but is rather crude.
+function randomPointOnUnitSphere() {
+  let x = 0;
+  let y = 0;
+  let z = 0;
+  let r = Infinity;
+
+  while (r > 1) {
+    x = rand();
+    y = rand();
+    z = rand();
+    r = Math.sqrt(x ** 2 + y ** 2 + z ** 2);
+  }
+
+  return [x / r, y / r, z / r];
+}
+
 // Create the ray data.
-// TODO: make the direction uniformally random on the sphere.
 const rayData = new Float32Array(RAY_BUFFER_LENGTH);
 
 for (let i = 0; i < NUM_RAYS; ++i) {
   const ind = i * 6;
+
   rayData[ind + 0] = rand() * 100;
   rayData[ind + 1] = rand() * 100;
   rayData[ind + 2] = rand() * 100;
 
-  let dx = rand();
-  let dy = rand();
-  let dz = rand();
-  let n = Math.sqrt(dx ** 2 + dy ** 2 + dz ** 2);
-
-  rayData[ind + 3] = dx / n;
-  rayData[ind + 4] = dy / n;
-  rayData[ind + 5] = dz / n;
+  let [dx, dy, dz] = randomPointOnUnitSphere();
+  rayData[ind + 3] = dx;
+  rayData[ind + 4] = dy;
+  rayData[ind + 5] = dz;
 }
 
 // Create the triangle data.
