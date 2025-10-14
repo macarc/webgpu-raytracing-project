@@ -1,0 +1,19 @@
+{
+  "name": "audio-raytracing-project",
+  "version": "0.0.0",
+  "description": "",
+  "license": "GPL-3.0",
+  "author": "",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "esbuild . --outfile=public/index.js",
+    "build-watch": "esbuild . --watch --outfile=public/index.js"
+  },
+  "devDependencies": {
+    "@webgpu/types": "^0.1.65",
+    "esbuild": "^0.25.10",
+    "typescript": "^5.9.3"
+  }
+}
