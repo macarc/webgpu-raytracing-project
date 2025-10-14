@@ -23,6 +23,7 @@ function rand() {
 }
 
 // Create the ray data.
+// TODO: make the direction uniformally random on the sphere.
 const rayData = new Float32Array(RAY_BUFFER_LENGTH);
 
 for (let i = 0; i < NUM_RAYS; ++i) {
@@ -46,16 +47,30 @@ const triangleData = new Float32Array(TRIANGLE_BUFFER_LENGTH);
 
 for (let i = 0; i < NUM_TRIANGLES; ++i) {
   const ind = i * 9;
-  triangleData[ind + 0] = rand() * 100;
-  triangleData[ind + 1] = rand() * 100;
-  triangleData[ind + 2] = rand() * 100;
-  triangleData[ind + 3] = rand() * 100;
-  triangleData[ind + 4] = rand() * 100;
-  triangleData[ind + 5] = rand() * 100;
-  triangleData[ind + 6] = rand() * 100;
-  triangleData[ind + 7] = rand() * 100;
-  triangleData[ind + 8] = rand() * 100;
+
+  let x1 = rand() * 100;
+  let y1 = rand() * 100;
+  let z1 = rand() * 100;
+  let x2 = rand() * 100;
+  let y2 = rand() * 100;
+  let z2 = rand() * 100;
+  let x3 = rand() * 100;
+  let y3 = rand() * 100;
+  let z3 = rand() * 100;
+
+  triangleData[ind + 0] = x1;
+  triangleData[ind + 1] = y1;
+  triangleData[ind + 2] = z1;
+  triangleData[ind + 3] = x2 - x1;
+  triangleData[ind + 4] = y2 - y1;
+  triangleData[ind + 5] = z2 - z1;
+  triangleData[ind + 6] = x3 - x1;
+  triangleData[ind + 7] = y3 - y1;
+  triangleData[ind + 8] = z3 - z1;
 }
+
+// Create the result data - this is initially infinity (i.e. no intersection).
+let resultData = new Float32Array(RESULT_BUFFER_LENGTH).fill(Infinity);
 
 // Define shader code.
 const shader = /* wgsl */ `
@@ -69,17 +84,16 @@ const shader = /* wgsl */ `
   }
 
   struct Triangle {
-    x1: f32, y1: f32, z1: f32,
-    x2: f32, y2: f32, z2: f32,
-    x3: f32, y3: f32, z3: f32,
+    x: f32, y: f32, z: f32,
+    u1: f32, u2: f32, u3: f32,
+    v1: f32, v2: f32, v3: f32,
   }
 
-  // TODO: can we remove read_write here.
   @group(0) @binding(0)
   var<storage, read_write> rayBuffer: array<Ray>;
 
   @group(0) @binding(1)
-  var<storage, read_write> triangleBuffer: array<Triangle>;
+  var<storage, read> triangleBuffer: array<Triangle>;
 
   @group(0) @binding(2)
   var<storage, read_write> output: array<f32>;
@@ -102,10 +116,9 @@ const shader = /* wgsl */ `
     // This is more or less a line-by-line translation of the Möller–Trumbore intersection algorithm C++ example from Wikipedia.
     // TODO: research triangle intersection algorithms to see if there are others - though this one seems to be really simple so
     //       I doubt it can be improved much.
-    // TODO: currently the GPU is passed triangles as points (as in the example code), but it would be slightly faster to store them
-    //       instead as position + U + V.
 
-    let epsilon = 0.0000001; // TODO: find a principled value for this.
+    let eps = 0.0000001; // TODO: find a principled value for this.
+    let eps1 = 1 + eps;
 
     let raydirection = vec3f(ray.dx, ray.dy, ray.dz);
 
@@ -115,35 +128,27 @@ const shader = /* wgsl */ `
       for (var i = 0; i < triangleCount; i++) {
         let triangle = triangleBuffer[i];
 
-        // TODO: pass data as uv, not points.
-        let edge1 = vec3f(triangle.x2 - triangle.x1, triangle.y2 - triangle.y1, triangle.z2 - triangle.z1);
-        let edge2 = vec3f(triangle.x3 - triangle.x1, triangle.y3 - triangle.y1, triangle.z3 - triangle.z1);
+        let edge1 = vec3f(triangle.u1, triangle.u2, triangle.u3);
+        let edge2 = vec3f(triangle.v1, triangle.v2, triangle.v3);
         let ray_cross_e2 = cross(raydirection, edge2);
         let det = dot(edge1, ray_cross_e2);
 
-        if (det > -epsilon && det < epsilon) {
-          continue;
-        }
-
         let inv_det = 1.0 / det;
-        let offset = vec3f(ray.x - triangle.x1, ray.y - triangle.y1, ray.z - triangle.z1);
+        let offset = vec3f(ray.x - triangle.x, ray.y - triangle.y, ray.z - triangle.z);
         let u = inv_det * dot(offset, ray_cross_e2);
-
-        if ((u < 0 && abs(u) > epsilon) || (u > 1 && abs(u-1) > epsilon)) {
-          continue;
-        }
 
         let offset_cross_e1 = cross(offset, edge1);
         let v = inv_det * dot(raydirection, offset_cross_e1);
 
-        if ((v < 0 && abs(v) > epsilon) || (u + v > 1 && abs(u+v-1) > epsilon)) {
-          continue;
-        }
-
         let t = inv_det * dot(edge2, offset_cross_e1);
 
-        // TODO: initially set at infinity.
-        if (t > epsilon && (output[index] == 0 || t < output[index])) {
+        // TODO: I removed a bunch of useless epsilon checks here, is that OK? It reduces time from >40s to 27s.
+        // NOTE: this happens in a single if-statement at the end of each loop (rather than as each value is calculated)
+        //       to reduce the number of times branching occurs. The amount of branching matters, since work-groups
+        //       in the GPU run in lockstep, and branching messes around with that.
+        if ((abs(det) < eps) || (u < -eps) || (u > eps1) || (v < -eps) || (u + v > eps1)) {
+          // Ray missed the triangle.
+        } else if (t > eps && t < output[index]) {
           output[index] = t;
         }
       }
@@ -224,7 +229,7 @@ async function run() {
       {
         binding: 1,
         visibility: GPUShaderStage.COMPUTE,
-        buffer: { type: "storage" },
+        buffer: { type: "read-only-storage" },
       },
       {
         binding: 2,
@@ -256,6 +261,7 @@ async function run() {
   // Schedule copying data into buffers.
   device.queue.writeBuffer(rayBuffer, 0, rayData);
   device.queue.writeBuffer(triangleBuffer, 0, triangleData);
+  device.queue.writeBuffer(resultBuffer, 0, resultData);
 
   // Schedule the GPU shader pass.
   const commandEncoder = device.createCommandEncoder();
