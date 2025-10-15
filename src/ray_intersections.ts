@@ -1,4 +1,5 @@
 import { runShader } from "./lib";
+import { WORKGROUP_SIZE } from "./constants";
 
 const NUM_RAYS = 20000;
 const NUM_TRIANGLES = 3000;
@@ -12,10 +13,6 @@ const TRIANGLE_BUFFER_LENGTH = NUM_TRIANGLES * 9;
 
 // 1 float (distance).
 const RESULT_BUFFER_LENGTH = NUM_RAYS * 1;
-
-// The advice from https://webgpufundamentals.org/webgpu/lessons/webgpu-compute-shaders.html
-// is to always use a workgroup size of 64, as this is what most GPUs are best at.
-const WORKGROUP_SIZE = 64;
 
 /**
  *
@@ -85,7 +82,8 @@ for (let i = 0; i < NUM_TRIANGLES; ++i) {
   triangleData[ind + 8] = z3 - z1;
 }
 
-const shader = /* wgsl */ `
+export function rayIntersectionShaderCode(intersectionCount: number) {
+  return /* wgsl */ `
   struct Ray {
     x: f32,
     y: f32,
@@ -137,7 +135,7 @@ const shader = /* wgsl */ `
 
     let raydirection = vec3f(ray.dx, ray.dy, ray.dz);
 
-    for (var n = 0; n < ${NUM_INTERSECTIONS}; n++) {
+    for (var n = 0; n < ${intersectionCount}; n++) {
       for (var i = 0; i < triangleCount; i++) {
         let triangle = triangleBuffer[i];
 
@@ -168,14 +166,14 @@ const shader = /* wgsl */ `
     }
   }
 `;
+}
 
 // Create the result data - this is initially infinity (i.e. no intersection).
 let resultData = new Float32Array(RESULT_BUFFER_LENGTH).fill(Infinity);
 
-// Adapted from MDN WebGPU API documentation.
-async function run() {
+export async function runRayIntersections() {
   const result = await runShader(
-    shader,
+    rayIntersectionShaderCode(NUM_INTERSECTIONS),
     [
       {
         data: rayData,
@@ -194,20 +192,7 @@ async function run() {
       },
     ],
     NUM_RAYS,
-    WORKGROUP_SIZE,
   );
 
   console.log(result);
 }
-
-document.addEventListener("DOMContentLoaded", () => {
-  const btn = document
-    .querySelector("#start")
-    ?.addEventListener("click", async (e) => {
-      (e.target as HTMLButtonElement).innerHTML = "Running";
-      (e.target as HTMLButtonElement).disabled = true;
-      await run();
-      (e.target as HTMLButtonElement).innerHTML = "Run";
-      (e.target as HTMLButtonElement).disabled = false;
-    });
-});

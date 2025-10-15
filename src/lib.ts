@@ -1,10 +1,10 @@
+import { FLOAT32_SIZE, WORKGROUP_SIZE } from "./constants";
+
 type ShaderBuffer = {
   data: Float32Array<ArrayBuffer>;
   readonly: boolean;
   output: boolean;
 };
-
-const FLOAT32_SIZE = 4; // bytes.
 
 // Adapted from MDN WebGPU API documentation.
 async function getGPUDevice(): Promise<GPUDevice | null> {
@@ -54,7 +54,6 @@ export async function runShader(
   code: string,
   buffers: ShaderBuffer[],
   instancesCount: number,
-  workgroupSize: number,
 ): Promise<Float32Array[] | null> {
   const device = await getGPUDevice();
 
@@ -112,7 +111,7 @@ export async function runShader(
   passEncoder.setPipeline(computePipeline);
   passEncoder.setBindGroup(0, bindGroup);
 
-  passEncoder.dispatchWorkgroups(Math.ceil(instancesCount / workgroupSize));
+  passEncoder.dispatchWorkgroups(Math.ceil(instancesCount / WORKGROUP_SIZE));
   passEncoder.end();
 
   // Schedule copying output buffers to staging buffers (which can be read in JS).
