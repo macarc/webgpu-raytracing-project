@@ -1,59 +1,55 @@
 import { runShader } from "../lib";
 import { rayIntersectionShaderCode } from "../ray_intersections";
-
-type Ray = {
-  position: [number, number, number];
-  direction: [number, number, number];
-};
-
-type Triangle = {
-  p1: [number, number, number];
-  p2: [number, number, number];
-  p3: [number, number, number];
-};
+import { Ray, Triangle } from "../constants";
+import {
+  raysToFloatArray,
+  trianglesToFloatArray,
+  initialIntersectionsFloatArray,
+} from "../floatarrays";
 
 type TestCase = {
   name: string;
   rays: Ray[];
   triangles: Triangle[];
   expectedResult: number[];
+  scale?: number;
 };
 
-async function runTestCases(testcases: TestCase[]) {
-  for (const testcase of testcases) {
-    const rayData = new Float32Array(
-      testcase.rays.flatMap((ray) => [...ray.position, ...ray.direction]),
-    );
-    const triangleData = new Float32Array(
-      testcase.triangles.flatMap((triangle) => [
-        ...triangle.p1,
-        triangle.p2[0] - triangle.p1[0],
-        triangle.p2[1] - triangle.p1[1],
-        triangle.p2[2] - triangle.p1[2],
-        triangle.p3[0] - triangle.p1[0],
-        triangle.p3[1] - triangle.p1[1],
-        triangle.p3[2] - triangle.p1[2],
-      ]),
-    );
-    const resultData = new Float32Array(testcase.expectedResult.length).fill(
-      Infinity,
-    );
+const TEST_EPSILON = 0.00000001;
 
+async function runTestCases(testcases: TestCase[]) {
+  let successCount = 0;
+
+  for (const testcase of testcases) {
+    // Scale rays based on scale factor.
+
+    const scale = testcase.scale || 1;
+
+    const scaledRays = testcase.rays.map((ray) => ({
+      ...ray,
+      direction: ray.direction.map((d) => d * scale) as [
+        number,
+        number,
+        number,
+      ],
+    }));
+
+    // Run intersection code.
     const result = await runShader(
       rayIntersectionShaderCode(1),
       [
         {
-          data: rayData,
+          data: raysToFloatArray(scaledRays),
           readonly: false,
           output: false,
         },
         {
-          data: triangleData,
+          data: trianglesToFloatArray(testcase.triangles),
           readonly: true,
           output: false,
         },
         {
-          data: resultData,
+          data: initialIntersectionsFloatArray(testcase.rays.length),
           readonly: false,
           output: true,
         },
@@ -61,8 +57,8 @@ async function runTestCases(testcases: TestCase[]) {
       testcase.rays.length,
     );
 
-    const outputBuffer = result && result[0];
-    const eps = 0.00000000001;
+    // Scale output buffer.
+    const outputBuffer = result && result[0].map((d) => d * scale);
 
     let testSuccess = true;
 
@@ -70,11 +66,22 @@ async function runTestCases(testcases: TestCase[]) {
       console.log(`Got no response for testcase ${testcase.name}.`);
       testSuccess = false;
     } else {
+      // Check each returned value is correct.
       for (let i = 0; i < testcase.expectedResult.length; ++i) {
-        if (Math.abs(outputBuffer[i] - testcase.expectedResult[i]) > eps) {
+        if (
+          Math.abs(outputBuffer[i] - testcase.expectedResult[i]) > TEST_EPSILON
+        ) {
           console.log("Got", outputBuffer, "expected", testcase.expectedResult);
           console.log(
             `(First mismatch at index ${i}: ${outputBuffer[i]} !== ${testcase.expectedResult[i]})`,
+          );
+
+          // TODO: verify the maths here.
+          const iterationsToAffect =
+            340 /
+            (20000 * Math.abs(outputBuffer[i] - testcase.expectedResult[i]));
+          console.log(
+            `This causes noise in the audible frequency range after ${iterationsToAffect} iterations`,
           );
           testSuccess = false;
           break;
@@ -82,14 +89,23 @@ async function runTestCases(testcases: TestCase[]) {
       }
     }
 
+    // Summarise test.
     if (testSuccess) {
       console.log(`[${testcase.name}]: SUCCESS`);
+      ++successCount;
     } else {
       console.log(`[${testcase.name}]: FAIL`);
     }
   }
+
+  // Summarise all tests.
+  const summaryString = `[${successCount}/${testcases.length}] tests passed`;
+  console.log("-".repeat(summaryString.length));
+  console.log(summaryString);
+  console.log("-".repeat(summaryString.length));
 }
 
+// Ray/triangle combinations to test.
 const TEST_CASES: TestCase[] = [
   {
     name: "ray-fired-downwards",
@@ -139,20 +155,37 @@ const TEST_CASES: TestCase[] = [
     triangles: [{ p1: [-2, -1, 4], p2: [0, 0, 4], p3: [1, 3, 4] }],
     expectedResult: [6],
   },
+  // NOTE: by passing -100 rather than -1 here, the result is more accurate.
+  //       This appears to be true even when taking into account the smaller values.
+  // TODO: look into why this is (and if it actually helps, or causes another issue),
+  //       and whether there's a good way to decide exactly how
+  //       the direction vector should be scaled (or if something else should be adjusted).
   {
     name: "non-power-of-two-2",
     rays: [{ position: [0, 0, 10], direction: [0, 0, -1] }],
     triangles: [{ p1: [-0.5, -0.5, 4], p2: [2, 2, 4], p3: [0, 3, 4] }],
     expectedResult: [6],
+    scale: 10,
   },
   {
     name: "non-power-of-two-3",
     rays: [{ position: [0, 0, 100], direction: [0, 0, -1] }],
     triangles: [{ p1: [-0.5, -0.5, 40], p2: [2, 2, 40], p3: [0, 3, 40] }],
     expectedResult: [60],
+    scale: 10,
+  },
+  {
+    name: "angled-ray",
+    rays: [{ position: [1, 2, 2], direction: [-1 / 3, -2 / 3, -2 / 3] }],
+    triangles: [{ p1: [-100, -1, 0], p2: [100, -0.5, 0], p3: [0.2, 0.1, 0] }],
+    expectedResult: [3],
+    scale: 100,
   },
 ];
 
+/**
+ * Run the ray intersection test suite.
+ */
 export async function runRayIntersectionTests() {
   await runTestCases(TEST_CASES);
 }
