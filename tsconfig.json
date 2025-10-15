@@ -9,7 +9,10 @@
     "noImplicitReturns": true,
     "alwaysStrict": true,
     "types": ["@webgpu/types"],
-    "outDir": "public"
+    "outDir": "public",
+    "paths": {
+      "plotly.js-dist": ["./node_modules/@types/plotly.js"]
+    }
   },
   "exclude": ["build", "node_modules"]
 }

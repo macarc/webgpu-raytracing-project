@@ -10,7 +10,9 @@ type ShaderBuffer = {
 async function getGPUDevice(): Promise<GPUDevice | null> {
   // Ensure that the browser supports the GPU API.
   if (!navigator.gpu) {
-    alert("GPU/browser not supported");
+    alert(
+      "GPU/browser not supported.\nIf you're on Firefox, try setting dom.webgpu.enabled to true in about:config.",
+    );
     return null;
   }
 

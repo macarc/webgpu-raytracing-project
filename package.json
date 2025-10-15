@@ -12,8 +12,10 @@
     "build-watch": "esbuild src/index.ts --watch --bundle --outfile=public/index.js"
   },
   "devDependencies": {
+    "@types/plotly.js": "^3.0.7",
     "@webgpu/types": "^0.1.65",
     "esbuild": "^0.25.10",
+    "plotly.js-dist": "^3.1.1",
     "typescript": "^5.9.3"
   }
 }

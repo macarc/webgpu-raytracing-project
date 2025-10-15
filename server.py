@@ -1,5 +1,4 @@
 from http.server import SimpleHTTPRequestHandler, HTTPServer
-import re
 
 
 class RequestHandler(SimpleHTTPRequestHandler):
@@ -9,16 +8,6 @@ class RequestHandler(SimpleHTTPRequestHandler):
     def end_headers(self):
         self.send_header("Cache-Control", "no-cache, must-revalidate")
         super().end_headers()
-
-    # def do_GET(self):
-    #     if self.path.startswith("/pipescore"):
-    #         self.path = "/pipescore.html"
-    #     elif self.path == "/":
-    #         self.path = "/index.html"
-    #     elif "." not in re.search("(/.*?)$", self.path).group(0):
-    #         self.path += ".html"
-
-    #     return super().do_GET()
 
 
 def run():

@@ -1,18 +1,29 @@
 import { runShader } from "./lib";
-import { WORKGROUP_SIZE } from "./constants";
+import { Ray, Triangle, WORKGROUP_SIZE } from "./constants";
+import { plotOutput } from "./draw";
+import {
+  raysToFloatArray,
+  trianglesToFloatArray,
+  initialIntersectionsFloatArray,
+} from "./floatarrays";
 
-const NUM_RAYS = 20000;
-const NUM_TRIANGLES = 3000;
-const NUM_INTERSECTIONS = 20000;
+interface Settings {
+  rayCount: number;
+  triangleCount: number;
+  intersectionCount: number;
+}
 
-// 6 floats (x, y, z, dx, dy, dz).
-const RAY_BUFFER_LENGTH = NUM_RAYS * 6;
+const PLOT_SETTINGS = {
+  rayCount: 1000,
+  triangleCount: 50,
+  intersectionCount: 1,
+};
 
-// 9 floats (x1, y1, z1, x2, y2, z2, x3, y3, z3).
-const TRIANGLE_BUFFER_LENGTH = NUM_TRIANGLES * 9;
-
-// 1 float (distance).
-const RESULT_BUFFER_LENGTH = NUM_RAYS * 1;
+const STRESS_TEST_SETTINGS = {
+  rayCount: 20000,
+  triangleCount: 3000,
+  intersectionCount: 20000,
+};
 
 /**
  *
@@ -23,7 +34,7 @@ function rand() {
 }
 
 // TODO: this works but is rather crude.
-function randomPointOnUnitSphere() {
+function randomPointOnUnitSphere(): [number, number, number] {
   let x = 0;
   let y = 0;
   let z = 0;
@@ -37,49 +48,6 @@ function randomPointOnUnitSphere() {
   }
 
   return [x / r, y / r, z / r];
-}
-
-// Create the ray data.
-const rayData = new Float32Array(RAY_BUFFER_LENGTH);
-
-for (let i = 0; i < NUM_RAYS; ++i) {
-  const ind = i * 6;
-
-  rayData[ind + 0] = rand() * 100;
-  rayData[ind + 1] = rand() * 100;
-  rayData[ind + 2] = rand() * 100;
-
-  let [dx, dy, dz] = randomPointOnUnitSphere();
-  rayData[ind + 3] = dx;
-  rayData[ind + 4] = dy;
-  rayData[ind + 5] = dz;
-}
-
-// Create the triangle data.
-const triangleData = new Float32Array(TRIANGLE_BUFFER_LENGTH);
-
-for (let i = 0; i < NUM_TRIANGLES; ++i) {
-  const ind = i * 9;
-
-  let x1 = rand() * 100;
-  let y1 = rand() * 100;
-  let z1 = rand() * 100;
-  let x2 = rand() * 100;
-  let y2 = rand() * 100;
-  let z2 = rand() * 100;
-  let x3 = rand() * 100;
-  let y3 = rand() * 100;
-  let z3 = rand() * 100;
-
-  triangleData[ind + 0] = x1;
-  triangleData[ind + 1] = y1;
-  triangleData[ind + 2] = z1;
-  triangleData[ind + 3] = x2 - x1;
-  triangleData[ind + 4] = y2 - y1;
-  triangleData[ind + 5] = z2 - z1;
-  triangleData[ind + 6] = x3 - x1;
-  triangleData[ind + 7] = y3 - y1;
-  triangleData[ind + 8] = z3 - z1;
 }
 
 export function rayIntersectionShaderCode(intersectionCount: number) {
@@ -126,11 +94,14 @@ export function rayIntersectionShaderCode(intersectionCount: number) {
 
     let ray = rayBuffer[index];
 
-    // This is more or less a line-by-line translation of the Möller–Trumbore intersection algorithm C++ example from Wikipedia.
+    // This is more or less a line-by-line translation of the Möller–Trumbore intersection algorithm.
     // TODO: research triangle intersection algorithms to see if there are others - though this one seems to be really simple so
     //       I doubt it can be improved much.
+    // TODO: one potential idea would be to store u x v with the triangle, which saves on one cross product
+    //       per test. The additional memory strain might not actually make this any faster though.
 
-    let eps = 0.0000001; // TODO: find a principled value for this.
+    let smallestPositiveNormal = 1.17549435082228750797e-38f;
+    let eps = smallestPositiveNormal;
     let eps1 = 1 + eps;
 
     let raydirection = vec3f(ray.dx, ray.dy, ray.dz);
@@ -153,11 +124,10 @@ export function rayIntersectionShaderCode(intersectionCount: number) {
 
         let t = inv_det * dot(edge2, offset_cross_e1);
 
-        // TODO: I removed a bunch of useless epsilon checks here, is that OK? It reduces time from >40s to 27s.
         // NOTE: this happens in a single if-statement at the end of each loop (rather than as each value is calculated)
         //       to reduce the number of times branching occurs. The amount of branching matters, since work-groups
         //       in the GPU run in lockstep, and branching messes around with that.
-        if ((abs(det) < eps) || (u < -eps) || (u > eps1) || (v < -eps) || (u + v > eps1)) {
+        if ((abs(det) < eps) || (u < -eps) || (v < -eps) || (u + v > eps1)) {
           // Ray missed the triangle.
         } else if (t > eps && t < output[index]) {
           output[index] = t;
@@ -168,31 +138,69 @@ export function rayIntersectionShaderCode(intersectionCount: number) {
 `;
 }
 
-// Create the result data - this is initially infinity (i.e. no intersection).
-let resultData = new Float32Array(RESULT_BUFFER_LENGTH).fill(Infinity);
+async function runRayIntersections(settings: Settings): Promise<{
+  rays: Ray[];
+  triangles: Triangle[];
+  result: Float32Array | null;
+}> {
+  const rays: Ray[] = [];
+  const triangles: Triangle[] = [];
 
-export async function runRayIntersections() {
+  // Create the rays.
+  for (let i = 0; i < settings.rayCount; ++i) {
+    rays.push({
+      position: [rand() * 100, rand() * 100, rand() * 100],
+      direction: randomPointOnUnitSphere(),
+    });
+  }
+
+  // Create the geometry.
+  for (let i = 0; i < settings.triangleCount; ++i) {
+    triangles.push({
+      p1: [rand() * 100, rand() * 100, rand() * 100],
+      p2: [rand() * 100, rand() * 100, rand() * 100],
+      p3: [rand() * 100, rand() * 100, rand() * 100],
+    });
+  }
+
+  // Run the shader and get the result.
   const result = await runShader(
-    rayIntersectionShaderCode(NUM_INTERSECTIONS),
+    rayIntersectionShaderCode(settings.intersectionCount),
     [
       {
-        data: rayData,
+        data: raysToFloatArray(rays),
         readonly: false,
         output: false,
       },
       {
-        data: triangleData,
+        data: trianglesToFloatArray(triangles),
         readonly: true,
         output: false,
       },
       {
-        data: resultData,
+        data: initialIntersectionsFloatArray(settings.rayCount),
         readonly: false,
         output: true,
       },
     ],
-    NUM_RAYS,
+    settings.rayCount,
   );
 
+  return { rays, triangles, result: result && result[0] };
+}
+
+export async function plotRayIntersections() {
+  const { rays, triangles, result } = await runRayIntersections(PLOT_SETTINGS);
+  console.log(result);
+  console.log("plotting...");
+  plotOutput(
+    triangles,
+    rays.map((ray, i) => [ray, result?.[i] || 0]),
+  );
+}
+
+export async function stressTestRayIntersections() {
+  const { rays, triangles, result } =
+    await runRayIntersections(STRESS_TEST_SETTINGS);
   console.log(result);
 }
