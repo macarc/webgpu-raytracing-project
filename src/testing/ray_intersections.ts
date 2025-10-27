@@ -12,34 +12,20 @@ type TestCase = {
   rays: Ray[];
   triangles: Triangle[];
   expectedResult: number[];
-  scale?: number;
 };
 
-const TEST_EPSILON = 0.00000001;
+const TEST_EPSILON = 32 * 2 ** -23;
 
 async function runTestCases(testcases: TestCase[]) {
   let successCount = 0;
 
   for (const testcase of testcases) {
-    // Scale rays based on scale factor.
-
-    const scale = testcase.scale || 1;
-
-    const scaledRays = testcase.rays.map((ray) => ({
-      ...ray,
-      direction: ray.direction.map((d) => d * scale) as [
-        number,
-        number,
-        number,
-      ],
-    }));
-
     // Run intersection code.
     const result = await runShader(
       rayIntersectionShaderCode(1),
       [
         {
-          data: raysToFloatArray(scaledRays),
+          data: raysToFloatArray(testcase.rays),
           readonly: false,
           output: false,
         },
@@ -57,8 +43,8 @@ async function runTestCases(testcases: TestCase[]) {
       testcase.rays.length,
     );
 
-    // Scale output buffer.
-    const outputBuffer = result && result[0].map((d) => d * scale);
+    // Get output buffer.
+    const outputBuffer = result && result[0];
 
     let testSuccess = true;
 
@@ -155,31 +141,23 @@ const TEST_CASES: TestCase[] = [
     triangles: [{ p1: [-2, -1, 4], p2: [0, 0, 4], p3: [1, 3, 4] }],
     expectedResult: [6],
   },
-  // NOTE: by passing -100 rather than -1 here, the result is more accurate.
-  //       This appears to be true even when taking into account the smaller values.
-  // TODO: look into why this is (and if it actually helps, or causes another issue),
-  //       and whether there's a good way to decide exactly how
-  //       the direction vector should be scaled (or if something else should be adjusted).
   {
     name: "non-power-of-two-2",
     rays: [{ position: [0, 0, 10], direction: [0, 0, -1] }],
     triangles: [{ p1: [-0.5, -0.5, 4], p2: [2, 2, 4], p3: [0, 3, 4] }],
     expectedResult: [6],
-    scale: 10,
   },
   {
     name: "non-power-of-two-3",
     rays: [{ position: [0, 0, 100], direction: [0, 0, -1] }],
     triangles: [{ p1: [-0.5, -0.5, 40], p2: [2, 2, 40], p3: [0, 3, 40] }],
     expectedResult: [60],
-    scale: 10,
   },
   {
     name: "angled-ray",
     rays: [{ position: [1, 2, 2], direction: [-1 / 3, -2 / 3, -2 / 3] }],
     triangles: [{ p1: [-100, -1, 0], p2: [100, -0.5, 0], p3: [0.2, 0.1, 0] }],
     expectedResult: [3],
-    scale: 100,
   },
 ];
 

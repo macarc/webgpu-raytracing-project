@@ -115,6 +115,9 @@ export function rayIntersectionShaderCode(intersectionCount: number) {
         let ray_cross_e2 = cross(raydirection, edge2);
         let det = dot(edge1, ray_cross_e2);
 
+        // TODO: can we use this to improve perf?
+        // let det = determinant(mat3x3(edge1, raydirection, edge2));
+
         let inv_det = 1.0 / det;
         let offset = vec3f(ray.x - triangle.x, ray.y - triangle.y, ray.z - triangle.z);
         let u = inv_det * dot(offset, ray_cross_e2);
