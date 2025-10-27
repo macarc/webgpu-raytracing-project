@@ -8,8 +8,8 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "esbuild src/index.ts --bundle --outfile=public/index.js",
-    "build-watch": "esbuild src/index.ts --watch --bundle --outfile=public/index.js"
+    "build": "esbuild src/index.ts --sourcemap --bundle --outfile=public/index.js",
+    "build-watch": "esbuild src/index.ts --sourcemap --watch --bundle --outfile=public/index.js"
   },
   "devDependencies": {
     "@types/plotly.js": "^3.0.7",
