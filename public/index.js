@@ -47,7 +47,9 @@
       );
       return null;
     }
-    const adapter = await navigator.gpu.requestAdapter();
+    const adapter = await navigator.gpu.requestAdapter({
+      powerPreference: "high-performance"
+    });
     if (!adapter) {
       console.error("No adapter");
       return null;
