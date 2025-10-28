@@ -17,7 +17,9 @@ async function getGPUDevice(): Promise<GPUDevice | null> {
   }
 
   // Get the GPU adapter, from which a GPU device may be requested.
-  const adapter = await navigator.gpu.requestAdapter();
+  const adapter = await navigator.gpu.requestAdapter({
+    powerPreference: "high-performance",
+  });
   if (!adapter) {
     console.error("No adapter");
     return null;
