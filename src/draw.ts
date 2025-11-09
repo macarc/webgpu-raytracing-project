@@ -53,3 +53,65 @@ export function plotOutput(triangles: Triangle[], rays: [Ray, number][]) {
 
   Plotly.newPlot("container", [...triangleData, ...rayData, circleData]);
 }
+
+/**
+ *
+ * @param triangles geometry.
+ * @param rays rays and ray distances travelled.
+ */
+export function plotSpecularReflections(
+  triangles: Triangle[],
+  rayBounces: [number, number, number][][],
+  showFaces = true,
+) {
+  const eps = showFaces ? 0.01 : 0;
+
+  // Each point gets a random amount added to it - this is because Plotly
+  // doesn't show vertical 3D faces for whatever reason.
+  // TODO: display vertical triangles without hacks.
+  const triangleData = triangles.map((triangle) => ({
+    type: "mesh3d",
+    x: [
+      triangle.p1[0] + Math.random() * eps,
+      triangle.p2[0] + Math.random() * eps,
+      triangle.p3[0] + Math.random() * eps,
+    ],
+    y: [
+      triangle.p1[1] + Math.random() * eps,
+      triangle.p2[1] + Math.random() * eps,
+      triangle.p3[1] + Math.random() * eps,
+    ],
+    z: [
+      triangle.p1[2] + Math.random() * eps,
+      triangle.p2[2] + Math.random() * eps,
+      triangle.p3[2] + Math.random() * eps,
+    ],
+    facecolor: triangles.map(
+      (_) => `rgb(${randomColour()}, ${randomColour()}, ${randomColour()})`,
+    ),
+    flatshading: true,
+  })) as Data[];
+
+  console.log(triangleData);
+
+  const finiteRayBounces = rayBounces
+    .map((ray) => ray.filter((point) => !point.includes(Infinity)))
+    .filter((ray) => ray.length > 1);
+
+  const rayData = finiteRayBounces.map((ray) => ({
+    type: "scatter3d",
+    mode: "lines+markers",
+    marker: {
+      size: 2,
+      color: RAY_COLOUR,
+    },
+    x: ray.map((position) => position[0]),
+    y: ray.map((position) => position[1]),
+    z: ray.map((position) => position[2]),
+    line: {
+      color: RAY_COLOUR,
+    },
+  })) as Data[];
+
+  Plotly.newPlot("container", [...triangleData, ...rayData /*  circleData */]);
+}

@@ -1,8 +1,8 @@
-import { runRayIntersectionTests } from "./testing/ray_intersections";
 import {
-  plotRayIntersections,
-  stressTestRayIntersections,
-} from "./ray_intersections";
+  plotRaySpecularReflections,
+  stressTestRaySpecularReflections,
+} from "./specular_ray_tracing";
+import { runRayIntersectionTests } from "./testing/ray_intersections";
 
 async function withDisabled(
   element: HTMLButtonElement,
@@ -20,13 +20,16 @@ document.addEventListener("DOMContentLoaded", () => {
   document
     .querySelector("#run-plot")
     ?.addEventListener("click", (e) =>
-      withDisabled(e.target as HTMLButtonElement, plotRayIntersections),
+      withDisabled(e.target as HTMLButtonElement, plotRaySpecularReflections),
     );
 
   document
     .querySelector("#run-stress")
     ?.addEventListener("click", (e) =>
-      withDisabled(e.target as HTMLButtonElement, stressTestRayIntersections),
+      withDisabled(
+        e.target as HTMLButtonElement,
+        stressTestRaySpecularReflections,
+      ),
     );
 
   document

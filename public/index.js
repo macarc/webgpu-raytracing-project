@@ -264082,42 +264082,51 @@ uniform ${i3} ${a3} u_${s3};
   function randomColour() {
     return Math.floor(256 * Math.random());
   }
-  function plotOutput(triangles, rays) {
+  function plotSpecularReflections(triangles, rayBounces, showFaces = true) {
+    const eps = showFaces ? 0.01 : 0;
     const triangleData = triangles.map((triangle) => ({
       type: "mesh3d",
-      x: [triangle.p1[0], triangle.p2[0], triangle.p3[0]],
-      y: [triangle.p1[1], triangle.p2[1], triangle.p3[1]],
-      z: [triangle.p1[2], triangle.p2[2], triangle.p3[2]],
+      x: [
+        triangle.p1[0] + Math.random() * eps,
+        triangle.p2[0] + Math.random() * eps,
+        triangle.p3[0] + Math.random() * eps
+      ],
+      y: [
+        triangle.p1[1] + Math.random() * eps,
+        triangle.p2[1] + Math.random() * eps,
+        triangle.p3[1] + Math.random() * eps
+      ],
+      z: [
+        triangle.p1[2] + Math.random() * eps,
+        triangle.p2[2] + Math.random() * eps,
+        triangle.p3[2] + Math.random() * eps
+      ],
       facecolor: triangles.map(
         (_) => `rgb(${randomColour()}, ${randomColour()}, ${randomColour()})`
       ),
       flatshading: true
     }));
-    const finiteRays = rays.filter(
-      ([ray, distance]) => Math.abs(distance) !== Infinity
-    );
-    const rayData = finiteRays.map(([ray, distance]) => ({
+    console.log(triangleData);
+    const finiteRayBounces = rayBounces.map((ray) => ray.filter((point) => !point.includes(Infinity))).filter((ray) => ray.length > 1);
+    const rayData = finiteRayBounces.map((ray) => ({
       type: "scatter3d",
-      mode: "lines",
-      x: [ray.position[0], ray.position[0] + ray.direction[0] * distance],
-      y: [ray.position[1], ray.position[1] + ray.direction[1] * distance],
-      z: [ray.position[2], ray.position[2] + ray.direction[2] * distance],
-      line: {
-        color: RAY_COLOUR
-      }
-    }));
-    const circleData = {
-      type: "scatter3d",
-      mode: "markers",
+      mode: "lines+markers",
       marker: {
         size: 2,
         color: RAY_COLOUR
       },
-      x: finiteRays.map(([ray, _]) => ray.position[0]),
-      y: finiteRays.map(([ray, _]) => ray.position[1]),
-      z: finiteRays.map(([ray, _]) => ray.position[2])
-    };
-    import_plotly.default.newPlot("container", [...triangleData, ...rayData, circleData]);
+      x: ray.map((position) => position[0]),
+      y: ray.map((position) => position[1]),
+      z: ray.map((position) => position[2]),
+      line: {
+        color: RAY_COLOUR
+      }
+    }));
+    import_plotly.default.newPlot("container", [
+      ...triangleData,
+      ...rayData
+      /*  circleData */
+    ]);
   }
   var import_plotly, RAY_COLOUR;
   var init_draw = __esm({
@@ -264156,7 +264165,7 @@ uniform ${i3} ${a3} u_${s3};
     }
   });
 
-  // src/ray_intersections.ts
+  // src/specular_ray_tracing.ts
   function rand() {
     return Math.random() * 2 - 1;
   }
@@ -264174,6 +264183,295 @@ uniform ${i3} ${a3} u_${s3};
     return [x / r, y / r, z / r];
   }
   function rayIntersectionShaderCode(intersectionCount) {
+    return (
+      /* wgsl */
+      `
+  struct Ray {
+    x: f32,
+    y: f32,
+    z: f32,
+    dx: f32,
+    dy: f32,
+    dz: f32,
+  }
+
+  struct Point {
+    x: f32,
+    y: f32,
+    z: f32,
+  }
+
+  struct Triangle {
+    x: f32, y: f32, z: f32,
+    u1: f32, u2: f32, u3: f32,
+    v1: f32, v2: f32, v3: f32,
+  }
+
+  @group(0) @binding(0)
+  var<storage, read_write> rayBuffer: array<Ray>;
+
+  @group(0) @binding(1)
+  var<storage, read> triangleBuffer: array<Triangle>;
+
+  @group(0) @binding(2)
+  var<storage, read_write> output: array<Point>;
+
+  @compute @workgroup_size(${WORKGROUP_SIZE})
+  fn main(
+    @builtin(global_invocation_id)
+    global_id : vec3u,
+  ) {
+    let rayIndex = global_id.x;
+
+    let triangleCount = i32(arrayLength(&triangleBuffer));
+    let rayCount = u32(arrayLength(&rayBuffer));
+
+    // Avoid accessing the buffer out of bounds - this could happen
+    // if NUM_RAYS and WORKGROUP_SIZE don't line up.
+    if (rayIndex >= rayCount) {
+      return;
+    }
+
+    let initialRay = rayBuffer[rayIndex];
+
+    // This is more or less a line-by-line translation of the M\xF6ller\u2013Trumbore intersection algorithm.
+    // TODO: research triangle intersection algorithms to see if there are others - though this one seems to be really simple so
+    //       I doubt it can be improved much.
+    // TODO: one potential idea would be to store u x v with the triangle, which saves on one cross product
+    //       per test. The additional memory strain might not actually make this any faster though.
+
+    let smallestPositiveNormal = 1.17549435082228750797e-38f;
+    let eps = smallestPositiveNormal;
+    let eps1 = 1 + eps;
+
+    var rayposition = vec3f(initialRay.x, initialRay.y, initialRay.z);
+    var raydirection = vec3f(initialRay.dx, initialRay.dy, initialRay.dz);
+
+    for (var n: u32 = 0; n < ${intersectionCount}; n++) {
+      let index = rayIndex * ${intersectionCount} + n;
+
+      // TODO: infinity
+      var distance = 1e10;
+      var closestTriangleIndex = triangleCount;
+
+      for (var i = 0; i < triangleCount; i++) {
+        let triangle = triangleBuffer[i];
+
+        let edge1 = vec3f(triangle.u1, triangle.u2, triangle.u3);
+        let edge2 = vec3f(triangle.v1, triangle.v2, triangle.v3);
+        let ray_cross_e2 = cross(raydirection, edge2);
+        let det = dot(edge1, ray_cross_e2);
+
+        let inv_det = 1.0 / det;
+        let offset = vec3f(rayposition.x - triangle.x, rayposition.y - triangle.y, rayposition.z - triangle.z);
+        let u = inv_det * dot(offset, ray_cross_e2);
+
+        let offset_cross_e1 = cross(offset, edge1);
+        let v = inv_det * dot(raydirection, offset_cross_e1);
+
+        let t = inv_det * dot(edge2, offset_cross_e1);
+
+        // NOTE: this happens in a single if-statement at the end of each loop (rather than as each value is calculated)
+        //       to reduce the number of times branching occurs. The amount of branching matters, since work-groups
+        //       in the GPU run in lockstep, and branching messes around with that.
+        if ((abs(det) < eps) || (u < -eps) || (v < -eps) || (u + v > eps1)) {
+          // Ray missed the triangle.
+        } else if (t > eps && t < distance) {
+          distance = t;
+          closestTriangleIndex = i;
+        }
+      }
+
+      if (closestTriangleIndex < triangleCount) {
+        let triangle = triangleBuffer[closestTriangleIndex];
+        let edge1 = vec3f(triangle.u1, triangle.u2, triangle.u3);
+        let edge2 = vec3f(triangle.v1, triangle.v2, triangle.v3);
+
+        let triangleNormal = normalize(cross(edge1, edge2));
+        let reflected = normalize(reflect(raydirection, triangleNormal));
+
+        // TODO: find a good way to do this.
+        let newposition = rayposition + raydirection * (distance - 0.0001);
+
+        output[index].x = newposition.x;
+        output[index].y = newposition.y;
+        output[index].z = newposition.z;
+
+        rayposition = newposition;
+        raydirection = reflected;
+      }
+    }
+  }
+`
+    );
+  }
+  async function runRayIntersections(settings) {
+    const rays = [];
+    const triangles = [];
+    if (PLOT_CUBE) {
+      triangles.push(...CUBE_FACES);
+    } else {
+      for (let i = 0; i < settings.triangleCount; ++i) {
+        triangles.push({
+          p1: [rand() * 100, rand() * 100, rand() * 100],
+          p2: [rand() * 100, rand() * 100, rand() * 100],
+          p3: [rand() * 100, rand() * 100, rand() * 100]
+        });
+      }
+    }
+    for (let i = 0; i < settings.rayCount; ++i) {
+      rays.push({
+        position: [rand() * 100, rand() * 100, rand() * 100],
+        direction: randomPointOnUnitSphere()
+      });
+    }
+    const result = await runShader(
+      rayIntersectionShaderCode(settings.intersectionCount),
+      [
+        {
+          data: raysToFloatArray(rays),
+          readonly: false,
+          output: false
+        },
+        {
+          data: trianglesToFloatArray(triangles),
+          readonly: true,
+          output: false
+        },
+        {
+          // 7 floats for OutputRay.
+          data: initialIntersectionsFloatArray(
+            3 * settings.intersectionCount * settings.rayCount
+          ),
+          readonly: false,
+          output: true
+        }
+      ],
+      settings.rayCount
+    );
+    return {
+      rays,
+      triangles,
+      result: result && result[0]
+    };
+  }
+  async function plotRaySpecularReflections() {
+    const { rays, triangles, result } = await runRayIntersections(PLOT_SETTINGS);
+    console.log(result);
+    console.log("plotting...");
+    const rayPositions = [];
+    for (const ray of rays) {
+      rayPositions.push([ray.position]);
+    }
+    if (result) {
+      for (let i = 0; i < (result?.length || 0); i += 3) {
+        rayPositions[Math.floor(i / (3 * PLOT_SETTINGS.intersectionCount))].push([
+          result[i],
+          result[i + 1],
+          result[i + 2]
+        ]);
+      }
+    }
+    console.log(rayPositions);
+    plotSpecularReflections(triangles, rayPositions, SHOW_FACES);
+  }
+  async function stressTestRaySpecularReflections() {
+    const { rays, triangles, result } = await runRayIntersections(STRESS_TEST_SETTINGS);
+    console.log(result);
+  }
+  var PLOT_CUBE, SHOW_FACES, CUBE_FACES, PLOT_SETTINGS, STRESS_TEST_SETTINGS;
+  var init_specular_ray_tracing = __esm({
+    "src/specular_ray_tracing.ts"() {
+      "use strict";
+      init_lib();
+      init_constants();
+      init_draw();
+      init_floatarrays();
+      PLOT_CUBE = true;
+      SHOW_FACES = false;
+      CUBE_FACES = [
+        // Bottom face.
+        {
+          p1: [-100, -100, -100],
+          p2: [100, -100, -100],
+          p3: [-100, 100, -100]
+        },
+        {
+          p1: [100, -100, -100],
+          p2: [100, 100, -100],
+          p3: [-100, 100, -100]
+        },
+        // Top face.
+        {
+          p1: [-100, -100, 100],
+          p2: [100, -100, 100],
+          p3: [-100, 100, 100]
+        },
+        {
+          p1: [100, -100, 100],
+          p2: [100, 100, 100],
+          p3: [-100, 100, 100]
+        },
+        // Left face.
+        {
+          p1: [-100, -100, -100],
+          p2: [-100, 100, 100],
+          p3: [-100, -100, 100]
+        },
+        {
+          p1: [-100, -100, -100],
+          p2: [-100, 100, -100],
+          p3: [-100, 100, 100]
+        },
+        // Right face.
+        {
+          p1: [100, -100, -100],
+          p2: [100, 100, 100],
+          p3: [100, -100, 100]
+        },
+        {
+          p1: [100, -100, -100],
+          p2: [100, 100, -100],
+          p3: [100, 100, 100]
+        },
+        // Front face.
+        {
+          p1: [-100, -100, -100],
+          p2: [100, -100, 100],
+          p3: [-100, -100, 100]
+        },
+        {
+          p1: [-100, -100, -100],
+          p2: [100, -100, -100],
+          p3: [100, -100, 100]
+        },
+        // Back face.
+        {
+          p1: [-100, 100, -100],
+          p2: [100, 100, 100],
+          p3: [-100, 100, 100]
+        },
+        {
+          p1: [-100, 100, -100],
+          p2: [100, 100, -100],
+          p3: [100, 100, 100]
+        }
+      ];
+      PLOT_SETTINGS = {
+        rayCount: PLOT_CUBE ? 10 : 1e3,
+        triangleCount: 50,
+        intersectionCount: 5
+      };
+      STRESS_TEST_SETTINGS = {
+        rayCount: 2e4,
+        triangleCount: 3e3,
+        intersectionCount: 2e4
+      };
+    }
+  });
+
+  // src/ray_intersections.ts
+  function rayIntersectionShaderCode2(intersectionCount) {
     return (
       /* wgsl */
       `
@@ -264266,59 +264564,6 @@ uniform ${i3} ${a3} u_${s3};
 `
     );
   }
-  async function runRayIntersections(settings) {
-    const rays = [];
-    const triangles = [];
-    for (let i = 0; i < settings.rayCount; ++i) {
-      rays.push({
-        position: [rand() * 100, rand() * 100, rand() * 100],
-        direction: randomPointOnUnitSphere()
-      });
-    }
-    for (let i = 0; i < settings.triangleCount; ++i) {
-      triangles.push({
-        p1: [rand() * 100, rand() * 100, rand() * 100],
-        p2: [rand() * 100, rand() * 100, rand() * 100],
-        p3: [rand() * 100, rand() * 100, rand() * 100]
-      });
-    }
-    const result = await runShader(
-      rayIntersectionShaderCode(settings.intersectionCount),
-      [
-        {
-          data: raysToFloatArray(rays),
-          readonly: false,
-          output: false
-        },
-        {
-          data: trianglesToFloatArray(triangles),
-          readonly: true,
-          output: false
-        },
-        {
-          data: initialIntersectionsFloatArray(settings.rayCount),
-          readonly: false,
-          output: true
-        }
-      ],
-      settings.rayCount
-    );
-    return { rays, triangles, result: result && result[0] };
-  }
-  async function plotRayIntersections() {
-    const { rays, triangles, result } = await runRayIntersections(PLOT_SETTINGS);
-    console.log(result);
-    console.log("plotting...");
-    plotOutput(
-      triangles,
-      rays.map((ray, i) => [ray, result?.[i] || 0])
-    );
-  }
-  async function stressTestRayIntersections() {
-    const { rays, triangles, result } = await runRayIntersections(STRESS_TEST_SETTINGS);
-    console.log(result);
-  }
-  var PLOT_SETTINGS, STRESS_TEST_SETTINGS;
   var init_ray_intersections = __esm({
     "src/ray_intersections.ts"() {
       "use strict";
@@ -264326,16 +264571,6 @@ uniform ${i3} ${a3} u_${s3};
       init_constants();
       init_draw();
       init_floatarrays();
-      PLOT_SETTINGS = {
-        rayCount: 1e3,
-        triangleCount: 50,
-        intersectionCount: 1
-      };
-      STRESS_TEST_SETTINGS = {
-        rayCount: 2e4,
-        triangleCount: 3e3,
-        intersectionCount: 2e4
-      };
     }
   });
 
@@ -264344,7 +264579,7 @@ uniform ${i3} ${a3} u_${s3};
     let successCount = 0;
     for (const testcase of testcases) {
       const result = await runShader(
-        rayIntersectionShaderCode(1),
+        rayIntersectionShaderCode2(1),
         [
           {
             data: raysToFloatArray(testcase.rays),
@@ -264482,8 +264717,8 @@ uniform ${i3} ${a3} u_${s3};
   // src/index.ts
   var require_index = __commonJS({
     "src/index.ts"() {
+      init_specular_ray_tracing();
       init_ray_intersections2();
-      init_ray_intersections();
       async function withDisabled(element, fn) {
         const text = element.innerText;
         element.innerText = "Running";
@@ -264495,11 +264730,14 @@ uniform ${i3} ${a3} u_${s3};
       document.addEventListener("DOMContentLoaded", () => {
         document.querySelector("#run-plot")?.addEventListener(
           "click",
-          (e) => withDisabled(e.target, plotRayIntersections)
+          (e) => withDisabled(e.target, plotRaySpecularReflections)
         );
         document.querySelector("#run-stress")?.addEventListener(
           "click",
-          (e) => withDisabled(e.target, stressTestRayIntersections)
+          (e) => withDisabled(
+            e.target,
+            stressTestRaySpecularReflections
+          )
         );
         document.querySelector("#run-tests")?.addEventListener(
           "click",
