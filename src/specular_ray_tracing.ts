@@ -1,5 +1,5 @@
-import { runShader } from "./lib";
-import { Ray, Triangle, WORKGROUP_SIZE } from "./constants";
+import { getGPUDevice, runShader } from "./lib";
+import { FLOAT32_SIZE, Ray, Triangle, WORKGROUP_SIZE } from "./constants";
 import { plotSpecularReflections } from "./draw";
 import {
   raysToFloatArray,
@@ -84,19 +84,22 @@ const CUBE_FACES: Triangle[] = [
 interface Settings {
   rayCount: number;
   triangleCount: number;
-  intersectionCount: number;
+  intersectionsPerPass: number;
+  numberOfPasses: number;
 }
 
-const PLOT_SETTINGS = {
+const PLOT_SETTINGS: Settings = {
   rayCount: PLOT_CUBE ? 10 : 1000,
   triangleCount: 50,
-  intersectionCount: 5,
+  intersectionsPerPass: 5,
+  numberOfPasses: 10,
 };
 
-const STRESS_TEST_SETTINGS = {
+const STRESS_TEST_SETTINGS: Settings = {
   rayCount: 20000,
   triangleCount: 3000,
-  intersectionCount: 20000,
+  intersectionsPerPass: 1000,
+  numberOfPasses: 20,
 };
 
 /**
@@ -124,7 +127,7 @@ function randomPointOnUnitSphere(): [number, number, number] {
   return [x / r, y / r, z / r];
 }
 
-export function rayIntersectionShaderCode(intersectionCount: number) {
+function specularRayIntersectionShaderCode(intersectionCount: number) {
   return /* wgsl */ `
   struct Ray {
     x: f32,
@@ -148,7 +151,7 @@ export function rayIntersectionShaderCode(intersectionCount: number) {
   }
 
   @group(0) @binding(0)
-  var<storage, read_write> rayBuffer: array<Ray>;
+  var<storage, read> rayBuffer: array<Ray>;
 
   @group(0) @binding(1)
   var<storage, read> triangleBuffer: array<Triangle>;
@@ -245,6 +248,134 @@ export function rayIntersectionShaderCode(intersectionCount: number) {
 `;
 }
 
+class SpecularRayIntersections {
+  device: GPUDevice;
+  computePipeline: GPUComputePipeline;
+  bindGroup: GPUBindGroup;
+  outputBuffer: GPUBuffer;
+  stagingBuffer: GPUBuffer;
+
+  constructor(
+    gpuDevice: GPUDevice,
+    rays: Float32Array<ArrayBuffer>,
+    triangles: Float32Array<ArrayBuffer>,
+    output: Float32Array<ArrayBuffer>,
+    code: string,
+  ) {
+    this.device = gpuDevice;
+
+    const rayBuffer = this.device.createBuffer({
+      size: rays.length * FLOAT32_SIZE,
+      usage:
+        GPUBufferUsage.STORAGE |
+        GPUBufferUsage.COPY_SRC |
+        GPUBufferUsage.COPY_DST,
+    });
+    const triangleBuffer = this.device.createBuffer({
+      size: triangles.length * FLOAT32_SIZE,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+    this.outputBuffer = this.device.createBuffer({
+      size: output.length * FLOAT32_SIZE,
+      usage:
+        GPUBufferUsage.STORAGE |
+        GPUBufferUsage.COPY_SRC |
+        GPUBufferUsage.COPY_DST,
+    });
+    this.stagingBuffer = this.device.createBuffer({
+      size: output.length * FLOAT32_SIZE,
+      usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+    });
+
+    // Bind group layout and bind group define how the buffers are passed to the shader.
+    const bindGroupLayout = this.device.createBindGroupLayout({
+      entries: [
+        {
+          binding: 0, // ray buffer
+          visibility: GPUShaderStage.COMPUTE,
+          buffer: { type: "read-only-storage" },
+        },
+        {
+          binding: 1, // triangle buffer
+          visibility: GPUShaderStage.COMPUTE,
+          buffer: { type: "read-only-storage" },
+        },
+        {
+          binding: 2, // output buffer
+          visibility: GPUShaderStage.COMPUTE,
+          buffer: { type: "storage" },
+        },
+      ],
+    });
+
+    this.bindGroup = this.device.createBindGroup({
+      layout: bindGroupLayout,
+      entries: [
+        { binding: 0, resource: { buffer: rayBuffer } },
+        { binding: 1, resource: { buffer: triangleBuffer } },
+        { binding: 2, resource: { buffer: this.outputBuffer } },
+      ],
+    });
+
+    // Create the GPU shader and compute pipeline.
+    const shaderModule = this.device.createShaderModule({ code });
+    this.computePipeline = this.device.createComputePipeline({
+      layout: this.device.createPipelineLayout({
+        bindGroupLayouts: [bindGroupLayout],
+      }),
+      compute: { module: shaderModule, entryPoint: "main" },
+    });
+
+    // Schedule copying data into buffers.
+    this.device.queue.writeBuffer(rayBuffer, 0, rays);
+    this.device.queue.writeBuffer(triangleBuffer, 0, triangles);
+    this.device.queue.writeBuffer(this.outputBuffer, 0, output);
+  }
+
+  async runPass(instancesCount: number) {
+    // Schedule the GPU shader pass.
+    const commandEncoder = this.device.createCommandEncoder();
+    const passEncoder = commandEncoder.beginComputePass();
+
+    passEncoder.setPipeline(this.computePipeline);
+    passEncoder.setBindGroup(0, this.bindGroup);
+
+    passEncoder.dispatchWorkgroups(Math.ceil(instancesCount / WORKGROUP_SIZE));
+    passEncoder.end();
+
+    commandEncoder.copyBufferToBuffer(
+      this.outputBuffer,
+      0,
+      this.stagingBuffer,
+      0,
+      this.stagingBuffer.size,
+    );
+
+    console.time("run");
+
+    // Execute the scheduled commands.
+    this.device.queue.submit([commandEncoder.finish()]);
+
+    // Map output buffers back to staging buffers (which can be read in JS).
+    await this.stagingBuffer.mapAsync(
+      GPUMapMode.READ,
+      0,
+      this.stagingBuffer.size,
+    );
+
+    console.timeEnd("run");
+
+    // Get the data from the staging buffers, and unmap the staging buffers.
+    const arrayDataOutput = this.stagingBuffer.getMappedRange().slice();
+
+    // TODO: do we need a cleanup method for this class.
+    this.stagingBuffer.unmap();
+
+    // Convert to the correct type, and display the output.
+    return new Float32Array(arrayDataOutput);
+  }
+}
+
 async function runRayIntersections(settings: Settings): Promise<{
   rays: Ray[];
   triangles: Triangle[];
@@ -274,36 +405,33 @@ async function runRayIntersections(settings: Settings): Promise<{
     });
   }
 
-  // Run the shader and get the result.
-  const result = await runShader(
-    rayIntersectionShaderCode(settings.intersectionCount),
-    [
-      {
-        data: raysToFloatArray(rays),
-        readonly: false,
-        output: false,
-      },
-      {
-        data: trianglesToFloatArray(triangles),
-        readonly: true,
-        output: false,
-      },
-      {
-        // 7 floats for OutputRay.
-        data: initialIntersectionsFloatArray(
-          3 * settings.intersectionCount * settings.rayCount,
-        ),
-        readonly: false,
-        output: true,
-      },
-    ],
-    settings.rayCount,
+  const gpuDevice = await getGPUDevice();
+
+  if (!gpuDevice) {
+    throw new Error("Aborted due to null GPU device");
+  }
+
+  const intersectionsRunner = new SpecularRayIntersections(
+    gpuDevice,
+    raysToFloatArray(rays),
+    trianglesToFloatArray(triangles),
+    initialIntersectionsFloatArray(
+      3 * settings.intersectionsPerPass * settings.rayCount,
+    ),
+    specularRayIntersectionShaderCode(settings.intersectionsPerPass),
   );
+
+  for (let i = 0; i < settings.numberOfPasses - 1; i++) {
+    await intersectionsRunner.runPass(settings.rayCount);
+  }
+
+  // Run the shader and get the result.
+  const result = await intersectionsRunner.runPass(settings.rayCount);
 
   return {
     rays,
     triangles,
-    result: result && result[0],
+    result,
   };
 }
 
@@ -320,11 +448,9 @@ export async function plotRaySpecularReflections() {
 
   if (result) {
     for (let i = 0; i < (result?.length || 0); i += 3) {
-      rayPositions[Math.floor(i / (3 * PLOT_SETTINGS.intersectionCount))].push([
-        result[i],
-        result[i + 1],
-        result[i + 2],
-      ]);
+      rayPositions[
+        Math.floor(i / (3 * PLOT_SETTINGS.intersectionsPerPass))
+      ].push([result[i], result[i + 1], result[i + 2]]);
     }
   }
 

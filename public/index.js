@@ -264182,7 +264182,7 @@ uniform ${i3} ${a3} u_${s3};
     }
     return [x / r, y / r, z / r];
   }
-  function rayIntersectionShaderCode(intersectionCount) {
+  function specularRayIntersectionShaderCode(intersectionCount) {
     return (
       /* wgsl */
       `
@@ -264208,7 +264208,7 @@ uniform ${i3} ${a3} u_${s3};
   }
 
   @group(0) @binding(0)
-  var<storage, read_write> rayBuffer: array<Ray>;
+  var<storage, read> rayBuffer: array<Ray>;
 
   @group(0) @binding(1)
   var<storage, read> triangleBuffer: array<Triangle>;
@@ -264325,34 +264325,27 @@ uniform ${i3} ${a3} u_${s3};
         direction: randomPointOnUnitSphere()
       });
     }
-    const result = await runShader(
-      rayIntersectionShaderCode(settings.intersectionCount),
-      [
-        {
-          data: raysToFloatArray(rays),
-          readonly: false,
-          output: false
-        },
-        {
-          data: trianglesToFloatArray(triangles),
-          readonly: true,
-          output: false
-        },
-        {
-          // 7 floats for OutputRay.
-          data: initialIntersectionsFloatArray(
-            3 * settings.intersectionCount * settings.rayCount
-          ),
-          readonly: false,
-          output: true
-        }
-      ],
-      settings.rayCount
+    const gpuDevice = await getGPUDevice();
+    if (!gpuDevice) {
+      throw new Error("Aborted due to null GPU device");
+    }
+    const intersectionsRunner = new SpecularRayIntersections(
+      gpuDevice,
+      raysToFloatArray(rays),
+      trianglesToFloatArray(triangles),
+      initialIntersectionsFloatArray(
+        3 * settings.intersectionsPerPass * settings.rayCount
+      ),
+      specularRayIntersectionShaderCode(settings.intersectionsPerPass)
     );
+    for (let i = 0; i < settings.numberOfPasses - 1; i++) {
+      await intersectionsRunner.runPass(settings.rayCount);
+    }
+    const result = await intersectionsRunner.runPass(settings.rayCount);
     return {
       rays,
       triangles,
-      result: result && result[0]
+      result
     };
   }
   async function plotRaySpecularReflections() {
@@ -264365,11 +264358,7 @@ uniform ${i3} ${a3} u_${s3};
     }
     if (result) {
       for (let i = 0; i < (result?.length || 0); i += 3) {
-        rayPositions[Math.floor(i / (3 * PLOT_SETTINGS.intersectionCount))].push([
-          result[i],
-          result[i + 1],
-          result[i + 2]
-        ]);
+        rayPositions[Math.floor(i / (3 * PLOT_SETTINGS.intersectionsPerPass))].push([result[i], result[i + 1], result[i + 2]]);
       }
     }
     console.log(rayPositions);
@@ -264379,7 +264368,7 @@ uniform ${i3} ${a3} u_${s3};
     const { rays, triangles, result } = await runRayIntersections(STRESS_TEST_SETTINGS);
     console.log(result);
   }
-  var PLOT_CUBE, SHOW_FACES, CUBE_FACES, PLOT_SETTINGS, STRESS_TEST_SETTINGS;
+  var PLOT_CUBE, SHOW_FACES, CUBE_FACES, PLOT_SETTINGS, STRESS_TEST_SETTINGS, SpecularRayIntersections;
   var init_specular_ray_tracing = __esm({
     "src/specular_ray_tracing.ts"() {
       "use strict";
@@ -264460,18 +264449,112 @@ uniform ${i3} ${a3} u_${s3};
       PLOT_SETTINGS = {
         rayCount: PLOT_CUBE ? 10 : 1e3,
         triangleCount: 50,
-        intersectionCount: 5
+        intersectionsPerPass: 5,
+        numberOfPasses: 10
       };
       STRESS_TEST_SETTINGS = {
         rayCount: 2e4,
         triangleCount: 3e3,
-        intersectionCount: 2e4
+        intersectionsPerPass: 1e3,
+        numberOfPasses: 20
+      };
+      SpecularRayIntersections = class {
+        device;
+        computePipeline;
+        bindGroup;
+        outputBuffer;
+        stagingBuffer;
+        constructor(gpuDevice, rays, triangles, output, code) {
+          this.device = gpuDevice;
+          const rayBuffer = this.device.createBuffer({
+            size: rays.length * FLOAT32_SIZE,
+            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
+          });
+          const triangleBuffer = this.device.createBuffer({
+            size: triangles.length * FLOAT32_SIZE,
+            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+          });
+          this.outputBuffer = this.device.createBuffer({
+            size: output.length * FLOAT32_SIZE,
+            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
+          });
+          this.stagingBuffer = this.device.createBuffer({
+            size: output.length * FLOAT32_SIZE,
+            usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
+          });
+          const bindGroupLayout = this.device.createBindGroupLayout({
+            entries: [
+              {
+                binding: 0,
+                // ray buffer
+                visibility: GPUShaderStage.COMPUTE,
+                buffer: { type: "read-only-storage" }
+              },
+              {
+                binding: 1,
+                // triangle buffer
+                visibility: GPUShaderStage.COMPUTE,
+                buffer: { type: "read-only-storage" }
+              },
+              {
+                binding: 2,
+                // output buffer
+                visibility: GPUShaderStage.COMPUTE,
+                buffer: { type: "storage" }
+              }
+            ]
+          });
+          this.bindGroup = this.device.createBindGroup({
+            layout: bindGroupLayout,
+            entries: [
+              { binding: 0, resource: { buffer: rayBuffer } },
+              { binding: 1, resource: { buffer: triangleBuffer } },
+              { binding: 2, resource: { buffer: this.outputBuffer } }
+            ]
+          });
+          const shaderModule = this.device.createShaderModule({ code });
+          this.computePipeline = this.device.createComputePipeline({
+            layout: this.device.createPipelineLayout({
+              bindGroupLayouts: [bindGroupLayout]
+            }),
+            compute: { module: shaderModule, entryPoint: "main" }
+          });
+          this.device.queue.writeBuffer(rayBuffer, 0, rays);
+          this.device.queue.writeBuffer(triangleBuffer, 0, triangles);
+          this.device.queue.writeBuffer(this.outputBuffer, 0, output);
+        }
+        async runPass(instancesCount) {
+          const commandEncoder = this.device.createCommandEncoder();
+          const passEncoder = commandEncoder.beginComputePass();
+          passEncoder.setPipeline(this.computePipeline);
+          passEncoder.setBindGroup(0, this.bindGroup);
+          passEncoder.dispatchWorkgroups(Math.ceil(instancesCount / WORKGROUP_SIZE));
+          passEncoder.end();
+          commandEncoder.copyBufferToBuffer(
+            this.outputBuffer,
+            0,
+            this.stagingBuffer,
+            0,
+            this.stagingBuffer.size
+          );
+          console.time("run");
+          this.device.queue.submit([commandEncoder.finish()]);
+          await this.stagingBuffer.mapAsync(
+            GPUMapMode.READ,
+            0,
+            this.stagingBuffer.size
+          );
+          console.timeEnd("run");
+          const arrayDataOutput = this.stagingBuffer.getMappedRange().slice();
+          this.stagingBuffer.unmap();
+          return new Float32Array(arrayDataOutput);
+        }
       };
     }
   });
 
   // src/ray_intersections.ts
-  function rayIntersectionShaderCode2(intersectionCount) {
+  function rayIntersectionShaderCode(intersectionCount) {
     return (
       /* wgsl */
       `
@@ -264579,7 +264662,7 @@ uniform ${i3} ${a3} u_${s3};
     let successCount = 0;
     for (const testcase of testcases) {
       const result = await runShader(
-        rayIntersectionShaderCode2(1),
+        rayIntersectionShaderCode(1),
         [
           {
             data: raysToFloatArray(testcase.rays),

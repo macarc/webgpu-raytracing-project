@@ -7,7 +7,7 @@ type ShaderBuffer = {
 };
 
 // Adapted from MDN WebGPU API documentation.
-async function getGPUDevice(): Promise<GPUDevice | null> {
+export async function getGPUDevice(): Promise<GPUDevice | null> {
   // Ensure that the browser supports the GPU API.
   if (!navigator.gpu) {
     alert(
