@@ -6,6 +6,7 @@ import {
   trianglesToFloatArray,
   initialIntersectionsFloatArray,
 } from "./floatarrays";
+import { orientTriangles } from "./orient_surfaces";
 
 // From WebGPU specification
 const MAX_STORAGE_BUFFER_SIZE = 134217728;
@@ -207,14 +208,18 @@ function specularRayIntersectionShaderCode(intersectionCount: number) {
 
         let edge1 = vec3f(triangle.u1, triangle.u2, triangle.u3);
         let edge2 = vec3f(triangle.v1, triangle.v2, triangle.v3);
-        let ray_cross_e2 = cross(raydirection, edge2);
-        let det = dot(edge1, ray_cross_e2);
-
-        let inv_det = 1.0 / det;
         let offset = vec3f(rayposition.x - triangle.x, rayposition.y - triangle.y, rayposition.z - triangle.z);
-        let u = inv_det * dot(offset, ray_cross_e2);
 
+        let ray_cross_e2 = cross(raydirection, edge2);
         let offset_cross_e1 = cross(offset, edge1);
+
+        // NOTE: greater than 0 iff ray is incident on backface.
+        let dir = -dot(edge1, ray_cross_e2);  // raydirection.(e1 x e2)
+
+        let det = dot(edge1, ray_cross_e2);
+        let inv_det = 1.0 / det;
+
+        let u = inv_det * dot(offset, ray_cross_e2);
         let v = inv_det * dot(raydirection, offset_cross_e1);
 
         let t = inv_det * dot(edge2, offset_cross_e1);
@@ -224,7 +229,7 @@ function specularRayIntersectionShaderCode(intersectionCount: number) {
         //       in the GPU run in lockstep, and branching messes around with that.
         if ((abs(det) < eps) || (u < -eps) || (v < -eps) || (u + v > eps1)) {
           // Ray missed the triangle.
-        } else if (t > eps && t < distance) {
+        } else if (t > eps && t < distance && dir >= 0) {
           distance = t;
           closestTriangleIndex = i;
         }
@@ -237,9 +242,7 @@ function specularRayIntersectionShaderCode(intersectionCount: number) {
 
         let triangleNormal = normalize(cross(edge1, edge2));
         let reflected = normalize(reflect(raydirection, triangleNormal));
-
-        // TODO: find a good way to do this.
-        let newposition = rayposition + raydirection * (distance - 0.0001);
+        let newposition = rayposition + raydirection * distance;
 
         output[index].x = newposition.x;
         output[index].y = newposition.y;
@@ -386,21 +389,25 @@ async function runRayIntersections(settings: Settings): Promise<{
   triangles: Triangle[];
   result: Float32Array | null;
 }> {
+  console.log("Creating geometry");
   const rays: Ray[] = [];
-  const triangles: Triangle[] = [];
+  const unorientedTriangles: Triangle[] = [];
 
   // Create the geometry.
   if (PLOT_CUBE) {
-    triangles.push(...CUBE_FACES);
+    unorientedTriangles.push(...CUBE_FACES);
   } else {
     for (let i = 0; i < settings.triangleCount; ++i) {
-      triangles.push({
+      unorientedTriangles.push({
         p1: [rand() * 100, rand() * 100, rand() * 100],
         p2: [rand() * 100, rand() * 100, rand() * 100],
         p3: [rand() * 100, rand() * 100, rand() * 100],
       });
     }
   }
+
+  // Orient the triangles so that they all face outwards.
+  const triangles = await orientTriangles(unorientedTriangles);
 
   // Create the rays.
   for (let i = 0; i < settings.rayCount; ++i) {

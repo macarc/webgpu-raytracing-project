@@ -264165,6 +264165,177 @@ uniform ${i3} ${a3} u_${s3};
     }
   });
 
+  // src/orient_surfaces.ts
+  async function orientTriangles(triangles) {
+    let result = await runShader(
+      shaderCode,
+      [
+        {
+          data: trianglesToFloatArray(triangles),
+          readonly: true,
+          output: false
+        },
+        {
+          data: new Float32Array(triangles.length),
+          readonly: false,
+          output: true
+        }
+      ],
+      triangles.length
+    );
+    let flips = result && result[0];
+    console.log(flips);
+    console.log(triangles);
+    if (flips) {
+      for (let i = 0; i < flips.length; i++) {
+        const sign = flips[i];
+        if (sign !== 1 && sign !== -1) {
+          throw new Error(
+            `Received invalid output ${sign} from triangle orientation shader.`
+          );
+        } else if (sign === -1) {
+          const p2 = triangles[i].p3;
+          const p3 = triangles[i].p2;
+          triangles[i].p2 = p2;
+          triangles[i].p3 = p3;
+        }
+      }
+    } else {
+      throw new Error(
+        "Did not receive shader output from triangle orientation shader."
+      );
+    }
+    return triangles;
+  }
+  var shaderCode;
+  var init_orient_surfaces = __esm({
+    "src/orient_surfaces.ts"() {
+      "use strict";
+      init_lib();
+      init_constants();
+      init_floatarrays();
+      shaderCode = `
+  struct Triangle {
+    x: f32, y: f32, z: f32,
+    u1: f32, u2: f32, u3: f32,
+    v1: f32, v2: f32, v3: f32,
+  }
+
+  @group(0) @binding(0)
+  var<storage, read> triangles: array<Triangle>;
+
+  // TODO: these shouldn't really be floats.
+  @group(0) @binding(1)
+  var<storage, read_write> output: array<f32>;
+
+  const INFINITY: f32 = 1e10;
+
+  fn distanceTo(origin: vec3f, ray: vec3f, triangle: Triangle) -> f32 {
+    let smallestPositiveNormal = 1.17549435082228750797e-38f;
+    let eps = smallestPositiveNormal;
+    let eps1 = 1 + eps;
+
+    let edge1 = vec3f(triangle.u1, triangle.u2, triangle.u3);
+    let edge2 = vec3f(triangle.v1, triangle.v2, triangle.v3);
+    let offset = vec3f(origin.x - triangle.x, origin.y - triangle.y, origin.z - triangle.z);
+
+    let ray_cross_e2 = cross(ray, edge2);
+    let offset_cross_e1 = cross(offset, edge1);
+
+    let det = dot(edge1, ray_cross_e2);
+    let inv_det = 1.0 / det;
+
+    let u = inv_det * dot(offset, ray_cross_e2);
+    let v = inv_det * dot(ray, offset_cross_e1);
+
+    let t = inv_det * dot(edge2, offset_cross_e1);
+
+    if ((abs(det) < eps) || (u < -eps) || (v < -eps) || (u + v > eps1)) {
+      // Ray missed the triangle.
+    } else if (t > eps) {
+      return t;
+    }
+
+    return INFINITY;
+  }
+
+  @compute @workgroup_size(${WORKGROUP_SIZE})
+  fn main(
+    @builtin(global_invocation_id)
+    global_id : vec3u,
+  ) {
+    let index = global_id.x;
+
+    let triangleCount = u32(arrayLength(&triangles));
+
+    // Avoid accessing the buffer out of bounds - this could happen
+    // if NUM_RAYS and WORKGROUP_SIZE don't line up.
+    if (index >= triangleCount) {
+      output[index] = 42;
+      return;
+    }
+
+    let trgtTriangle = triangles[index];
+    let targetCentre = vec3(
+      trgtTriangle.x * 3 + (trgtTriangle.u1 + trgtTriangle.v1),
+      trgtTriangle.y * 3 + (trgtTriangle.u2 + trgtTriangle.v2),
+      trgtTriangle.z * 3 + (trgtTriangle.u3 + trgtTriangle.v3)
+    );
+
+    var origin = vec3(0.0, 0.0, 0.0);
+    var ray = normalize(targetCentre - origin);
+    var targetDistance = distanceTo(origin, ray, trgtTriangle);
+
+    // Since the origin (0,0,0) might be aligned with the triangle, in this case move the origin to (0,0,1).
+    if (targetDistance == INFINITY) {
+      origin.z += 1.0;
+      ray = normalize(targetCentre - origin);
+      targetDistance = distanceTo(origin, ray, trgtTriangle);
+    }
+    if (targetDistance == INFINITY) {
+      output[index] = 42;
+      return;
+    }
+
+    let target_edge_1 = vec3(trgtTriangle.u1, trgtTriangle.u2, trgtTriangle.u3);
+    let target_edge_2 = vec3(trgtTriangle.v1, trgtTriangle.v2, trgtTriangle.v3);
+    let currentRayNormalDirection = i32(dot(ray, cross(target_edge_1, target_edge_2)) > 0);
+
+    var intersectionCount = 1;
+    var intersectionsBeforeTargetCount = 0;
+
+    for (var i: u32 = 0; i < triangleCount; i++) {
+      let triangle = triangles[i];
+
+      let distance = distanceTo(origin, ray, triangle);
+
+      if (i != index && distance < INFINITY) {
+        intersectionCount += 1;
+        if (distance < targetDistance) {
+          intersectionsBeforeTargetCount += 1;
+        }
+      }
+    }
+
+    var shouldFlip: i32 = currentRayNormalDirection * 2 - 1;
+
+    // If the origin is outside the geometry, flip the sign.
+    if (intersectionCount % 2 == 0) {
+      shouldFlip *= -1;
+    }
+
+    // If the ray intersects an odd number of triangles before the current one,
+    // flip the sign.
+    if (intersectionsBeforeTargetCount % 2 == 1) {
+      shouldFlip *= -1;
+    }
+
+    output[index] = f32(shouldFlip);
+  }
+`;
+    }
+  });
+
   // src/specular_ray_tracing.ts
   function rand() {
     return Math.random() * 2 - 1;
@@ -264259,14 +264430,18 @@ uniform ${i3} ${a3} u_${s3};
 
         let edge1 = vec3f(triangle.u1, triangle.u2, triangle.u3);
         let edge2 = vec3f(triangle.v1, triangle.v2, triangle.v3);
-        let ray_cross_e2 = cross(raydirection, edge2);
-        let det = dot(edge1, ray_cross_e2);
-
-        let inv_det = 1.0 / det;
         let offset = vec3f(rayposition.x - triangle.x, rayposition.y - triangle.y, rayposition.z - triangle.z);
-        let u = inv_det * dot(offset, ray_cross_e2);
 
+        let ray_cross_e2 = cross(raydirection, edge2);
         let offset_cross_e1 = cross(offset, edge1);
+
+        // NOTE: greater than 0 iff ray is incident on backface.
+        let dir = -dot(edge1, ray_cross_e2);  // raydirection.(e1 x e2)
+
+        let det = dot(edge1, ray_cross_e2);
+        let inv_det = 1.0 / det;
+
+        let u = inv_det * dot(offset, ray_cross_e2);
         let v = inv_det * dot(raydirection, offset_cross_e1);
 
         let t = inv_det * dot(edge2, offset_cross_e1);
@@ -264276,7 +264451,7 @@ uniform ${i3} ${a3} u_${s3};
         //       in the GPU run in lockstep, and branching messes around with that.
         if ((abs(det) < eps) || (u < -eps) || (v < -eps) || (u + v > eps1)) {
           // Ray missed the triangle.
-        } else if (t > eps && t < distance) {
+        } else if (t > eps && t < distance && dir >= 0) {
           distance = t;
           closestTriangleIndex = i;
         }
@@ -264289,9 +264464,7 @@ uniform ${i3} ${a3} u_${s3};
 
         let triangleNormal = normalize(cross(edge1, edge2));
         let reflected = normalize(reflect(raydirection, triangleNormal));
-
-        // TODO: find a good way to do this.
-        let newposition = rayposition + raydirection * (distance - 0.0001);
+        let newposition = rayposition + raydirection * distance;
 
         output[index].x = newposition.x;
         output[index].y = newposition.y;
@@ -264307,18 +264480,19 @@ uniform ${i3} ${a3} u_${s3};
   }
   async function runRayIntersections(settings) {
     const rays = [];
-    const triangles = [];
+    const unorientedTriangles = [];
     if (PLOT_CUBE) {
-      triangles.push(...CUBE_FACES);
+      unorientedTriangles.push(...CUBE_FACES);
     } else {
       for (let i = 0; i < settings.triangleCount; ++i) {
-        triangles.push({
+        unorientedTriangles.push({
           p1: [rand() * 100, rand() * 100, rand() * 100],
           p2: [rand() * 100, rand() * 100, rand() * 100],
           p3: [rand() * 100, rand() * 100, rand() * 100]
         });
       }
     }
+    const triangles = await orientTriangles(unorientedTriangles);
     for (let i = 0; i < settings.rayCount; ++i) {
       rays.push({
         position: [rand() * 100, rand() * 100, rand() * 100],
@@ -264380,6 +264554,7 @@ uniform ${i3} ${a3} u_${s3};
       init_constants();
       init_draw();
       init_floatarrays();
+      init_orient_surfaces();
       MAX_STORAGE_BUFFER_SIZE = 134217728;
       PLOT_CUBE = true;
       SHOW_FACES = false;
