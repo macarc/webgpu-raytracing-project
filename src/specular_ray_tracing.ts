@@ -7,6 +7,9 @@ import {
   initialIntersectionsFloatArray,
 } from "./floatarrays";
 
+// From WebGPU specification
+const MAX_STORAGE_BUFFER_SIZE = 134217728;
+
 const PLOT_CUBE = true;
 const SHOW_FACES = false;
 
@@ -95,11 +98,13 @@ const PLOT_SETTINGS: Settings = {
   numberOfPasses: 10,
 };
 
+const ipp = Math.floor(MAX_STORAGE_BUFFER_SIZE / (3 * FLOAT32_SIZE * 20000));
+
 const STRESS_TEST_SETTINGS: Settings = {
   rayCount: 20000,
   triangleCount: 3000,
-  intersectionsPerPass: 1000,
-  numberOfPasses: 20,
+  intersectionsPerPass: ipp,
+  numberOfPasses: Math.ceil(20000 / ipp),
 };
 
 /**
@@ -409,6 +414,12 @@ async function runRayIntersections(settings: Settings): Promise<{
 
   if (!gpuDevice) {
     throw new Error("Aborted due to null GPU device");
+  }
+
+  const outputSize = 3 * settings.intersectionsPerPass * settings.rayCount;
+
+  if (outputSize > MAX_STORAGE_BUFFER_SIZE) {
+    console.log("Output buffer is too large, will not work");
   }
 
   const intersectionsRunner = new SpecularRayIntersections(

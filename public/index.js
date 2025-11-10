@@ -264329,6 +264329,10 @@ uniform ${i3} ${a3} u_${s3};
     if (!gpuDevice) {
       throw new Error("Aborted due to null GPU device");
     }
+    const outputSize = 3 * settings.intersectionsPerPass * settings.rayCount;
+    if (outputSize > MAX_STORAGE_BUFFER_SIZE) {
+      console.log("Output buffer is too large, will not work");
+    }
     const intersectionsRunner = new SpecularRayIntersections(
       gpuDevice,
       raysToFloatArray(rays),
@@ -264368,7 +264372,7 @@ uniform ${i3} ${a3} u_${s3};
     const { rays, triangles, result } = await runRayIntersections(STRESS_TEST_SETTINGS);
     console.log(result);
   }
-  var PLOT_CUBE, SHOW_FACES, CUBE_FACES, PLOT_SETTINGS, STRESS_TEST_SETTINGS, SpecularRayIntersections;
+  var MAX_STORAGE_BUFFER_SIZE, PLOT_CUBE, SHOW_FACES, CUBE_FACES, PLOT_SETTINGS, ipp, STRESS_TEST_SETTINGS, SpecularRayIntersections;
   var init_specular_ray_tracing = __esm({
     "src/specular_ray_tracing.ts"() {
       "use strict";
@@ -264376,6 +264380,7 @@ uniform ${i3} ${a3} u_${s3};
       init_constants();
       init_draw();
       init_floatarrays();
+      MAX_STORAGE_BUFFER_SIZE = 134217728;
       PLOT_CUBE = true;
       SHOW_FACES = false;
       CUBE_FACES = [
@@ -264452,11 +264457,12 @@ uniform ${i3} ${a3} u_${s3};
         intersectionsPerPass: 5,
         numberOfPasses: 10
       };
+      ipp = Math.floor(MAX_STORAGE_BUFFER_SIZE / (3 * FLOAT32_SIZE * 2e4));
       STRESS_TEST_SETTINGS = {
         rayCount: 2e4,
         triangleCount: 3e3,
-        intersectionsPerPass: 1e3,
-        numberOfPasses: 20
+        intersectionsPerPass: ipp,
+        numberOfPasses: Math.ceil(2e4 / ipp)
       };
       SpecularRayIntersections = class {
         device;
