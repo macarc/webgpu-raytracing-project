@@ -264184,8 +264184,6 @@ uniform ${i3} ${a3} u_${s3};
       triangles.length
     );
     let flips = result && result[0];
-    console.log(flips);
-    console.log(triangles);
     if (flips) {
       for (let i = 0; i < flips.length; i++) {
         const sign = flips[i];
@@ -264280,7 +264278,7 @@ uniform ${i3} ${a3} u_${s3};
       trgtTriangle.x * 3 + (trgtTriangle.u1 + trgtTriangle.v1),
       trgtTriangle.y * 3 + (trgtTriangle.u2 + trgtTriangle.v2),
       trgtTriangle.z * 3 + (trgtTriangle.u3 + trgtTriangle.v3)
-    );
+    ) / 3;
 
     var origin = vec3(0.0, 0.0, 0.0);
     var ray = normalize(targetCentre - origin);
@@ -264479,6 +264477,8 @@ uniform ${i3} ${a3} u_${s3};
     );
   }
   async function runRayIntersections(settings) {
+    console.time("Total (including setup)");
+    console.log("Creating geometry");
     const rays = [];
     const unorientedTriangles = [];
     if (PLOT_CUBE) {
@@ -264516,10 +264516,13 @@ uniform ${i3} ${a3} u_${s3};
       ),
       specularRayIntersectionShaderCode(settings.intersectionsPerPass)
     );
+    console.time("Total (excluding setup)");
     for (let i = 0; i < settings.numberOfPasses - 1; i++) {
       await intersectionsRunner.runPass(settings.rayCount);
     }
     const result = await intersectionsRunner.runPass(settings.rayCount);
+    console.timeEnd("Total (excluding setup)");
+    console.timeEnd("Total (including setup)");
     return {
       rays,
       triangles,

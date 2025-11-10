@@ -69,7 +69,7 @@ const shaderCode = `
       trgtTriangle.x * 3 + (trgtTriangle.u1 + trgtTriangle.v1),
       trgtTriangle.y * 3 + (trgtTriangle.u2 + trgtTriangle.v2),
       trgtTriangle.z * 3 + (trgtTriangle.u3 + trgtTriangle.v3)
-    );
+    ) / 3;
 
     var origin = vec3(0.0, 0.0, 0.0);
     var ray = normalize(targetCentre - origin);
