@@ -263,7 +263,7 @@ function specularRayIntersectionShaderCode(intersectionCount: number) {
         // Get distance from receiver
         let vecToReceiver = receiverPosition - rayposition;
         let distanceToClosestPoint = dot(vecToReceiver, raydirection);
-        let distanceFromReceiver = sqrt(pow(length(vecToReceiver), 2) - pow(distanceToClosestPoint, 2));
+        let distanceFromReceiver = length(vecToReceiver - distanceToClosestPoint * raydirection); // sqrt(pow(length(vecToReceiver), 2) - pow(distanceToClosestPoint, 2));
 
         let time = raydistancetravelled + abs(distanceToClosestPoint);
         let intensity = pow(0.9, f32(n) + rayinitialbouncecount);
@@ -498,8 +498,10 @@ async function runRayIntersections(settings: Settings): Promise<{
     console.log(result);
 
     for (let j = 0; j < result.length; j += 2) {
+      // TODO: frequency dependent.
+      const AIR_ABSORPTION_COEFF = 0.0013;
       output[Math.round((SAMPLE_RATE * result[j]) / SPEED_OF_SOUND)] +=
-        result[j + 1];
+        result[j + 1] * Math.exp(-result[j] * AIR_ABSORPTION_COEFF);
     }
   }
 

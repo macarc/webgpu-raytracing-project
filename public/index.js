@@ -264479,7 +264479,7 @@ uniform ${i3} ${a3} u_${s3};
         // Get distance from receiver
         let vecToReceiver = receiverPosition - rayposition;
         let distanceToClosestPoint = dot(vecToReceiver, raydirection);
-        let distanceFromReceiver = sqrt(pow(length(vecToReceiver), 2) - pow(distanceToClosestPoint, 2));
+        let distanceFromReceiver = length(vecToReceiver - distanceToClosestPoint * raydirection); // sqrt(pow(length(vecToReceiver), 2) - pow(distanceToClosestPoint, 2));
 
         let time = raydistancetravelled + abs(distanceToClosestPoint);
         let intensity = pow(0.9, f32(n) + rayinitialbouncecount);
@@ -264566,7 +264566,8 @@ uniform ${i3} ${a3} u_${s3};
       const result2 = await intersectionsRunner.runPass(settings.rayCount);
       console.log(result2);
       for (let j = 0; j < result2.length; j += 2) {
-        output[Math.round(SAMPLE_RATE * result2[j] / SPEED_OF_SOUND)] += result2[j + 1];
+        const AIR_ABSORPTION_COEFF = 13e-4;
+        output[Math.round(SAMPLE_RATE * result2[j] / SPEED_OF_SOUND)] += result2[j + 1] * Math.exp(-result2[j] * AIR_ABSORPTION_COEFF);
       }
     }
     const result = await intersectionsRunner.runPass(settings.rayCount);
