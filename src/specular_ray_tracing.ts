@@ -1,11 +1,14 @@
-import { getGPUDevice, runShader } from "./lib";
-import { FLOAT32_SIZE, Ray, Triangle, WORKGROUP_SIZE } from "./constants";
-import { plotSpecularReflections } from "./draw";
+import { getGPUDevice } from "./lib";
 import {
-  raysToFloatArray,
-  trianglesToFloatArray,
-  initialIntersectionsFloatArray,
-} from "./floatarrays";
+  FLOAT32_SIZE,
+  Ray,
+  SAMPLE_RATE,
+  SPEED_OF_SOUND,
+  Triangle,
+  WORKGROUP_SIZE,
+} from "./constants";
+import { plotSpecularReflections } from "./draw";
+import { trianglesToFloatArray } from "./floatarrays";
 import { orientTriangles } from "./orient_surfaces";
 
 // From WebGPU specification
@@ -14,74 +17,77 @@ const MAX_STORAGE_BUFFER_SIZE = 134217728;
 const PLOT_CUBE = true;
 const SHOW_FACES = false;
 
+// TODO: allow setting this somehow.
+const OUTPUT_AUDIO_LENGTH = 4; // seconds.
+
 const CUBE_FACES: Triangle[] = [
   // Bottom face.
   {
-    p1: [-100, -100, -100],
-    p2: [100, -100, -100],
-    p3: [-100, 100, -100],
+    p1: [-10, -10, -10],
+    p2: [10, -10, -10],
+    p3: [-10, 10, -10],
   },
   {
-    p1: [100, -100, -100],
-    p2: [100, 100, -100],
-    p3: [-100, 100, -100],
+    p1: [10, -10, -10],
+    p2: [10, 10, -10],
+    p3: [-10, 10, -10],
   },
   // Top face.
   {
-    p1: [-100, -100, 100],
-    p2: [100, -100, 100],
-    p3: [-100, 100, 100],
+    p1: [-10, -10, 10],
+    p2: [10, -10, 10],
+    p3: [-10, 10, 10],
   },
   {
-    p1: [100, -100, 100],
-    p2: [100, 100, 100],
-    p3: [-100, 100, 100],
+    p1: [10, -10, 10],
+    p2: [10, 10, 10],
+    p3: [-10, 10, 10],
   },
 
   // Left face.
   {
-    p1: [-100, -100, -100],
-    p2: [-100, 100, 100],
-    p3: [-100, -100, 100],
+    p1: [-10, -10, -10],
+    p2: [-10, 10, 10],
+    p3: [-10, -10, 10],
   },
   {
-    p1: [-100, -100, -100],
-    p2: [-100, 100, -100],
-    p3: [-100, 100, 100],
+    p1: [-10, -10, -10],
+    p2: [-10, 10, -10],
+    p3: [-10, 10, 10],
   },
   // Right face.
   {
-    p1: [100, -100, -100],
-    p2: [100, 100, 100],
-    p3: [100, -100, 100],
+    p1: [10, -10, -10],
+    p2: [10, 10, 10],
+    p3: [10, -10, 10],
   },
   {
-    p1: [100, -100, -100],
-    p2: [100, 100, -100],
-    p3: [100, 100, 100],
+    p1: [10, -10, -10],
+    p2: [10, 10, -10],
+    p3: [10, 10, 10],
   },
 
   // Front face.
   {
-    p1: [-100, -100, -100],
-    p2: [100, -100, 100],
-    p3: [-100, -100, 100],
+    p1: [-10, -10, -10],
+    p2: [10, -10, 10],
+    p3: [-10, -10, 10],
   },
   {
-    p1: [-100, -100, -100],
-    p2: [100, -100, -100],
-    p3: [100, -100, 100],
+    p1: [-10, -10, -10],
+    p2: [10, -10, -10],
+    p3: [10, -10, 10],
   },
   // Back face.
   {
-    p1: [-100, 100, -100],
-    p2: [100, 100, 100],
-    p3: [-100, 100, 100],
+    p1: [-10, 10, -10],
+    p2: [10, 10, 10],
+    p3: [-10, 10, 10],
   },
   {
-    p1: [-100, 100, -100],
-    p2: [100, 100, -100],
-    p3: [100, 100, 100],
+    p1: [-10, 10, -10],
+    p2: [10, 10, -10],
+    p3: [10, 10, 10],
   },
 ];
 
@@ -96,10 +102,10 @@ const PLOT_SETTINGS: Settings = {
   rayCount: PLOT_CUBE ? 10 : 1000,
   triangleCount: 50,
   intersectionsPerPass: 5,
-  numberOfPasses: 10,
+  numberOfPasses: 1,
 };
 
-const ipp = Math.floor(MAX_STORAGE_BUFFER_SIZE / (3 * FLOAT32_SIZE * 20000));
+const ipp = Math.floor(MAX_STORAGE_BUFFER_SIZE / (2 * FLOAT32_SIZE * 20000));
 
 const STRESS_TEST_SETTINGS: Settings = {
   rayCount: 20000,
@@ -142,6 +148,9 @@ function specularRayIntersectionShaderCode(intersectionCount: number) {
     dx: f32,
     dy: f32,
     dz: f32,
+    // TODO: these should really be integers.
+    distanceTravelled: f32,
+    bounceCount: f32,
   }
 
   struct Point {
@@ -156,14 +165,19 @@ function specularRayIntersectionShaderCode(intersectionCount: number) {
     v1: f32, v2: f32, v3: f32,
   }
 
+  struct Hit {
+    time: f32,
+    intensity: f32,
+  }
+
   @group(0) @binding(0)
-  var<storage, read> rayBuffer: array<Ray>;
+  var<storage, read_write> rayBuffer: array<Ray>;
 
   @group(0) @binding(1)
   var<storage, read> triangleBuffer: array<Triangle>;
 
   @group(0) @binding(2)
-  var<storage, read_write> output: array<Point>;
+  var<storage, read_write> output: array<Hit>;
 
   @compute @workgroup_size(${WORKGROUP_SIZE})
   fn main(
@@ -195,6 +209,12 @@ function specularRayIntersectionShaderCode(intersectionCount: number) {
 
     var rayposition = vec3f(initialRay.x, initialRay.y, initialRay.z);
     var raydirection = vec3f(initialRay.dx, initialRay.dy, initialRay.dz);
+    var raydistancetravelled = initialRay.distanceTravelled;
+    let rayinitialbouncecount = initialRay.bounceCount;
+
+    let receiverRadius = 1.0;
+    let receiverRadius2 = pow(receiverRadius, 2.0);
+    let receiverPosition = vec3(8.5, 0.0, 0.0);
 
     for (var n: u32 = 0; n < ${intersectionCount}; n++) {
       let index = rayIndex * ${intersectionCount} + n;
@@ -206,6 +226,7 @@ function specularRayIntersectionShaderCode(intersectionCount: number) {
       for (var i = 0; i < triangleCount; i++) {
         let triangle = triangleBuffer[i];
 
+        // TODO: don't create a vec every time through the loop.
         let edge1 = vec3f(triangle.u1, triangle.u2, triangle.u3);
         let edge2 = vec3f(triangle.v1, triangle.v2, triangle.v3);
         let offset = vec3f(rayposition.x - triangle.x, rayposition.y - triangle.y, rayposition.z - triangle.z);
@@ -235,7 +256,23 @@ function specularRayIntersectionShaderCode(intersectionCount: number) {
         }
       }
 
+      output[index].intensity = 0;
+
+      // This should always be true.
       if (closestTriangleIndex < triangleCount) {
+        // Get distance from receiver
+        let vecToReceiver = receiverPosition - rayposition;
+        let distanceToClosestPoint = dot(vecToReceiver, raydirection);
+        let distanceFromReceiver = sqrt(pow(length(vecToReceiver), 2) - pow(distanceToClosestPoint, 2));
+
+        let time = raydistancetravelled + abs(distanceToClosestPoint);
+        let intensity = pow(0.9, f32(n) + rayinitialbouncecount);
+
+        if (distanceFromReceiver <= receiverRadius && abs(distanceToClosestPoint) <= distance) {
+          output[index].time = time;
+          output[index].intensity = intensity;
+        }
+
         let triangle = triangleBuffer[closestTriangleIndex];
         let edge1 = vec3f(triangle.u1, triangle.u2, triangle.u3);
         let edge2 = vec3f(triangle.v1, triangle.v2, triangle.v3);
@@ -244,14 +281,22 @@ function specularRayIntersectionShaderCode(intersectionCount: number) {
         let reflected = normalize(reflect(raydirection, triangleNormal));
         let newposition = rayposition + raydirection * distance;
 
-        output[index].x = newposition.x;
-        output[index].y = newposition.y;
-        output[index].z = newposition.z;
-
         rayposition = newposition;
         raydirection = reflected;
+        raydistancetravelled += distance;
       }
     }
+
+    // Write the updated ray position/distance to the output buffer, ready for
+    // the next pass.
+    rayBuffer[rayIndex].x = rayposition.x;
+    rayBuffer[rayIndex].y = rayposition.y;
+    rayBuffer[rayIndex].z = rayposition.z;
+    rayBuffer[rayIndex].dx = raydirection.x;
+    rayBuffer[rayIndex].dy = raydirection.y;
+    rayBuffer[rayIndex].dz = raydirection.z;
+    rayBuffer[rayIndex].distanceTravelled = raydistancetravelled;
+    rayBuffer[rayIndex].bounceCount = rayinitialbouncecount + ${intersectionCount};
   }
 `;
 }
@@ -301,7 +346,7 @@ class SpecularRayIntersections {
         {
           binding: 0, // ray buffer
           visibility: GPUShaderStage.COMPUTE,
-          buffer: { type: "read-only-storage" },
+          buffer: { type: "storage" },
         },
         {
           binding: 1, // triangle buffer
@@ -389,6 +434,7 @@ async function runRayIntersections(settings: Settings): Promise<{
   triangles: Triangle[];
   result: Float32Array | null;
 }> {
+  console.time("Total (including setup)");
   console.log("Creating geometry");
   const rays: Ray[] = [];
   const unorientedTriangles: Triangle[] = [];
@@ -412,7 +458,9 @@ async function runRayIntersections(settings: Settings): Promise<{
   // Create the rays.
   for (let i = 0; i < settings.rayCount; ++i) {
     rays.push({
-      position: [rand() * 100, rand() * 100, rand() * 100],
+      // NOTE: placing at the exact origin [0,0,0] causes artefacts.
+      // TODO: once diffusion has been implemented, try [0,0,0] again.
+      position: [0.1, -0.1, -0.1], // [0, 0, 0]
       direction: randomPointOnUnitSphere(),
     });
   }
@@ -423,7 +471,7 @@ async function runRayIntersections(settings: Settings): Promise<{
     throw new Error("Aborted due to null GPU device");
   }
 
-  const outputSize = 3 * settings.intersectionsPerPass * settings.rayCount;
+  const outputSize = 2 * settings.intersectionsPerPass * settings.rayCount;
 
   if (outputSize > MAX_STORAGE_BUFFER_SIZE) {
     console.log("Output buffer is too large, will not work");
@@ -431,20 +479,35 @@ async function runRayIntersections(settings: Settings): Promise<{
 
   const intersectionsRunner = new SpecularRayIntersections(
     gpuDevice,
-    raysToFloatArray(rays),
-    trianglesToFloatArray(triangles),
-    initialIntersectionsFloatArray(
-      3 * settings.intersectionsPerPass * settings.rayCount,
+    new Float32Array(
+      rays.flatMap((ray) => [...ray.position, ...ray.direction, 0, 0]),
     ),
+    trianglesToFloatArray(triangles),
+    new Float32Array(outputSize),
     specularRayIntersectionShaderCode(settings.intersectionsPerPass),
   );
 
-  for (let i = 0; i < settings.numberOfPasses - 1; i++) {
-    await intersectionsRunner.runPass(settings.rayCount);
+  console.time("Total (excluding setup)");
+
+  // TODO BUG: don't cut this off arbitrarily.
+  let output = new Float32Array(SAMPLE_RATE * OUTPUT_AUDIO_LENGTH);
+
+  for (let i = 0; i < settings.numberOfPasses; i++) {
+    // Run the shader and get the result.
+    const result = await intersectionsRunner.runPass(settings.rayCount);
+    console.log(result);
+
+    for (let j = 0; j < result.length; j += 2) {
+      output[Math.round((SAMPLE_RATE * result[j]) / SPEED_OF_SOUND)] +=
+        result[j + 1];
+    }
   }
 
-  // Run the shader and get the result.
   const result = await intersectionsRunner.runPass(settings.rayCount);
+
+  console.timeEnd("Total (excluding setup)");
+  console.timeEnd("Total (including setup)");
+  console.log("Output", output.join(","));
 
   return {
     rays,
@@ -464,6 +527,7 @@ export async function plotRaySpecularReflections() {
     rayPositions.push([ray.position]);
   }
 
+  // TODO: now broken!!
   if (result) {
     for (let i = 0; i < (result?.length || 0); i += 3) {
       rayPositions[

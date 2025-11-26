@@ -30,12 +30,14 @@
   ));
 
   // src/constants.ts
-  var FLOAT32_SIZE, WORKGROUP_SIZE;
+  var FLOAT32_SIZE, WORKGROUP_SIZE, SAMPLE_RATE, SPEED_OF_SOUND;
   var init_constants = __esm({
     "src/constants.ts"() {
       "use strict";
       FLOAT32_SIZE = 4;
       WORKGROUP_SIZE = 64;
+      SAMPLE_RATE = 48e3;
+      SPEED_OF_SOUND = 340;
     }
   });
 
@@ -264362,6 +264364,9 @@ uniform ${i3} ${a3} u_${s3};
     dx: f32,
     dy: f32,
     dz: f32,
+    // TODO: these should really be integers.
+    distanceTravelled: f32,
+    bounceCount: f32,
   }
 
   struct Point {
@@ -264376,14 +264381,19 @@ uniform ${i3} ${a3} u_${s3};
     v1: f32, v2: f32, v3: f32,
   }
 
+  struct Hit {
+    time: f32,
+    intensity: f32,
+  }
+
   @group(0) @binding(0)
-  var<storage, read> rayBuffer: array<Ray>;
+  var<storage, read_write> rayBuffer: array<Ray>;
 
   @group(0) @binding(1)
   var<storage, read> triangleBuffer: array<Triangle>;
 
   @group(0) @binding(2)
-  var<storage, read_write> output: array<Point>;
+  var<storage, read_write> output: array<Hit>;
 
   @compute @workgroup_size(${WORKGROUP_SIZE})
   fn main(
@@ -264415,6 +264425,12 @@ uniform ${i3} ${a3} u_${s3};
 
     var rayposition = vec3f(initialRay.x, initialRay.y, initialRay.z);
     var raydirection = vec3f(initialRay.dx, initialRay.dy, initialRay.dz);
+    var raydistancetravelled = initialRay.distanceTravelled;
+    let rayinitialbouncecount = initialRay.bounceCount;
+
+    let receiverRadius = 1.0;
+    let receiverRadius2 = pow(receiverRadius, 2.0);
+    let receiverPosition = vec3(8.5, 0.0, 0.0);
 
     for (var n: u32 = 0; n < ${intersectionCount}; n++) {
       let index = rayIndex * ${intersectionCount} + n;
@@ -264426,6 +264442,7 @@ uniform ${i3} ${a3} u_${s3};
       for (var i = 0; i < triangleCount; i++) {
         let triangle = triangleBuffer[i];
 
+        // TODO: don't create a vec every time through the loop.
         let edge1 = vec3f(triangle.u1, triangle.u2, triangle.u3);
         let edge2 = vec3f(triangle.v1, triangle.v2, triangle.v3);
         let offset = vec3f(rayposition.x - triangle.x, rayposition.y - triangle.y, rayposition.z - triangle.z);
@@ -264455,7 +264472,23 @@ uniform ${i3} ${a3} u_${s3};
         }
       }
 
+      output[index].intensity = 0;
+
+      // This should always be true.
       if (closestTriangleIndex < triangleCount) {
+        // Get distance from receiver
+        let vecToReceiver = receiverPosition - rayposition;
+        let distanceToClosestPoint = dot(vecToReceiver, raydirection);
+        let distanceFromReceiver = sqrt(pow(length(vecToReceiver), 2) - pow(distanceToClosestPoint, 2));
+
+        let time = raydistancetravelled + abs(distanceToClosestPoint);
+        let intensity = pow(0.9, f32(n) + rayinitialbouncecount);
+
+        if (distanceFromReceiver <= receiverRadius && abs(distanceToClosestPoint) <= distance) {
+          output[index].time = time;
+          output[index].intensity = intensity;
+        }
+
         let triangle = triangleBuffer[closestTriangleIndex];
         let edge1 = vec3f(triangle.u1, triangle.u2, triangle.u3);
         let edge2 = vec3f(triangle.v1, triangle.v2, triangle.v3);
@@ -264464,14 +264497,22 @@ uniform ${i3} ${a3} u_${s3};
         let reflected = normalize(reflect(raydirection, triangleNormal));
         let newposition = rayposition + raydirection * distance;
 
-        output[index].x = newposition.x;
-        output[index].y = newposition.y;
-        output[index].z = newposition.z;
-
         rayposition = newposition;
         raydirection = reflected;
+        raydistancetravelled += distance;
       }
     }
+
+    // Write the updated ray position/distance to the output buffer, ready for
+    // the next pass.
+    rayBuffer[rayIndex].x = rayposition.x;
+    rayBuffer[rayIndex].y = rayposition.y;
+    rayBuffer[rayIndex].z = rayposition.z;
+    rayBuffer[rayIndex].dx = raydirection.x;
+    rayBuffer[rayIndex].dy = raydirection.y;
+    rayBuffer[rayIndex].dz = raydirection.z;
+    rayBuffer[rayIndex].distanceTravelled = raydistancetravelled;
+    rayBuffer[rayIndex].bounceCount = rayinitialbouncecount + ${intersectionCount};
   }
 `
     );
@@ -264495,7 +264536,10 @@ uniform ${i3} ${a3} u_${s3};
     const triangles = await orientTriangles(unorientedTriangles);
     for (let i = 0; i < settings.rayCount; ++i) {
       rays.push({
-        position: [rand() * 100, rand() * 100, rand() * 100],
+        // NOTE: placing at the exact origin [0,0,0] causes artefacts.
+        // TODO: once diffusion has been implemented, try [0,0,0] again.
+        position: [0.1, -0.1, -0.1],
+        // [0, 0, 0]
         direction: randomPointOnUnitSphere()
       });
     }
@@ -264503,26 +264547,32 @@ uniform ${i3} ${a3} u_${s3};
     if (!gpuDevice) {
       throw new Error("Aborted due to null GPU device");
     }
-    const outputSize = 3 * settings.intersectionsPerPass * settings.rayCount;
+    const outputSize = 2 * settings.intersectionsPerPass * settings.rayCount;
     if (outputSize > MAX_STORAGE_BUFFER_SIZE) {
       console.log("Output buffer is too large, will not work");
     }
     const intersectionsRunner = new SpecularRayIntersections(
       gpuDevice,
-      raysToFloatArray(rays),
-      trianglesToFloatArray(triangles),
-      initialIntersectionsFloatArray(
-        3 * settings.intersectionsPerPass * settings.rayCount
+      new Float32Array(
+        rays.flatMap((ray) => [...ray.position, ...ray.direction, 0, 0])
       ),
+      trianglesToFloatArray(triangles),
+      new Float32Array(outputSize),
       specularRayIntersectionShaderCode(settings.intersectionsPerPass)
     );
     console.time("Total (excluding setup)");
-    for (let i = 0; i < settings.numberOfPasses - 1; i++) {
-      await intersectionsRunner.runPass(settings.rayCount);
+    let output = new Float32Array(SAMPLE_RATE * OUTPUT_AUDIO_LENGTH);
+    for (let i = 0; i < settings.numberOfPasses; i++) {
+      const result2 = await intersectionsRunner.runPass(settings.rayCount);
+      console.log(result2);
+      for (let j = 0; j < result2.length; j += 2) {
+        output[Math.round(SAMPLE_RATE * result2[j] / SPEED_OF_SOUND)] += result2[j + 1];
+      }
     }
     const result = await intersectionsRunner.runPass(settings.rayCount);
     console.timeEnd("Total (excluding setup)");
     console.timeEnd("Total (including setup)");
+    console.log("Output", output.join(","));
     return {
       rays,
       triangles,
@@ -264549,7 +264599,7 @@ uniform ${i3} ${a3} u_${s3};
     const { rays, triangles, result } = await runRayIntersections(STRESS_TEST_SETTINGS);
     console.log(result);
   }
-  var MAX_STORAGE_BUFFER_SIZE, PLOT_CUBE, SHOW_FACES, CUBE_FACES, PLOT_SETTINGS, ipp, STRESS_TEST_SETTINGS, SpecularRayIntersections;
+  var MAX_STORAGE_BUFFER_SIZE, PLOT_CUBE, SHOW_FACES, OUTPUT_AUDIO_LENGTH, CUBE_FACES, PLOT_SETTINGS, ipp, STRESS_TEST_SETTINGS, SpecularRayIntersections;
   var init_specular_ray_tracing = __esm({
     "src/specular_ray_tracing.ts"() {
       "use strict";
@@ -264561,81 +264611,82 @@ uniform ${i3} ${a3} u_${s3};
       MAX_STORAGE_BUFFER_SIZE = 134217728;
       PLOT_CUBE = true;
       SHOW_FACES = false;
+      OUTPUT_AUDIO_LENGTH = 4;
       CUBE_FACES = [
         // Bottom face.
         {
-          p1: [-100, -100, -100],
-          p2: [100, -100, -100],
-          p3: [-100, 100, -100]
+          p1: [-10, -10, -10],
+          p2: [10, -10, -10],
+          p3: [-10, 10, -10]
         },
         {
-          p1: [100, -100, -100],
-          p2: [100, 100, -100],
-          p3: [-100, 100, -100]
+          p1: [10, -10, -10],
+          p2: [10, 10, -10],
+          p3: [-10, 10, -10]
         },
         // Top face.
         {
-          p1: [-100, -100, 100],
-          p2: [100, -100, 100],
-          p3: [-100, 100, 100]
+          p1: [-10, -10, 10],
+          p2: [10, -10, 10],
+          p3: [-10, 10, 10]
         },
         {
-          p1: [100, -100, 100],
-          p2: [100, 100, 100],
-          p3: [-100, 100, 100]
+          p1: [10, -10, 10],
+          p2: [10, 10, 10],
+          p3: [-10, 10, 10]
         },
         // Left face.
         {
-          p1: [-100, -100, -100],
-          p2: [-100, 100, 100],
-          p3: [-100, -100, 100]
+          p1: [-10, -10, -10],
+          p2: [-10, 10, 10],
+          p3: [-10, -10, 10]
         },
         {
-          p1: [-100, -100, -100],
-          p2: [-100, 100, -100],
-          p3: [-100, 100, 100]
+          p1: [-10, -10, -10],
+          p2: [-10, 10, -10],
+          p3: [-10, 10, 10]
         },
         // Right face.
         {
-          p1: [100, -100, -100],
-          p2: [100, 100, 100],
-          p3: [100, -100, 100]
+          p1: [10, -10, -10],
+          p2: [10, 10, 10],
+          p3: [10, -10, 10]
         },
         {
-          p1: [100, -100, -100],
-          p2: [100, 100, -100],
-          p3: [100, 100, 100]
+          p1: [10, -10, -10],
+          p2: [10, 10, -10],
+          p3: [10, 10, 10]
         },
         // Front face.
         {
-          p1: [-100, -100, -100],
-          p2: [100, -100, 100],
-          p3: [-100, -100, 100]
+          p1: [-10, -10, -10],
+          p2: [10, -10, 10],
+          p3: [-10, -10, 10]
         },
         {
-          p1: [-100, -100, -100],
-          p2: [100, -100, -100],
-          p3: [100, -100, 100]
+          p1: [-10, -10, -10],
+          p2: [10, -10, -10],
+          p3: [10, -10, 10]
         },
         // Back face.
         {
-          p1: [-100, 100, -100],
-          p2: [100, 100, 100],
-          p3: [-100, 100, 100]
+          p1: [-10, 10, -10],
+          p2: [10, 10, 10],
+          p3: [-10, 10, 10]
         },
         {
-          p1: [-100, 100, -100],
-          p2: [100, 100, -100],
-          p3: [100, 100, 100]
+          p1: [-10, 10, -10],
+          p2: [10, 10, -10],
+          p3: [10, 10, 10]
         }
       ];
       PLOT_SETTINGS = {
         rayCount: PLOT_CUBE ? 10 : 1e3,
         triangleCount: 50,
         intersectionsPerPass: 5,
-        numberOfPasses: 10
+        numberOfPasses: 1
       };
-      ipp = Math.floor(MAX_STORAGE_BUFFER_SIZE / (3 * FLOAT32_SIZE * 2e4));
+      ipp = Math.floor(MAX_STORAGE_BUFFER_SIZE / (2 * FLOAT32_SIZE * 2e4));
       STRESS_TEST_SETTINGS = {
         rayCount: 2e4,
         triangleCount: 3e3,
@@ -264672,7 +264723,7 @@ uniform ${i3} ${a3} u_${s3};
                 binding: 0,
                 // ray buffer
                 visibility: GPUShaderStage.COMPUTE,
-                buffer: { type: "read-only-storage" }
+                buffer: { type: "storage" }
               },
               {
                 binding: 1,

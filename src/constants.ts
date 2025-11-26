@@ -4,6 +4,9 @@ export const FLOAT32_SIZE = 4; // bytes.
 // is to always use a workgroup size of 64, as this is what most GPUs are best at.
 export const WORKGROUP_SIZE = 64;
 
+export const SAMPLE_RATE = 48000;
+export const SPEED_OF_SOUND = 340;
+
 export type Ray = {
   position: [number, number, number];
   direction: [number, number, number];
