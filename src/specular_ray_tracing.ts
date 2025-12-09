@@ -11,14 +11,23 @@ import { plotSpecularReflections } from "./draw";
 import { trianglesToFloatArray } from "./floatarrays";
 import { orientTriangles } from "./orient_surfaces";
 
+type Vec3 = [number, number, number];
+
 // From WebGPU specification
 const MAX_STORAGE_BUFFER_SIZE = 134217728;
 
-const PLOT_CUBE = true;
 const SHOW_FACES = false;
 
 // TODO: allow setting this somehow.
 const OUTPUT_AUDIO_LENGTH = 4; // seconds.
+
+// NOTE: placing at the exact origin [0,0,0] causes artefacts.
+// TODO: once diffusion has been implemented, try [0,0,0] again.
+const SOURCE_POSITION: Vec3 = [0.1, -0.1, -0.1];
+const RECEIVER_POSITION: Vec3 = [8.5, 0.0, 0.0];
+
+// TODO: frequency dependent.
+const AIR_ABSORPTION_COEFF = 0.0013;
 
 const CUBE_FACES: Triangle[] = [
   // Bottom face.
@@ -93,14 +102,12 @@ const CUBE_FACES: Triangle[] = [
 
 interface Settings {
   rayCount: number;
-  triangleCount: number;
   intersectionsPerPass: number;
   numberOfPasses: number;
 }
 
 const PLOT_SETTINGS: Settings = {
-  rayCount: PLOT_CUBE ? 10 : 1000,
-  triangleCount: 50,
+  rayCount: 10,
   intersectionsPerPass: 5,
   numberOfPasses: 1,
 };
@@ -109,7 +116,6 @@ const ipp = Math.floor(MAX_STORAGE_BUFFER_SIZE / (2 * FLOAT32_SIZE * 20000));
 
 const STRESS_TEST_SETTINGS: Settings = {
   rayCount: 20000,
-  triangleCount: 3000,
   intersectionsPerPass: ipp,
   numberOfPasses: Math.ceil(20000 / ipp),
 };
@@ -123,7 +129,7 @@ function rand() {
 }
 
 // TODO: this works but is rather crude.
-function randomPointOnUnitSphere(): [number, number, number] {
+function randomPointOnUnitSphere(): Vec3 {
   let x = 0;
   let y = 0;
   let z = 0;
@@ -148,9 +154,12 @@ function specularRayIntersectionShaderCode(intersectionCount: number) {
     dx: f32,
     dy: f32,
     dz: f32,
+    nx: f32,
+    ny: f32,
+    nz: f32,
     // TODO: these should really be integers.
     distanceTravelled: f32,
-    bounceCount: f32,
+    intensity: f32,
   }
 
   struct Point {
@@ -210,11 +219,11 @@ function specularRayIntersectionShaderCode(intersectionCount: number) {
     var rayposition = vec3f(initialRay.x, initialRay.y, initialRay.z);
     var raydirection = vec3f(initialRay.dx, initialRay.dy, initialRay.dz);
     var raydistancetravelled = initialRay.distanceTravelled;
-    let rayinitialbouncecount = initialRay.bounceCount;
+    var rayintensity = initialRay.intensity;
 
-    let receiverRadius = 1.0;
-    let receiverRadius2 = pow(receiverRadius, 2.0);
-    let receiverPosition = vec3(8.5, 0.0, 0.0);
+    var lastsurfacenormal = vec3(initialRay.nx, initialRay.ny, initialRay.nz);
+
+    let receiverPosition = vec3(${RECEIVER_POSITION.join(",")});
 
     for (var n: u32 = 0; n < ${intersectionCount}; n++) {
       let index = rayIndex * ${intersectionCount} + n;
@@ -222,6 +231,10 @@ function specularRayIntersectionShaderCode(intersectionCount: number) {
       // TODO: infinity
       var distance = 1e10;
       var closestTriangleIndex = triangleCount;
+      var receiverRayTriangleDistance = 1e10; // TODO: infinity.
+
+      let directionToReceiver = normalize(receiverPosition - rayposition);
+      let distanceToReceiver = length(receiverPosition - rayposition);
 
       for (var i = 0; i < triangleCount; i++) {
         let triangle = triangleBuffer[i];
@@ -231,8 +244,34 @@ function specularRayIntersectionShaderCode(intersectionCount: number) {
         let edge2 = vec3f(triangle.v1, triangle.v2, triangle.v3);
         let offset = vec3f(rayposition.x - triangle.x, rayposition.y - triangle.y, rayposition.z - triangle.z);
 
-        let ray_cross_e2 = cross(raydirection, edge2);
         let offset_cross_e1 = cross(offset, edge1);
+
+        // Ray-trace to receiver.
+        {
+          // TODO: negative?
+          let ray_cross_e2 = cross(directionToReceiver, edge2);
+
+          // NOTE: greater than 0 iff ray is incident on backface.
+          let dir = -dot(edge1, ray_cross_e2);  // directionToReceiver.(e1 x e2)
+
+          let det = dot(edge1, ray_cross_e2);
+          let inv_det = 1.0 / det;
+
+          let u = inv_det * dot(offset, ray_cross_e2);
+          let v = inv_det * dot(directionToReceiver, offset_cross_e1);
+
+          let t = inv_det * dot(edge2, offset_cross_e1);
+
+          // TODO: remove if?
+          if (abs(det) < eps) || (u < -eps) || (v < -eps) || (u + v > eps1) {
+
+          } else if (t > eps && dir >= 0) {
+            receiverRayTriangleDistance = min(receiverRayTriangleDistance, t);
+          }
+        }
+
+        // Ray-trace normal ray.
+        let ray_cross_e2 = cross(raydirection, edge2);
 
         // NOTE: greater than 0 iff ray is incident on backface.
         let dir = -dot(edge1, ray_cross_e2);  // raydirection.(e1 x e2)
@@ -258,21 +297,20 @@ function specularRayIntersectionShaderCode(intersectionCount: number) {
 
       output[index].intensity = 0;
 
+      // If the ray to the receiver did not hit a triangle before hitting the receiver,
+      // add the contribution to the output.
+      if (receiverRayTriangleDistance >= distanceToReceiver) {
+        let cosNormalAngleToReceiver = dot(directionToReceiver, -lastsurfacenormal);
+
+        // Only count if the ray is not intersecting the last surface.
+        if (cosNormalAngleToReceiver > 0) {
+          output[index].time = raydistancetravelled + distanceToReceiver;
+          output[index].intensity = rayintensity * cosNormalAngleToReceiver;
+        }
+      }
+
       // This should always be true.
       if (closestTriangleIndex < triangleCount) {
-        // Get distance from receiver
-        let vecToReceiver = receiverPosition - rayposition;
-        let distanceToClosestPoint = dot(vecToReceiver, raydirection);
-        let distanceFromReceiver = length(vecToReceiver - distanceToClosestPoint * raydirection); // sqrt(pow(length(vecToReceiver), 2) - pow(distanceToClosestPoint, 2));
-
-        let time = raydistancetravelled + abs(distanceToClosestPoint);
-        let intensity = pow(0.9, f32(n) + rayinitialbouncecount);
-
-        if (distanceFromReceiver <= receiverRadius && abs(distanceToClosestPoint) <= distance) {
-          output[index].time = time;
-          output[index].intensity = intensity;
-        }
-
         let triangle = triangleBuffer[closestTriangleIndex];
         let edge1 = vec3f(triangle.u1, triangle.u2, triangle.u3);
         let edge2 = vec3f(triangle.v1, triangle.v2, triangle.v3);
@@ -284,6 +322,8 @@ function specularRayIntersectionShaderCode(intersectionCount: number) {
         rayposition = newposition;
         raydirection = reflected;
         raydistancetravelled += distance;
+        rayintensity *= 0.9;
+        lastsurfacenormal = triangleNormal;
       }
     }
 
@@ -295,8 +335,11 @@ function specularRayIntersectionShaderCode(intersectionCount: number) {
     rayBuffer[rayIndex].dx = raydirection.x;
     rayBuffer[rayIndex].dy = raydirection.y;
     rayBuffer[rayIndex].dz = raydirection.z;
+    rayBuffer[rayIndex].nx = lastsurfacenormal.x;
+    rayBuffer[rayIndex].ny = lastsurfacenormal.y;
+    rayBuffer[rayIndex].nz = lastsurfacenormal.z;
     rayBuffer[rayIndex].distanceTravelled = raydistancetravelled;
-    rayBuffer[rayIndex].bounceCount = rayinitialbouncecount + ${intersectionCount};
+    rayBuffer[rayIndex].intensity = rayintensity;
   }
 `;
 }
@@ -437,30 +480,15 @@ async function runRayIntersections(settings: Settings): Promise<{
   console.time("Total (including setup)");
   console.log("Creating geometry");
   const rays: Ray[] = [];
-  const unorientedTriangles: Triangle[] = [];
 
   // Create the geometry.
-  if (PLOT_CUBE) {
-    unorientedTriangles.push(...CUBE_FACES);
-  } else {
-    for (let i = 0; i < settings.triangleCount; ++i) {
-      unorientedTriangles.push({
-        p1: [rand() * 100, rand() * 100, rand() * 100],
-        p2: [rand() * 100, rand() * 100, rand() * 100],
-        p3: [rand() * 100, rand() * 100, rand() * 100],
-      });
-    }
-  }
-
   // Orient the triangles so that they all face outwards.
-  const triangles = await orientTriangles(unorientedTriangles);
+  const triangles = await orientTriangles(CUBE_FACES);
 
   // Create the rays.
   for (let i = 0; i < settings.rayCount; ++i) {
     rays.push({
-      // NOTE: placing at the exact origin [0,0,0] causes artefacts.
-      // TODO: once diffusion has been implemented, try [0,0,0] again.
-      position: [0.1, -0.1, -0.1], // [0, 0, 0]
+      position: SOURCE_POSITION,
       direction: randomPointOnUnitSphere(),
     });
   }
@@ -480,7 +508,13 @@ async function runRayIntersections(settings: Settings): Promise<{
   const intersectionsRunner = new SpecularRayIntersections(
     gpuDevice,
     new Float32Array(
-      rays.flatMap((ray) => [...ray.position, ...ray.direction, 0, 0]),
+      rays.flatMap((ray) => [
+        ...ray.position,
+        ...ray.direction,
+        ...[0, 0, 0],
+        0,
+        1,
+      ]),
     ),
     trianglesToFloatArray(triangles),
     new Float32Array(outputSize),
@@ -495,15 +529,25 @@ async function runRayIntersections(settings: Settings): Promise<{
   for (let i = 0; i < settings.numberOfPasses; i++) {
     // Run the shader and get the result.
     const result = await intersectionsRunner.runPass(settings.rayCount);
-    console.log(result);
+
+    let t = 10;
 
     for (let j = 0; j < result.length; j += 2) {
-      // TODO: frequency dependent.
-      const AIR_ABSORPTION_COEFF = 0.0013;
-      output[Math.round((SAMPLE_RATE * result[j]) / SPEED_OF_SOUND)] +=
+      output[Math.round(SAMPLE_RATE * (result[j] / SPEED_OF_SOUND))] +=
         result[j + 1] * Math.exp(-result[j] * AIR_ABSORPTION_COEFF);
     }
   }
+
+  // TODO BUG: need to raytrace this to check it is line-of-sight
+  //           (otherwise there will be no direct sound).
+  const directSoundDistance = Math.sqrt(
+    Math.pow(SOURCE_POSITION[0] - RECEIVER_POSITION[0], 2) +
+      Math.pow(SOURCE_POSITION[1] - RECEIVER_POSITION[1], 2) +
+      Math.pow(SOURCE_POSITION[1] - RECEIVER_POSITION[1], 2),
+  );
+  output[Math.round(SAMPLE_RATE * (directSoundDistance / SPEED_OF_SOUND))] +=
+    (20000 / (4 * Math.PI * directSoundDistance ** 2)) *
+    Math.exp(-directSoundDistance * AIR_ABSORPTION_COEFF);
 
   const result = await intersectionsRunner.runPass(settings.rayCount);
 
@@ -523,7 +567,7 @@ export async function plotRaySpecularReflections() {
   console.log(result);
   console.log("plotting...");
 
-  const rayPositions: [number, number, number][][] = [];
+  const rayPositions: Vec3[][] = [];
 
   for (const ray of rays) {
     rayPositions.push([ray.position]);
