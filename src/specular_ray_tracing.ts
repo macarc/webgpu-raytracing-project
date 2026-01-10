@@ -10,6 +10,7 @@ import {
 import { plotSpecularReflections } from "./draw";
 import { trianglesToFloatArray } from "./floatarrays";
 import { orientTriangles } from "./orient_surfaces";
+import { combineFilteredAudio, createAudioBlobURL } from "./audio";
 
 type Vec3 = [number, number, number];
 
@@ -601,7 +602,7 @@ class SpecularRayIntersections {
 async function runRayIntersections(settings: Settings): Promise<{
   rays: Ray[];
   triangles: Triangle[];
-  result: Float32Array | null;
+  result: Float32Array<ArrayBuffer> | null;
 }> {
   console.time("Total (including setup)");
   console.log("Creating geometry");
@@ -711,35 +712,24 @@ async function runRayIntersections(settings: Settings): Promise<{
     `Added ${directSoundIntensity} to ${directSoundIndex} (${directSoundDistance}m = ${directSoundDistance / SPEED_OF_SOUND}s)`,
   );
 
+  const outputAudio = combineFilteredAudio(
+    output125,
+    output250,
+    output500,
+    output1000,
+    output2000,
+    output4000,
+  );
+
   console.timeEnd("Total (excluding setup)");
   console.timeEnd("Total (including setup)");
 
-  console.log(`
-band125 = [
-  ${output125.join(",")}
-];
-band250 = [
-  ${output250.join(",")}
-];
-band500 = [
-  ${output500.join(",")}
-];
-band1000 = [
-  ${output1000.join(",")}
-];
-band2000 = [
-  ${output2000.join(",")}
-];
-band4000 = [
-  ${output4000.join(",")}
-];
-    `);
+  console.log(outputAudio.join(","));
 
-  const result = await intersectionsRunner.runPass(settings.rayCount);
   return {
     rays,
     triangles,
-    result: result[0],
+    result: outputAudio,
   };
 }
 
@@ -768,8 +758,8 @@ export async function plotRaySpecularReflections() {
   plotSpecularReflections(triangles, rayPositions, SHOW_FACES);
 }
 
-export async function stressTestRaySpecularReflections() {
-  const { rays, triangles, result } =
-    await runRayIntersections(STRESS_TEST_SETTINGS);
-  console.log(result);
+export async function stressTestRaySpecularReflections(): Promise<Float32Array<ArrayBuffer> | null> {
+  const { result } = await runRayIntersections(STRESS_TEST_SETTINGS);
+
+  return result;
 }

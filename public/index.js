@@ -1445,14 +1445,14 @@
                 d3_selectionPrototype.datum = function(value) {
                   return arguments.length ? this.property("__data__", value) : this.property("__data__");
                 };
-                d3_selectionPrototype.filter = function(filter) {
+                d3_selectionPrototype.filter = function(filter2) {
                   var subgroups = [], subgroup, group, node;
-                  if (typeof filter !== "function") filter = d3_selection_filter(filter);
+                  if (typeof filter2 !== "function") filter2 = d3_selection_filter(filter2);
                   for (var j = 0, m = this.length; j < m; j++) {
                     subgroups.push(subgroup = []);
                     subgroup.parentNode = (group = this[j]).parentNode;
                     for (var i = 0, n = group.length; i < n; i++) {
-                      if ((node = group[i]) && filter.call(node, node.__data__, i, j)) {
+                      if ((node = group[i]) && filter2.call(node, node.__data__, i, j)) {
                         subgroup.push(node);
                       }
                     }
@@ -1604,8 +1604,8 @@
                 function d3_selection_on(type, listener, capture) {
                   var name2 = "__on" + type, i = type.indexOf("."), wrap = d3_selection_onListener;
                   if (i > 0) type = type.slice(0, i);
-                  var filter = d3_selection_onFilters.get(type);
-                  if (filter) type = filter, wrap = d3_selection_onFilter;
+                  var filter2 = d3_selection_onFilters.get(type);
+                  if (filter2) type = filter2, wrap = d3_selection_onFilter;
                   function onRemove() {
                     var l = this[name2];
                     if (l) {
@@ -6701,13 +6701,13 @@
                   }
                   return d3_transition(subgroups, ns, id);
                 };
-                d3_transitionPrototype.filter = function(filter) {
+                d3_transitionPrototype.filter = function(filter2) {
                   var subgroups = [], subgroup, group, node;
-                  if (typeof filter !== "function") filter = d3_selection_filter(filter);
+                  if (typeof filter2 !== "function") filter2 = d3_selection_filter(filter2);
                   for (var j = 0, m = this.length; j < m; j++) {
                     subgroups.push(subgroup = []);
                     for (var group = this[j], i = 0, n = group.length; i < n; i++) {
-                      if ((node = group[i]) && filter.call(node, node.__data__, i, j)) {
+                      if ((node = group[i]) && filter2.call(node, node.__data__, i, j)) {
                         subgroup.push(node);
                       }
                     }
@@ -9322,7 +9322,7 @@
                   },
                   getLuminance: function() {
                     var rgb2 = this.toRgb();
-                    var RsRGB, GsRGB, BsRGB, R, G, B2;
+                    var RsRGB, GsRGB, BsRGB, R, G, B22;
                     RsRGB = rgb2.r / 255;
                     GsRGB = rgb2.g / 255;
                     BsRGB = rgb2.b / 255;
@@ -9337,11 +9337,11 @@
                       G = Math2.pow((GsRGB + 0.055) / 1.055, 2.4);
                     }
                     if (BsRGB <= 0.03928) {
-                      B2 = BsRGB / 12.92;
+                      B22 = BsRGB / 12.92;
                     } else {
-                      B2 = Math2.pow((BsRGB + 0.055) / 1.055, 2.4);
+                      B22 = Math2.pow((BsRGB + 0.055) / 1.055, 2.4);
                     }
-                    return 0.2126 * R + 0.7152 * G + 0.0722 * B2;
+                    return 0.2126 * R + 0.7152 * G + 0.0722 * B22;
                   },
                   setAlpha: function(value) {
                     this._a = boundAlpha(value);
@@ -19887,10 +19887,10 @@
               };
               plots.reselect = function(gd) {
                 var fullLayout = gd._fullLayout;
-                var A2 = (gd.layout || {}).selections;
-                var B2 = fullLayout._previousSelections;
-                fullLayout._previousSelections = A2;
-                var mayEmitSelected = fullLayout._reselect || JSON.stringify(A2) !== JSON.stringify(B2);
+                var A22 = (gd.layout || {}).selections;
+                var B22 = fullLayout._previousSelections;
+                fullLayout._previousSelections = A22;
+                var mayEmitSelected = fullLayout._reselect || JSON.stringify(A22) !== JSON.stringify(B22);
                 Registry.getComponentMethod("selections", "reselect")(gd, mayEmitSelected);
               };
               plots.generalUpdatePerTraceModule = function(gd, subplot, subplotCalcData, subplotLayout) {
@@ -23493,11 +23493,11 @@
                     x -= x0;
                     y -= y0;
                   }
-                  var B2 = rotate(t, [x, y]);
+                  var B22 = rotate(t, [x, y]);
                   if (op === "H" || op === "V") op = "L";
                   if (op === "M" || op === "L" || op === "m" || op === "l") {
-                    cmdI[1] = B2[0];
-                    cmdI[2] = B2[1];
+                    cmdI[1] = B22[0];
+                    cmdI[2] = B22[1];
                   }
                   cmdI[0] = op;
                   str += cmdI[0] + cmdI.slice(1).join(",");
@@ -24835,11 +24835,11 @@
                       previousLon = lon;
                       previousLat = lat;
                     }
-                    var A2 = rotate(u, [cos(t), 0]);
-                    var B2 = rotate(v, [sin(t), 0]);
+                    var A22 = rotate(u, [cos(t), 0]);
+                    var B22 = rotate(v, [sin(t), 0]);
                     angle = atan2(
-                      A2[1] + B2[1],
-                      A2[0] + B2[0]
+                      A22[1] + B22[1],
+                      A22[0] + B22[0]
                     ) / Math.PI * 180;
                     if (ref === "previous" && !(previousTraceUid === trace.uid && d.i === previousI + 1)) {
                       angle = null;
@@ -26953,9 +26953,9 @@
                     a = i;
                     b = i;
                   }
-                  var A2 = tickVals[a].value;
-                  var B2 = tickVals[b].value;
-                  var actualDelta = Math.abs(B2 - A2);
+                  var A22 = tickVals[a].value;
+                  var B22 = tickVals[b].value;
+                  var actualDelta = Math.abs(B22 - A22);
                   var delta = definedDelta || actualDelta;
                   var periodLength = 0;
                   if (delta >= ONEMINYEAR) {
@@ -33743,12 +33743,12 @@
                 var y0 = rect.top;
                 var x1 = x0 + rect.width;
                 var y1 = y0 + rect.height;
-                var A2 = Lib.apply3DTransform(fullLayout._invTransform)(x0, y0);
-                var B2 = Lib.apply3DTransform(fullLayout._invTransform)(x1, y1);
-                var Ax = A2[0];
-                var Ay = A2[1];
-                var Bx = B2[0];
-                var By = B2[1];
+                var A22 = Lib.apply3DTransform(fullLayout._invTransform)(x0, y0);
+                var B22 = Lib.apply3DTransform(fullLayout._invTransform)(x1, y1);
+                var Ax = A22[0];
+                var Ay = A22[1];
+                var Bx = B22[0];
+                var By = B22[1];
                 return {
                   x: Ax,
                   y: Ay,
@@ -37321,12 +37321,12 @@
                 var fullLayout = gd._fullLayout;
                 var fullData = gd._fullData;
                 var context = gd._context;
-                function match(name2, B2) {
-                  if (typeof B2 === "string") {
-                    if (B2.toLowerCase() === name2.toLowerCase()) return true;
+                function match(name2, B22) {
+                  if (typeof B22 === "string") {
+                    if (B22.toLowerCase() === name2.toLowerCase()) return true;
                   } else {
-                    var v0 = B2.name;
-                    var v1 = B2._cat || B2.name;
+                    var v0 = B22.name;
+                    var v1 = B22._cat || B22.name;
                     if (v0 === name2 || v1 === name2.toLowerCase()) return true;
                   }
                   return false;
@@ -37370,9 +37370,9 @@
                   var out = [];
                   for (var i2 = 0; i2 < newGroup.length; i2++) {
                     var name2 = newGroup[i2];
-                    var B2 = modeBarButtons[name2];
-                    var v0 = B2.name.toLowerCase();
-                    var v1 = (B2._cat || B2.name).toLowerCase();
+                    var B22 = modeBarButtons[name2];
+                    var v0 = B22.name.toLowerCase();
+                    var v1 = (B22._cat || B22.name).toLowerCase();
                     var found = false;
                     for (var q = 0; q < buttonsToRemove.length; q++) {
                       var t = buttonsToRemove[q].toLowerCase();
@@ -38919,33 +38919,33 @@
                       return false;
                     var dx = a0[0] - b0[0];
                     var dy = a0[1] - b0[1];
-                    var A2 = (bdx * dy - bdy * dx) / axb;
-                    var B2 = (adx * dy - ady * dx) / axb;
+                    var A22 = (bdx * dy - bdy * dx) / axb;
+                    var B22 = (adx * dy - ady * dx) / axb;
                     var ret = {
                       alongA: 0,
                       alongB: 0,
                       pt: [
-                        a0[0] + A2 * adx,
-                        a0[1] + A2 * ady
+                        a0[0] + A22 * adx,
+                        a0[1] + A22 * ady
                       ]
                     };
-                    if (A2 <= -eps)
+                    if (A22 <= -eps)
                       ret.alongA = -2;
-                    else if (A2 < eps)
+                    else if (A22 < eps)
                       ret.alongA = -1;
-                    else if (A2 - 1 <= -eps)
+                    else if (A22 - 1 <= -eps)
                       ret.alongA = 0;
-                    else if (A2 - 1 < eps)
+                    else if (A22 - 1 < eps)
                       ret.alongA = 1;
                     else
                       ret.alongA = 2;
-                    if (B2 <= -eps)
+                    if (B22 <= -eps)
                       ret.alongB = -2;
-                    else if (B2 < eps)
+                    else if (B22 < eps)
                       ret.alongB = -1;
-                    else if (B2 - 1 <= -eps)
+                    else if (B22 - 1 <= -eps)
                       ret.alongB = 0;
-                    else if (B2 - 1 < eps)
+                    else if (B22 - 1 < eps)
                       ret.alongB = 1;
                     else
                       ret.alongB = 2;
@@ -40064,7 +40064,7 @@
                 }
                 return false;
               };
-              polygon.filter = function filter(pts, tolerance) {
+              polygon.filter = function filter2(pts, tolerance) {
                 var ptsFiltered = [pts[0]];
                 var doneRawIndex = 0;
                 var doneFilteredIndex = 0;
@@ -83577,26 +83577,26 @@
                   return array;
                 }
                 function enclose(circles) {
-                  var i = 0, n = (circles = shuffle(slice.call(circles))).length, B2 = [], p, e;
+                  var i = 0, n = (circles = shuffle(slice.call(circles))).length, B22 = [], p, e;
                   while (i < n) {
                     p = circles[i];
                     if (e && enclosesWeak(e, p)) ++i;
-                    else e = encloseBasis(B2 = extendBasis(B2, p)), i = 0;
+                    else e = encloseBasis(B22 = extendBasis(B22, p)), i = 0;
                   }
                   return e;
                 }
-                function extendBasis(B2, p) {
+                function extendBasis(B22, p) {
                   var i, j;
-                  if (enclosesWeakAll(p, B2)) return [p];
-                  for (i = 0; i < B2.length; ++i) {
-                    if (enclosesNot(p, B2[i]) && enclosesWeakAll(encloseBasis2(B2[i], p), B2)) {
-                      return [B2[i], p];
+                  if (enclosesWeakAll(p, B22)) return [p];
+                  for (i = 0; i < B22.length; ++i) {
+                    if (enclosesNot(p, B22[i]) && enclosesWeakAll(encloseBasis2(B22[i], p), B22)) {
+                      return [B22[i], p];
                     }
                   }
-                  for (i = 0; i < B2.length - 1; ++i) {
-                    for (j = i + 1; j < B2.length; ++j) {
-                      if (enclosesNot(encloseBasis2(B2[i], B2[j]), p) && enclosesNot(encloseBasis2(B2[i], p), B2[j]) && enclosesNot(encloseBasis2(B2[j], p), B2[i]) && enclosesWeakAll(encloseBasis3(B2[i], B2[j], p), B2)) {
-                        return [B2[i], B2[j], p];
+                  for (i = 0; i < B22.length - 1; ++i) {
+                    for (j = i + 1; j < B22.length; ++j) {
+                      if (enclosesNot(encloseBasis2(B22[i], B22[j]), p) && enclosesNot(encloseBasis2(B22[i], p), B22[j]) && enclosesNot(encloseBasis2(B22[j], p), B22[i]) && enclosesWeakAll(encloseBasis3(B22[i], B22[j], p), B22)) {
+                        return [B22[i], B22[j], p];
                       }
                     }
                   }
@@ -83610,22 +83610,22 @@
                   var dr = a.r - b.r + 1e-6, dx = b.x - a.x, dy = b.y - a.y;
                   return dr > 0 && dr * dr > dx * dx + dy * dy;
                 }
-                function enclosesWeakAll(a, B2) {
-                  for (var i = 0; i < B2.length; ++i) {
-                    if (!enclosesWeak(a, B2[i])) {
+                function enclosesWeakAll(a, B22) {
+                  for (var i = 0; i < B22.length; ++i) {
+                    if (!enclosesWeak(a, B22[i])) {
                       return false;
                     }
                   }
                   return true;
                 }
-                function encloseBasis(B2) {
-                  switch (B2.length) {
+                function encloseBasis(B22) {
+                  switch (B22.length) {
                     case 1:
-                      return encloseBasis1(B2[0]);
+                      return encloseBasis1(B22[0]);
                     case 2:
-                      return encloseBasis2(B2[0], B2[1]);
+                      return encloseBasis2(B22[0], B22[1]);
                     case 3:
-                      return encloseBasis3(B2[0], B2[1], B2[2]);
+                      return encloseBasis3(B22[0], B22[1], B22[2]);
                   }
                 }
                 function encloseBasis1(a) {
@@ -83644,7 +83644,7 @@
                   };
                 }
                 function encloseBasis3(a, b, c) {
-                  var x1 = a.x, y1 = a.y, r1 = a.r, x2 = b.x, y2 = b.y, r2 = b.r, x3 = c.x, y3 = c.y, r3 = c.r, a2 = x1 - x2, a3 = x1 - x3, b2 = y1 - y2, b3 = y1 - y3, c2 = r2 - r1, c3 = r3 - r1, d1 = x1 * x1 + y1 * y1 - r1 * r1, d2 = d1 - x2 * x2 - y2 * y2 + r2 * r2, d3 = d1 - x3 * x3 - y3 * y3 + r3 * r3, ab = a3 * b2 - a2 * b3, xa = (b2 * d3 - b3 * d2) / (ab * 2) - x1, xb = (b3 * c2 - b2 * c3) / ab, ya = (a3 * d2 - a2 * d3) / (ab * 2) - y1, yb = (a2 * c3 - a3 * c2) / ab, A2 = xb * xb + yb * yb - 1, B2 = 2 * (r1 + xa * xb + ya * yb), C2 = xa * xa + ya * ya - r1 * r1, r = -(A2 ? (B2 + Math.sqrt(B2 * B2 - 4 * A2 * C2)) / (2 * A2) : C2 / B2);
+                  var x1 = a.x, y1 = a.y, r1 = a.r, x2 = b.x, y2 = b.y, r2 = b.r, x3 = c.x, y3 = c.y, r3 = c.r, a2 = x1 - x2, a3 = x1 - x3, b2 = y1 - y2, b3 = y1 - y3, c2 = r2 - r1, c3 = r3 - r1, d1 = x1 * x1 + y1 * y1 - r1 * r1, d2 = d1 - x2 * x2 - y2 * y2 + r2 * r2, d3 = d1 - x3 * x3 - y3 * y3 + r3 * r3, ab = a3 * b2 - a2 * b3, xa = (b2 * d3 - b3 * d2) / (ab * 2) - x1, xb = (b3 * c2 - b2 * c3) / ab, ya = (a3 * d2 - a2 * d3) / (ab * 2) - y1, yb = (a2 * c3 - a3 * c2) / ab, A22 = xb * xb + yb * yb - 1, B22 = 2 * (r1 + xa * xb + ya * yb), C2 = xa * xa + ya * ya - r1 * r1, r = -(A22 ? (B22 + Math.sqrt(B22 * B22 - 4 * A22 * C2)) / (2 * A22) : C2 / B22);
                   return {
                     x: x1 + xa + xb * r,
                     y: y1 + ya + yb * r,
@@ -90861,24 +90861,24 @@
                       }
                       function barycentric(simplex, point) {
                         var d = point.length;
-                        var A2 = new Array(d + 1);
+                        var A22 = new Array(d + 1);
                         for (var i = 0; i < d; ++i) {
                           var row = new Array(d + 1);
                           for (var j = 0; j <= d; ++j) {
                             row[j] = simplex[j][i];
                           }
-                          A2[i] = row;
+                          A22[i] = row;
                         }
-                        A2[d] = new Array(d + 1);
+                        A22[d] = new Array(d + 1);
                         for (var i = 0; i <= d; ++i) {
-                          A2[d][i] = 1;
+                          A22[d][i] = 1;
                         }
                         var b = new Array(d + 1);
                         for (var i = 0; i < d; ++i) {
                           b[i] = point[i];
                         }
                         b[d] = 1;
-                        var x = solve(A2, b);
+                        var x = solve(A22, b);
                         var w = reduce(x[d + 1]);
                         if (w === 0) {
                           w = 1;
@@ -93646,8 +93646,8 @@
                           } else {
                             x = x.clone();
                           }
-                          var A2 = new BN(1);
-                          var B2 = new BN(0);
+                          var A22 = new BN(1);
+                          var B22 = new BN(0);
                           var C2 = new BN(0);
                           var D2 = new BN(1);
                           var g = 0;
@@ -93663,12 +93663,12 @@
                             if (i > 0) {
                               x.iushrn(i);
                               while (i-- > 0) {
-                                if (A2.isOdd() || B2.isOdd()) {
-                                  A2.iadd(yp);
-                                  B2.isub(xp);
+                                if (A22.isOdd() || B22.isOdd()) {
+                                  A22.iadd(yp);
+                                  B22.isub(xp);
                                 }
-                                A2.iushrn(1);
-                                B2.iushrn(1);
+                                A22.iushrn(1);
+                                B22.iushrn(1);
                               }
                             }
                             for (var j = 0, jm = 1; (y.words[0] & jm) === 0 && j < 26; ++j, jm <<= 1) ;
@@ -93685,12 +93685,12 @@
                             }
                             if (x.cmp(y) >= 0) {
                               x.isub(y);
-                              A2.isub(C2);
-                              B2.isub(D2);
+                              A22.isub(C2);
+                              B22.isub(D2);
                             } else {
                               y.isub(x);
-                              C2.isub(A2);
-                              D2.isub(B2);
+                              C2.isub(A22);
+                              D2.isub(B22);
                             }
                           }
                           return {
@@ -96731,16 +96731,16 @@
                           return [];
                         }
                         var D2 = points[0].length;
-                        var A2 = dup([points.length + 1, points.length + 1], 1);
+                        var A22 = dup([points.length + 1, points.length + 1], 1);
                         var b = dup([points.length + 1], 1);
-                        A2[N][N] = 0;
+                        A22[N][N] = 0;
                         for (var i = 0; i < N; ++i) {
                           for (var j = 0; j <= i; ++j) {
-                            A2[j][i] = A2[i][j] = 2 * dot(points[i], points[j]);
+                            A22[j][i] = A22[i][j] = 2 * dot(points[i], points[j]);
                           }
                           b[i] = dot(points[i], points[i]);
                         }
-                        var x = solve(A2, b);
+                        var x = solve(A22, b);
                         var denom = 0;
                         var h = x[N + 1];
                         for (var i = 0; i < h.length; ++i) {
@@ -99589,32 +99589,32 @@
                         function solveTickAlignments(i2, minor2, major2) {
                           var i1 = (i2 + 1) % 3;
                           var i22 = (i2 + 2) % 3;
-                          var A2 = minor2[i1];
-                          var B2 = minor2[i22];
+                          var A22 = minor2[i1];
+                          var B22 = minor2[i22];
                           var C2 = major2[i1];
                           var D2 = major2[i22];
-                          if (A2 > 0 && D2 > 0) {
+                          if (A22 > 0 && D2 > 0) {
                             alignTo(i1);
                             return;
-                          } else if (A2 > 0 && D2 < 0) {
+                          } else if (A22 > 0 && D2 < 0) {
                             alignTo(i1);
                             return;
-                          } else if (A2 < 0 && D2 > 0) {
+                          } else if (A22 < 0 && D2 > 0) {
                             alignTo(i1);
                             return;
-                          } else if (A2 < 0 && D2 < 0) {
+                          } else if (A22 < 0 && D2 < 0) {
                             alignTo(i1);
                             return;
-                          } else if (B2 > 0 && C2 > 0) {
+                          } else if (B22 > 0 && C2 > 0) {
                             alignTo(i22);
                             return;
-                          } else if (B2 > 0 && C2 < 0) {
+                          } else if (B22 > 0 && C2 < 0) {
                             alignTo(i22);
                             return;
-                          } else if (B2 < 0 && C2 > 0) {
+                          } else if (B22 < 0 && C2 > 0) {
                             alignTo(i22);
                             return;
-                          } else if (B2 < 0 && C2 < 0) {
+                          } else if (B22 < 0 && C2 < 0) {
                             alignTo(i22);
                             return;
                           }
@@ -104443,13 +104443,13 @@
                         var x = pickData.coord[0];
                         var y = pickData.coord[1];
                         if (!this.pickVertex) {
-                          var A2 = this.positions[cell[0]];
-                          var B2 = this.positions[cell[1]];
+                          var A22 = this.positions[cell[0]];
+                          var B22 = this.positions[cell[1]];
                           var C2 = this.positions[cell[2]];
                           var dataCoordinate = [
-                            (A2[0] + B2[0] + C2[0]) / 3,
-                            (A2[1] + B2[1] + C2[1]) / 3,
-                            (A2[2] + B2[2] + C2[2]) / 3
+                            (A22[0] + B22[0] + C2[0]) / 3,
+                            (A22[1] + B22[1] + C2[1]) / 3,
+                            (A22[2] + B22[2] + C2[2]) / 3
                           ];
                           return {
                             _cellCenter: true,
@@ -118076,32 +118076,32 @@
                       function robustLinearSolve0d() {
                         return [[0]];
                       }
-                      function robustLinearSolve1d(A2, b) {
-                        return [[b[0]], [A2[0][0]]];
+                      function robustLinearSolve1d(A22, b) {
+                        return [[b[0]], [A22[0][0]]];
                       }
                       function solve2d(det) {
-                        return function robustLinearSolve2d(A2, b) {
-                          return [det([[+b[0], +A2[0][1]], [+b[1], +A2[1][1]]]), det([[+A2[0][0], +b[0]], [+A2[1][0], +b[1]]]), det(A2)];
+                        return function robustLinearSolve2d(A22, b) {
+                          return [det([[+b[0], +A22[0][1]], [+b[1], +A22[1][1]]]), det([[+A22[0][0], +b[0]], [+A22[1][0], +b[1]]]), det(A22)];
                         };
                       }
                       function solve3d(det) {
-                        return function robustLinearSolve3d(A2, b) {
-                          return [det([[+b[0], +A2[0][1], +A2[0][2]], [+b[1], +A2[1][1], +A2[1][2]], [+b[2], +A2[2][1], +A2[2][2]]]), det([[+A2[0][0], +b[0], +A2[0][2]], [+A2[1][0], +b[1], +A2[1][2]], [+A2[2][0], +b[2], +A2[2][2]]]), det([[+A2[0][0], +A2[0][1], +b[0]], [+A2[1][0], +A2[1][1], +b[1]], [+A2[2][0], +A2[2][1], +b[2]]]), det(A2)];
+                        return function robustLinearSolve3d(A22, b) {
+                          return [det([[+b[0], +A22[0][1], +A22[0][2]], [+b[1], +A22[1][1], +A22[1][2]], [+b[2], +A22[2][1], +A22[2][2]]]), det([[+A22[0][0], +b[0], +A22[0][2]], [+A22[1][0], +b[1], +A22[1][2]], [+A22[2][0], +b[2], +A22[2][2]]]), det([[+A22[0][0], +A22[0][1], +b[0]], [+A22[1][0], +A22[1][1], +b[1]], [+A22[2][0], +A22[2][1], +b[2]]]), det(A22)];
                         };
                       }
                       function solve4d(det) {
-                        return function robustLinearSolve4d(A2, b) {
-                          return [det([[+b[0], +A2[0][1], +A2[0][2], +A2[0][3]], [+b[1], +A2[1][1], +A2[1][2], +A2[1][3]], [+b[2], +A2[2][1], +A2[2][2], +A2[2][3]], [+b[3], +A2[3][1], +A2[3][2], +A2[3][3]]]), det([[+A2[0][0], +b[0], +A2[0][2], +A2[0][3]], [+A2[1][0], +b[1], +A2[1][2], +A2[1][3]], [+A2[2][0], +b[2], +A2[2][2], +A2[2][3]], [+A2[3][0], +b[3], +A2[3][2], +A2[3][3]]]), det([[+A2[0][0], +A2[0][1], +b[0], +A2[0][3]], [+A2[1][0], +A2[1][1], +b[1], +A2[1][3]], [+A2[2][0], +A2[2][1], +b[2], +A2[2][3]], [+A2[3][0], +A2[3][1], +b[3], +A2[3][3]]]), det([[+A2[0][0], +A2[0][1], +A2[0][2], +b[0]], [+A2[1][0], +A2[1][1], +A2[1][2], +b[1]], [+A2[2][0], +A2[2][1], +A2[2][2], +b[2]], [+A2[3][0], +A2[3][1], +A2[3][2], +b[3]]]), det(A2)];
+                        return function robustLinearSolve4d(A22, b) {
+                          return [det([[+b[0], +A22[0][1], +A22[0][2], +A22[0][3]], [+b[1], +A22[1][1], +A22[1][2], +A22[1][3]], [+b[2], +A22[2][1], +A22[2][2], +A22[2][3]], [+b[3], +A22[3][1], +A22[3][2], +A22[3][3]]]), det([[+A22[0][0], +b[0], +A22[0][2], +A22[0][3]], [+A22[1][0], +b[1], +A22[1][2], +A22[1][3]], [+A22[2][0], +b[2], +A22[2][2], +A22[2][3]], [+A22[3][0], +b[3], +A22[3][2], +A22[3][3]]]), det([[+A22[0][0], +A22[0][1], +b[0], +A22[0][3]], [+A22[1][0], +A22[1][1], +b[1], +A22[1][3]], [+A22[2][0], +A22[2][1], +b[2], +A22[2][3]], [+A22[3][0], +A22[3][1], +b[3], +A22[3][3]]]), det([[+A22[0][0], +A22[0][1], +A22[0][2], +b[0]], [+A22[1][0], +A22[1][1], +A22[1][2], +b[1]], [+A22[2][0], +A22[2][1], +A22[2][2], +b[2]], [+A22[3][0], +A22[3][1], +A22[3][2], +b[3]]]), det(A22)];
                         };
                       }
                       function solve5d(det) {
-                        return function robustLinearSolve5d(A2, b) {
-                          return [det([[+b[0], +A2[0][1], +A2[0][2], +A2[0][3], +A2[0][4]], [+b[1], +A2[1][1], +A2[1][2], +A2[1][3], +A2[1][4]], [+b[2], +A2[2][1], +A2[2][2], +A2[2][3], +A2[2][4]], [+b[3], +A2[3][1], +A2[3][2], +A2[3][3], +A2[3][4]], [+b[4], +A2[4][1], +A2[4][2], +A2[4][3], +A2[4][4]]]), det([[+A2[0][0], +b[0], +A2[0][2], +A2[0][3], +A2[0][4]], [+A2[1][0], +b[1], +A2[1][2], +A2[1][3], +A2[1][4]], [+A2[2][0], +b[2], +A2[2][2], +A2[2][3], +A2[2][4]], [+A2[3][0], +b[3], +A2[3][2], +A2[3][3], +A2[3][4]], [+A2[4][0], +b[4], +A2[4][2], +A2[4][3], +A2[4][4]]]), det([[+A2[0][0], +A2[0][1], +b[0], +A2[0][3], +A2[0][4]], [+A2[1][0], +A2[1][1], +b[1], +A2[1][3], +A2[1][4]], [+A2[2][0], +A2[2][1], +b[2], +A2[2][3], +A2[2][4]], [+A2[3][0], +A2[3][1], +b[3], +A2[3][3], +A2[3][4]], [+A2[4][0], +A2[4][1], +b[4], +A2[4][3], +A2[4][4]]]), det([[+A2[0][0], +A2[0][1], +A2[0][2], +b[0], +A2[0][4]], [+A2[1][0], +A2[1][1], +A2[1][2], +b[1], +A2[1][4]], [+A2[2][0], +A2[2][1], +A2[2][2], +b[2], +A2[2][4]], [+A2[3][0], +A2[3][1], +A2[3][2], +b[3], +A2[3][4]], [+A2[4][0], +A2[4][1], +A2[4][2], +b[4], +A2[4][4]]]), det([[+A2[0][0], +A2[0][1], +A2[0][2], +A2[0][3], +b[0]], [+A2[1][0], +A2[1][1], +A2[1][2], +A2[1][3], +b[1]], [+A2[2][0], +A2[2][1], +A2[2][2], +A2[2][3], +b[2]], [+A2[3][0], +A2[3][1], +A2[3][2], +A2[3][3], +b[3]], [+A2[4][0], +A2[4][1], +A2[4][2], +A2[4][3], +b[4]]]), det(A2)];
+                        return function robustLinearSolve5d(A22, b) {
+                          return [det([[+b[0], +A22[0][1], +A22[0][2], +A22[0][3], +A22[0][4]], [+b[1], +A22[1][1], +A22[1][2], +A22[1][3], +A22[1][4]], [+b[2], +A22[2][1], +A22[2][2], +A22[2][3], +A22[2][4]], [+b[3], +A22[3][1], +A22[3][2], +A22[3][3], +A22[3][4]], [+b[4], +A22[4][1], +A22[4][2], +A22[4][3], +A22[4][4]]]), det([[+A22[0][0], +b[0], +A22[0][2], +A22[0][3], +A22[0][4]], [+A22[1][0], +b[1], +A22[1][2], +A22[1][3], +A22[1][4]], [+A22[2][0], +b[2], +A22[2][2], +A22[2][3], +A22[2][4]], [+A22[3][0], +b[3], +A22[3][2], +A22[3][3], +A22[3][4]], [+A22[4][0], +b[4], +A22[4][2], +A22[4][3], +A22[4][4]]]), det([[+A22[0][0], +A22[0][1], +b[0], +A22[0][3], +A22[0][4]], [+A22[1][0], +A22[1][1], +b[1], +A22[1][3], +A22[1][4]], [+A22[2][0], +A22[2][1], +b[2], +A22[2][3], +A22[2][4]], [+A22[3][0], +A22[3][1], +b[3], +A22[3][3], +A22[3][4]], [+A22[4][0], +A22[4][1], +b[4], +A22[4][3], +A22[4][4]]]), det([[+A22[0][0], +A22[0][1], +A22[0][2], +b[0], +A22[0][4]], [+A22[1][0], +A22[1][1], +A22[1][2], +b[1], +A22[1][4]], [+A22[2][0], +A22[2][1], +A22[2][2], +b[2], +A22[2][4]], [+A22[3][0], +A22[3][1], +A22[3][2], +b[3], +A22[3][4]], [+A22[4][0], +A22[4][1], +A22[4][2], +b[4], +A22[4][4]]]), det([[+A22[0][0], +A22[0][1], +A22[0][2], +A22[0][3], +b[0]], [+A22[1][0], +A22[1][1], +A22[1][2], +A22[1][3], +b[1]], [+A22[2][0], +A22[2][1], +A22[2][2], +A22[2][3], +b[2]], [+A22[3][0], +A22[3][1], +A22[3][2], +A22[3][3], +b[3]], [+A22[4][0], +A22[4][1], +A22[4][2], +A22[4][3], +b[4]]]), det(A22)];
                         };
                       }
                       function solve6d(det) {
-                        return function robustLinearSolve6d(A2, b) {
-                          return [det([[+b[0], +A2[0][1], +A2[0][2], +A2[0][3], +A2[0][4], +A2[0][5]], [+b[1], +A2[1][1], +A2[1][2], +A2[1][3], +A2[1][4], +A2[1][5]], [+b[2], +A2[2][1], +A2[2][2], +A2[2][3], +A2[2][4], +A2[2][5]], [+b[3], +A2[3][1], +A2[3][2], +A2[3][3], +A2[3][4], +A2[3][5]], [+b[4], +A2[4][1], +A2[4][2], +A2[4][3], +A2[4][4], +A2[4][5]], [+b[5], +A2[5][1], +A2[5][2], +A2[5][3], +A2[5][4], +A2[5][5]]]), det([[+A2[0][0], +b[0], +A2[0][2], +A2[0][3], +A2[0][4], +A2[0][5]], [+A2[1][0], +b[1], +A2[1][2], +A2[1][3], +A2[1][4], +A2[1][5]], [+A2[2][0], +b[2], +A2[2][2], +A2[2][3], +A2[2][4], +A2[2][5]], [+A2[3][0], +b[3], +A2[3][2], +A2[3][3], +A2[3][4], +A2[3][5]], [+A2[4][0], +b[4], +A2[4][2], +A2[4][3], +A2[4][4], +A2[4][5]], [+A2[5][0], +b[5], +A2[5][2], +A2[5][3], +A2[5][4], +A2[5][5]]]), det([[+A2[0][0], +A2[0][1], +b[0], +A2[0][3], +A2[0][4], +A2[0][5]], [+A2[1][0], +A2[1][1], +b[1], +A2[1][3], +A2[1][4], +A2[1][5]], [+A2[2][0], +A2[2][1], +b[2], +A2[2][3], +A2[2][4], +A2[2][5]], [+A2[3][0], +A2[3][1], +b[3], +A2[3][3], +A2[3][4], +A2[3][5]], [+A2[4][0], +A2[4][1], +b[4], +A2[4][3], +A2[4][4], +A2[4][5]], [+A2[5][0], +A2[5][1], +b[5], +A2[5][3], +A2[5][4], +A2[5][5]]]), det([[+A2[0][0], +A2[0][1], +A2[0][2], +b[0], +A2[0][4], +A2[0][5]], [+A2[1][0], +A2[1][1], +A2[1][2], +b[1], +A2[1][4], +A2[1][5]], [+A2[2][0], +A2[2][1], +A2[2][2], +b[2], +A2[2][4], +A2[2][5]], [+A2[3][0], +A2[3][1], +A2[3][2], +b[3], +A2[3][4], +A2[3][5]], [+A2[4][0], +A2[4][1], +A2[4][2], +b[4], +A2[4][4], +A2[4][5]], [+A2[5][0], +A2[5][1], +A2[5][2], +b[5], +A2[5][4], +A2[5][5]]]), det([[+A2[0][0], +A2[0][1], +A2[0][2], +A2[0][3], +b[0], +A2[0][5]], [+A2[1][0], +A2[1][1], +A2[1][2], +A2[1][3], +b[1], +A2[1][5]], [+A2[2][0], +A2[2][1], +A2[2][2], +A2[2][3], +b[2], +A2[2][5]], [+A2[3][0], +A2[3][1], +A2[3][2], +A2[3][3], +b[3], +A2[3][5]], [+A2[4][0], +A2[4][1], +A2[4][2], +A2[4][3], +b[4], +A2[4][5]], [+A2[5][0], +A2[5][1], +A2[5][2], +A2[5][3], +b[5], +A2[5][5]]]), det([[+A2[0][0], +A2[0][1], +A2[0][2], +A2[0][3], +A2[0][4], +b[0]], [+A2[1][0], +A2[1][1], +A2[1][2], +A2[1][3], +A2[1][4], +b[1]], [+A2[2][0], +A2[2][1], +A2[2][2], +A2[2][3], +A2[2][4], +b[2]], [+A2[3][0], +A2[3][1], +A2[3][2], +A2[3][3], +A2[3][4], +b[3]], [+A2[4][0], +A2[4][1], +A2[4][2], +A2[4][3], +A2[4][4], +b[4]], [+A2[5][0], +A2[5][1], +A2[5][2], +A2[5][3], +A2[5][4], +b[5]]]), det(A2)];
+                        return function robustLinearSolve6d(A22, b) {
+                          return [det([[+b[0], +A22[0][1], +A22[0][2], +A22[0][3], +A22[0][4], +A22[0][5]], [+b[1], +A22[1][1], +A22[1][2], +A22[1][3], +A22[1][4], +A22[1][5]], [+b[2], +A22[2][1], +A22[2][2], +A22[2][3], +A22[2][4], +A22[2][5]], [+b[3], +A22[3][1], +A22[3][2], +A22[3][3], +A22[3][4], +A22[3][5]], [+b[4], +A22[4][1], +A22[4][2], +A22[4][3], +A22[4][4], +A22[4][5]], [+b[5], +A22[5][1], +A22[5][2], +A22[5][3], +A22[5][4], +A22[5][5]]]), det([[+A22[0][0], +b[0], +A22[0][2], +A22[0][3], +A22[0][4], +A22[0][5]], [+A22[1][0], +b[1], +A22[1][2], +A22[1][3], +A22[1][4], +A22[1][5]], [+A22[2][0], +b[2], +A22[2][2], +A22[2][3], +A22[2][4], +A22[2][5]], [+A22[3][0], +b[3], +A22[3][2], +A22[3][3], +A22[3][4], +A22[3][5]], [+A22[4][0], +b[4], +A22[4][2], +A22[4][3], +A22[4][4], +A22[4][5]], [+A22[5][0], +b[5], +A22[5][2], +A22[5][3], +A22[5][4], +A22[5][5]]]), det([[+A22[0][0], +A22[0][1], +b[0], +A22[0][3], +A22[0][4], +A22[0][5]], [+A22[1][0], +A22[1][1], +b[1], +A22[1][3], +A22[1][4], +A22[1][5]], [+A22[2][0], +A22[2][1], +b[2], +A22[2][3], +A22[2][4], +A22[2][5]], [+A22[3][0], +A22[3][1], +b[3], +A22[3][3], +A22[3][4], +A22[3][5]], [+A22[4][0], +A22[4][1], +b[4], +A22[4][3], +A22[4][4], +A22[4][5]], [+A22[5][0], +A22[5][1], +b[5], +A22[5][3], +A22[5][4], +A22[5][5]]]), det([[+A22[0][0], +A22[0][1], +A22[0][2], +b[0], +A22[0][4], +A22[0][5]], [+A22[1][0], +A22[1][1], +A22[1][2], +b[1], +A22[1][4], +A22[1][5]], [+A22[2][0], +A22[2][1], +A22[2][2], +b[2], +A22[2][4], +A22[2][5]], [+A22[3][0], +A22[3][1], +A22[3][2], +b[3], +A22[3][4], +A22[3][5]], [+A22[4][0], +A22[4][1], +A22[4][2], +b[4], +A22[4][4], +A22[4][5]], [+A22[5][0], +A22[5][1], +A22[5][2], +b[5], +A22[5][4], +A22[5][5]]]), det([[+A22[0][0], +A22[0][1], +A22[0][2], +A22[0][3], +b[0], +A22[0][5]], [+A22[1][0], +A22[1][1], +A22[1][2], +A22[1][3], +b[1], +A22[1][5]], [+A22[2][0], +A22[2][1], +A22[2][2], +A22[2][3], +b[2], +A22[2][5]], [+A22[3][0], +A22[3][1], +A22[3][2], +A22[3][3], +b[3], +A22[3][5]], [+A22[4][0], +A22[4][1], +A22[4][2], +A22[4][3], +b[4], +A22[4][5]], [+A22[5][0], +A22[5][1], +A22[5][2], +A22[5][3], +b[5], +A22[5][5]]]), det([[+A22[0][0], +A22[0][1], +A22[0][2], +A22[0][3], +A22[0][4], +b[0]], [+A22[1][0], +A22[1][1], +A22[1][2], +A22[1][3], +A22[1][4], +b[1]], [+A22[2][0], +A22[2][1], +A22[2][2], +A22[2][3], +A22[2][4], +b[2]], [+A22[3][0], +A22[3][1], +A22[3][2], +A22[3][3], +A22[3][4], +b[3]], [+A22[4][0], +A22[4][1], +A22[4][2], +A22[4][3], +A22[4][4], +b[4]], [+A22[5][0], +A22[5][1], +A22[5][2], +A22[5][3], +A22[5][4], +b[5]]]), det(A22)];
                         };
                       }
                       var CACHE = [
@@ -118109,24 +118109,24 @@
                         robustLinearSolve1d
                       ];
                       function proc(s0, s1, s2, s3, s4, s5, CACHE2, g) {
-                        return function dispatchLinearSolve(A2, b) {
-                          switch (A2.length) {
+                        return function dispatchLinearSolve(A22, b) {
+                          switch (A22.length) {
                             case 0:
-                              return s0(A2, b);
+                              return s0(A22, b);
                             case 1:
-                              return s1(A2, b);
+                              return s1(A22, b);
                             case 2:
-                              return s2(A2, b);
+                              return s2(A22, b);
                             case 3:
-                              return s3(A2, b);
+                              return s3(A22, b);
                             case 4:
-                              return s4(A2, b);
+                              return s4(A22, b);
                             case 5:
-                              return s5(A2, b);
+                              return s5(A22, b);
                           }
-                          var s = CACHE2[A2.length];
-                          if (!s) s = CACHE2[A2.length] = g(A2.length);
-                          return s(A2, b);
+                          var s = CACHE2[A22.length];
+                          if (!s) s = CACHE2[A22.length] = g(A22.length);
+                          return s(A22, b);
                         };
                       }
                       function generateDispatch() {
@@ -118888,7 +118888,7 @@
                       module22.exports = getPolygonizer;
                       var allFns = [
                         function cellPolygonizer_0() {
-                          function B2(C2, E2, i, j) {
+                          function B22(C2, E2, i, j) {
                             var a = Math.min(i, j) | 0, b = Math.max(i, j) | 0, l = C2[2 * a], h = C2[2 * a + 1];
                             while (l < h) {
                               var m = l + h >> 1, v = E2[2 * m + 1];
@@ -118913,7 +118913,7 @@
                           return getContour0d;
                         },
                         function cellPolygonizer_1() {
-                          function B2(C2, E2, i, j) {
+                          function B22(C2, E2, i, j) {
                             var a = Math.min(i, j) | 0, b = Math.max(i, j) | 0, l = C2[2 * a], h = C2[2 * a + 1];
                             while (l < h) {
                               var m = l + h >> 1, v = E2[2 * m + 1];
@@ -118941,10 +118941,10 @@
                                   case 0:
                                     break;
                                   case 1:
-                                    R.push([B2(C2, E2, c[0], c[1])]);
+                                    R.push([B22(C2, E2, c[0], c[1])]);
                                     break;
                                   case 2:
-                                    R.push([B2(C2, E2, c[1], c[0])]);
+                                    R.push([B22(C2, E2, c[1], c[0])]);
                                     break;
                                   case 3:
                                     break;
@@ -118956,7 +118956,7 @@
                           return getContour1d;
                         },
                         function cellPolygonizer_2() {
-                          function B2(C2, E2, i, j) {
+                          function B22(C2, E2, i, j) {
                             var a = Math.min(i, j) | 0, b = Math.max(i, j) | 0, l = C2[2 * a], h = C2[2 * a + 1];
                             while (l < h) {
                               var m = l + h >> 1, v = E2[2 * m + 1];
@@ -118984,22 +118984,22 @@
                                   case 0:
                                     break;
                                   case 1:
-                                    R.push([B2(C2, E2, c[0], c[2]), B2(C2, E2, c[0], c[1])]);
+                                    R.push([B22(C2, E2, c[0], c[2]), B22(C2, E2, c[0], c[1])]);
                                     break;
                                   case 2:
-                                    R.push([B2(C2, E2, c[1], c[0]), B2(C2, E2, c[1], c[2])]);
+                                    R.push([B22(C2, E2, c[1], c[0]), B22(C2, E2, c[1], c[2])]);
                                     break;
                                   case 3:
-                                    R.push([B2(C2, E2, c[0], c[2]), B2(C2, E2, c[1], c[2])]);
+                                    R.push([B22(C2, E2, c[0], c[2]), B22(C2, E2, c[1], c[2])]);
                                     break;
                                   case 4:
-                                    R.push([B2(C2, E2, c[2], c[1]), B2(C2, E2, c[2], c[0])]);
+                                    R.push([B22(C2, E2, c[2], c[1]), B22(C2, E2, c[2], c[0])]);
                                     break;
                                   case 5:
-                                    R.push([B2(C2, E2, c[2], c[1]), B2(C2, E2, c[0], c[1])]);
+                                    R.push([B22(C2, E2, c[2], c[1]), B22(C2, E2, c[0], c[1])]);
                                     break;
                                   case 6:
-                                    R.push([B2(C2, E2, c[1], c[0]), B2(C2, E2, c[2], c[0])]);
+                                    R.push([B22(C2, E2, c[1], c[0]), B22(C2, E2, c[2], c[0])]);
                                     break;
                                   case 7:
                                     break;
@@ -119013,10 +119013,10 @@
                                   case 0:
                                     break;
                                   case 1:
-                                    R.push([B2(C2, E2, c[0], c[1])]);
+                                    R.push([B22(C2, E2, c[0], c[1])]);
                                     break;
                                   case 2:
-                                    R.push([B2(C2, E2, c[1], c[0])]);
+                                    R.push([B22(C2, E2, c[1], c[0])]);
                                     break;
                                   case 3:
                                     break;
@@ -119028,7 +119028,7 @@
                           return getContour2d;
                         },
                         function cellPolygonizer_3() {
-                          function B2(C2, E2, i, j) {
+                          function B22(C2, E2, i, j) {
                             var a = Math.min(i, j) | 0, b = Math.max(i, j) | 0, l = C2[2 * a], h = C2[2 * a + 1];
                             while (l < h) {
                               var m = l + h >> 1, v = E2[2 * m + 1];
@@ -119056,46 +119056,46 @@
                                   case 0:
                                     break;
                                   case 1:
-                                    R.push([B2(C2, E2, c[0], c[1]), B2(C2, E2, c[0], c[2]), B2(C2, E2, c[0], c[3])]);
+                                    R.push([B22(C2, E2, c[0], c[1]), B22(C2, E2, c[0], c[2]), B22(C2, E2, c[0], c[3])]);
                                     break;
                                   case 2:
-                                    R.push([B2(C2, E2, c[1], c[2]), B2(C2, E2, c[1], c[0]), B2(C2, E2, c[1], c[3])]);
+                                    R.push([B22(C2, E2, c[1], c[2]), B22(C2, E2, c[1], c[0]), B22(C2, E2, c[1], c[3])]);
                                     break;
                                   case 3:
-                                    R.push([B2(C2, E2, c[1], c[2]), B2(C2, E2, c[0], c[2]), B2(C2, E2, c[0], c[3])], [B2(C2, E2, c[1], c[3]), B2(C2, E2, c[1], c[2]), B2(C2, E2, c[0], c[3])]);
+                                    R.push([B22(C2, E2, c[1], c[2]), B22(C2, E2, c[0], c[2]), B22(C2, E2, c[0], c[3])], [B22(C2, E2, c[1], c[3]), B22(C2, E2, c[1], c[2]), B22(C2, E2, c[0], c[3])]);
                                     break;
                                   case 4:
-                                    R.push([B2(C2, E2, c[2], c[0]), B2(C2, E2, c[2], c[1]), B2(C2, E2, c[2], c[3])]);
+                                    R.push([B22(C2, E2, c[2], c[0]), B22(C2, E2, c[2], c[1]), B22(C2, E2, c[2], c[3])]);
                                     break;
                                   case 5:
-                                    R.push([B2(C2, E2, c[0], c[1]), B2(C2, E2, c[2], c[1]), B2(C2, E2, c[0], c[3])], [B2(C2, E2, c[2], c[1]), B2(C2, E2, c[2], c[3]), B2(C2, E2, c[0], c[3])]);
+                                    R.push([B22(C2, E2, c[0], c[1]), B22(C2, E2, c[2], c[1]), B22(C2, E2, c[0], c[3])], [B22(C2, E2, c[2], c[1]), B22(C2, E2, c[2], c[3]), B22(C2, E2, c[0], c[3])]);
                                     break;
                                   case 6:
-                                    R.push([B2(C2, E2, c[2], c[0]), B2(C2, E2, c[1], c[0]), B2(C2, E2, c[1], c[3])], [B2(C2, E2, c[2], c[3]), B2(C2, E2, c[2], c[0]), B2(C2, E2, c[1], c[3])]);
+                                    R.push([B22(C2, E2, c[2], c[0]), B22(C2, E2, c[1], c[0]), B22(C2, E2, c[1], c[3])], [B22(C2, E2, c[2], c[3]), B22(C2, E2, c[2], c[0]), B22(C2, E2, c[1], c[3])]);
                                     break;
                                   case 7:
-                                    R.push([B2(C2, E2, c[0], c[3]), B2(C2, E2, c[1], c[3]), B2(C2, E2, c[2], c[3])]);
+                                    R.push([B22(C2, E2, c[0], c[3]), B22(C2, E2, c[1], c[3]), B22(C2, E2, c[2], c[3])]);
                                     break;
                                   case 8:
-                                    R.push([B2(C2, E2, c[3], c[1]), B2(C2, E2, c[3], c[0]), B2(C2, E2, c[3], c[2])]);
+                                    R.push([B22(C2, E2, c[3], c[1]), B22(C2, E2, c[3], c[0]), B22(C2, E2, c[3], c[2])]);
                                     break;
                                   case 9:
-                                    R.push([B2(C2, E2, c[3], c[1]), B2(C2, E2, c[0], c[1]), B2(C2, E2, c[0], c[2])], [B2(C2, E2, c[3], c[2]), B2(C2, E2, c[3], c[1]), B2(C2, E2, c[0], c[2])]);
+                                    R.push([B22(C2, E2, c[3], c[1]), B22(C2, E2, c[0], c[1]), B22(C2, E2, c[0], c[2])], [B22(C2, E2, c[3], c[2]), B22(C2, E2, c[3], c[1]), B22(C2, E2, c[0], c[2])]);
                                     break;
                                   case 10:
-                                    R.push([B2(C2, E2, c[1], c[0]), B2(C2, E2, c[3], c[0]), B2(C2, E2, c[1], c[2])], [B2(C2, E2, c[3], c[0]), B2(C2, E2, c[3], c[2]), B2(C2, E2, c[1], c[2])]);
+                                    R.push([B22(C2, E2, c[1], c[0]), B22(C2, E2, c[3], c[0]), B22(C2, E2, c[1], c[2])], [B22(C2, E2, c[3], c[0]), B22(C2, E2, c[3], c[2]), B22(C2, E2, c[1], c[2])]);
                                     break;
                                   case 11:
-                                    R.push([B2(C2, E2, c[1], c[2]), B2(C2, E2, c[0], c[2]), B2(C2, E2, c[3], c[2])]);
+                                    R.push([B22(C2, E2, c[1], c[2]), B22(C2, E2, c[0], c[2]), B22(C2, E2, c[3], c[2])]);
                                     break;
                                   case 12:
-                                    R.push([B2(C2, E2, c[3], c[0]), B2(C2, E2, c[2], c[0]), B2(C2, E2, c[2], c[1])], [B2(C2, E2, c[3], c[1]), B2(C2, E2, c[3], c[0]), B2(C2, E2, c[2], c[1])]);
+                                    R.push([B22(C2, E2, c[3], c[0]), B22(C2, E2, c[2], c[0]), B22(C2, E2, c[2], c[1])], [B22(C2, E2, c[3], c[1]), B22(C2, E2, c[3], c[0]), B22(C2, E2, c[2], c[1])]);
                                     break;
                                   case 13:
-                                    R.push([B2(C2, E2, c[0], c[1]), B2(C2, E2, c[2], c[1]), B2(C2, E2, c[3], c[1])]);
+                                    R.push([B22(C2, E2, c[0], c[1]), B22(C2, E2, c[2], c[1]), B22(C2, E2, c[3], c[1])]);
                                     break;
                                   case 14:
-                                    R.push([B2(C2, E2, c[2], c[0]), B2(C2, E2, c[1], c[0]), B2(C2, E2, c[3], c[0])]);
+                                    R.push([B22(C2, E2, c[2], c[0]), B22(C2, E2, c[1], c[0]), B22(C2, E2, c[3], c[0])]);
                                     break;
                                   case 15:
                                     break;
@@ -119109,22 +119109,22 @@
                                   case 0:
                                     break;
                                   case 1:
-                                    R.push([B2(C2, E2, c[0], c[2]), B2(C2, E2, c[0], c[1])]);
+                                    R.push([B22(C2, E2, c[0], c[2]), B22(C2, E2, c[0], c[1])]);
                                     break;
                                   case 2:
-                                    R.push([B2(C2, E2, c[1], c[0]), B2(C2, E2, c[1], c[2])]);
+                                    R.push([B22(C2, E2, c[1], c[0]), B22(C2, E2, c[1], c[2])]);
                                     break;
                                   case 3:
-                                    R.push([B2(C2, E2, c[0], c[2]), B2(C2, E2, c[1], c[2])]);
+                                    R.push([B22(C2, E2, c[0], c[2]), B22(C2, E2, c[1], c[2])]);
                                     break;
                                   case 4:
-                                    R.push([B2(C2, E2, c[2], c[1]), B2(C2, E2, c[2], c[0])]);
+                                    R.push([B22(C2, E2, c[2], c[1]), B22(C2, E2, c[2], c[0])]);
                                     break;
                                   case 5:
-                                    R.push([B2(C2, E2, c[2], c[1]), B2(C2, E2, c[0], c[1])]);
+                                    R.push([B22(C2, E2, c[2], c[1]), B22(C2, E2, c[0], c[1])]);
                                     break;
                                   case 6:
-                                    R.push([B2(C2, E2, c[1], c[0]), B2(C2, E2, c[2], c[0])]);
+                                    R.push([B22(C2, E2, c[1], c[0]), B22(C2, E2, c[2], c[0])]);
                                     break;
                                   case 7:
                                     break;
@@ -119138,10 +119138,10 @@
                                   case 0:
                                     break;
                                   case 1:
-                                    R.push([B2(C2, E2, c[0], c[1])]);
+                                    R.push([B22(C2, E2, c[0], c[1])]);
                                     break;
                                   case 2:
-                                    R.push([B2(C2, E2, c[1], c[0])]);
+                                    R.push([B22(C2, E2, c[1], c[0])]);
                                     break;
                                   case 3:
                                     break;
@@ -126612,10 +126612,10 @@
                 return powers;
               }
               function smallestDivisor(a) {
-                var A2 = getFactors(a);
+                var A22 = getFactors(a);
                 var result = a;
                 for (var i = 0; i < shortPrimes.length; i++) {
-                  if (A2[i] > 0) {
+                  if (A22[i] > 0) {
                     result = shortPrimes[i];
                     break;
                   }
@@ -126624,22 +126624,22 @@
               }
               function leastCommonMultiple(a, b) {
                 if (a < 1 || b < 1) return void 0;
-                var A2 = getFactors(a);
-                var B2 = getFactors(b);
+                var A22 = getFactors(a);
+                var B22 = getFactors(b);
                 var n = 1;
                 for (var i = 0; i < shortPrimes.length; i++) {
                   n *= Math.pow(
                     shortPrimes[i],
-                    Math.max(A2[i], B2[i])
+                    Math.max(A22[i], B22[i])
                   );
                 }
                 return n;
               }
-              function arrayLCM(A2) {
-                if (A2.length === 0) return void 0;
+              function arrayLCM(A22) {
+                if (A22.length === 0) return void 0;
                 var n = 1;
-                for (var i = 0; i < A2.length; i++) {
-                  n = leastCommonMultiple(n, A2[i]);
+                for (var i = 0; i < A22.length; i++) {
+                  n = leastCommonMultiple(n, A22[i]);
                 }
                 return n;
               }
@@ -127415,12 +127415,12 @@
                   trace.y.length,
                   trace.z.length
                 );
-                trace._u = filter(trace.u, trace._len);
-                trace._v = filter(trace.v, trace._len);
-                trace._w = filter(trace.w, trace._len);
-                trace._x = filter(trace.x, trace._len);
-                trace._y = filter(trace.y, trace._len);
-                trace._z = filter(trace.z, trace._len);
+                trace._u = filter2(trace.u, trace._len);
+                trace._v = filter2(trace.v, trace._len);
+                trace._w = filter2(trace.w, trace._len);
+                trace._x = filter2(trace.x, trace._len);
+                trace._y = filter2(trace.y, trace._len);
+                trace._z = filter2(trace.z, trace._len);
                 var grid = processGrid(trace);
                 trace._gridFill = grid.fill;
                 trace._Xs = grid.Xs;
@@ -127430,9 +127430,9 @@
                 var slen = 0;
                 var startx, starty, startz;
                 if (trace.starts) {
-                  startx = filter(trace.starts.x || []);
-                  starty = filter(trace.starts.y || []);
-                  startz = filter(trace.starts.z || []);
+                  startx = filter2(trace.starts.x || []);
+                  starty = filter2(trace.starts.y || []);
+                  startz = filter2(trace.starts.z || []);
                   slen = Math.min(startx.length, starty.length, startz.length);
                 }
                 trace._startsX = startx || [];
@@ -127595,7 +127595,7 @@
               function distinctVals(col) {
                 return Lib.distinctVals(col).vals;
               }
-              function filter(arr, len) {
+              function filter2(arr, len) {
                 if (len === void 0) len = arr.length;
                 if (Lib.isTypedArray(arr)) return arr.subarray(0, len);
                 var values = [];
@@ -127606,7 +127606,7 @@
               }
               module2.exports = {
                 calc,
-                filter,
+                filter: filter2,
                 processGrid
               };
             }
@@ -127616,7 +127616,7 @@
               "use strict";
               var colorscaleCalc = require_calc();
               var processGrid = require_calc23().processGrid;
-              var filter = require_calc23().filter;
+              var filter2 = require_calc23().filter;
               module2.exports = function calc(gd, trace) {
                 trace._len = Math.min(
                   trace.x.length,
@@ -127624,10 +127624,10 @@
                   trace.z.length,
                   trace.value.length
                 );
-                trace._x = filter(trace.x, trace._len);
-                trace._y = filter(trace.y, trace._len);
-                trace._z = filter(trace.z, trace._len);
-                trace._value = filter(trace.value, trace._len);
+                trace._x = filter2(trace.x, trace._len);
+                trace._y = filter2(trace.y, trace._len);
+                trace._z = filter2(trace.z, trace._len);
+                trace._value = filter2(trace.value, trace._len);
                 var grid = processGrid(trace);
                 trace._gridFill = grid.fill;
                 trace._Xs = grid.Xs;
@@ -127849,17 +127849,17 @@
                   numFaces++;
                   return numFaces - 1;
                 }
-                function getCenter(A2, B2, C2) {
+                function getCenter(A22, B22, C2) {
                   var M = [];
-                  for (var i = 0; i < A2.length; i++) {
-                    M[i] = (A2[i] + B2[i] + C2[i]) / 3;
+                  for (var i = 0; i < A22.length; i++) {
+                    M[i] = (A22[i] + B22[i] + C2[i]) / 3;
                   }
                   return M;
                 }
-                function getBetween(A2, B2, r) {
+                function getBetween(A22, B22, r) {
                   var M = [];
-                  for (var i = 0; i < A2.length; i++) {
-                    M[i] = A2[i] * (1 - r) + r * B2[i];
+                  for (var i = 0; i < A22.length; i++) {
+                    M[i] = A22[i] * (1 - r) + r * B22[i];
                   }
                   return M;
                 }
@@ -127868,24 +127868,24 @@
                   activeFill = fill;
                 }
                 function createOpenTri(xyzv, abc) {
-                  var A2 = xyzv[0];
-                  var B2 = xyzv[1];
+                  var A22 = xyzv[0];
+                  var B22 = xyzv[1];
                   var C2 = xyzv[2];
-                  var G = getCenter(A2, B2, C2);
+                  var G = getCenter(A22, B22, C2);
                   var r = Math.sqrt(1 - activeFill);
-                  var p1 = getBetween(G, A2, r);
-                  var p2 = getBetween(G, B2, r);
+                  var p1 = getBetween(G, A22, r);
+                  var p2 = getBetween(G, B22, r);
                   var p3 = getBetween(G, C2, r);
                   var a = abc[0];
                   var b = abc[1];
                   var c = abc[2];
                   return {
                     xyzv: [
-                      [A2, B2, p2],
-                      [p2, p1, A2],
-                      [B2, C2, p3],
-                      [p3, p2, B2],
-                      [C2, A2, p1],
+                      [A22, B22, p2],
+                      [p2, p1, A22],
+                      [B22, C2, p3],
+                      [p3, p2, B22],
+                      [C2, A22, p1],
                       [p1, p3, C2]
                     ],
                     abc: [
@@ -128021,13 +128021,13 @@
                     [1, 2, 0]
                   ].forEach(function(e) {
                     if (ok[e[0]] && ok[e[1]] && !ok[e[2]]) {
-                      var A2 = xyzv[e[0]];
-                      var B2 = xyzv[e[1]];
+                      var A22 = xyzv[e[0]];
+                      var B22 = xyzv[e[1]];
                       var C2 = xyzv[e[2]];
-                      var p1 = calcIntersection(C2, A2, min, max);
-                      var p2 = calcIntersection(C2, B2, min, max);
-                      result = tryDrawTri(style, [p2, p1, A2], [-1, -1, abc[e[0]]]) || result;
-                      result = tryDrawTri(style, [A2, B2, p2], [abc[e[0]], abc[e[1]], -1]) || result;
+                      var p1 = calcIntersection(C2, A22, min, max);
+                      var p2 = calcIntersection(C2, B22, min, max);
+                      result = tryDrawTri(style, [p2, p1, A22], [-1, -1, abc[e[0]]]) || result;
+                      result = tryDrawTri(style, [A22, B22, p2], [abc[e[0]], abc[e[1]], -1]) || result;
                       interpolated = true;
                     }
                   });
@@ -128038,12 +128038,12 @@
                     [2, 0, 1]
                   ].forEach(function(e) {
                     if (ok[e[0]] && !ok[e[1]] && !ok[e[2]]) {
-                      var A2 = xyzv[e[0]];
-                      var B2 = xyzv[e[1]];
+                      var A22 = xyzv[e[0]];
+                      var B22 = xyzv[e[1]];
                       var C2 = xyzv[e[2]];
-                      var p1 = calcIntersection(B2, A2, min, max);
-                      var p2 = calcIntersection(C2, A2, min, max);
-                      result = tryDrawTri(style, [p2, p1, A2], [-1, -1, abc[e[0]]]) || result;
+                      var p1 = calcIntersection(B22, A22, min, max);
+                      var p2 = calcIntersection(C2, A22, min, max);
+                      result = tryDrawTri(style, [p2, p1, A22], [-1, -1, abc[e[0]]]) || result;
                       interpolated = true;
                     }
                   });
@@ -128075,15 +128075,15 @@
                     [1, 2, 3, 0]
                   ].forEach(function(e) {
                     if (ok[e[0]] && ok[e[1]] && ok[e[2]] && !ok[e[3]]) {
-                      var A2 = xyzv[e[0]];
-                      var B2 = xyzv[e[1]];
+                      var A22 = xyzv[e[0]];
+                      var B22 = xyzv[e[1]];
                       var C2 = xyzv[e[2]];
                       var D2 = xyzv[e[3]];
                       if (drawingSpaceframe) {
-                        result = drawTri(style, [A2, B2, C2], [abcd[e[0]], abcd[e[1]], abcd[e[2]]]) || result;
+                        result = drawTri(style, [A22, B22, C2], [abcd[e[0]], abcd[e[1]], abcd[e[2]]]) || result;
                       } else {
-                        var p1 = calcIntersection(D2, A2, min, max);
-                        var p2 = calcIntersection(D2, B2, min, max);
+                        var p1 = calcIntersection(D2, A22, min, max);
+                        var p2 = calcIntersection(D2, B22, min, max);
                         var p3 = calcIntersection(D2, C2, min, max);
                         result = drawTri(null, [p1, p2, p3], [-1, -1, -1]) || result;
                       }
@@ -128100,17 +128100,17 @@
                     [1, 3, 2, 0]
                   ].forEach(function(e) {
                     if (ok[e[0]] && ok[e[1]] && !ok[e[2]] && !ok[e[3]]) {
-                      var A2 = xyzv[e[0]];
-                      var B2 = xyzv[e[1]];
+                      var A22 = xyzv[e[0]];
+                      var B22 = xyzv[e[1]];
                       var C2 = xyzv[e[2]];
                       var D2 = xyzv[e[3]];
-                      var p1 = calcIntersection(C2, A2, min, max);
-                      var p2 = calcIntersection(C2, B2, min, max);
-                      var p3 = calcIntersection(D2, B2, min, max);
-                      var p4 = calcIntersection(D2, A2, min, max);
+                      var p1 = calcIntersection(C2, A22, min, max);
+                      var p2 = calcIntersection(C2, B22, min, max);
+                      var p3 = calcIntersection(D2, B22, min, max);
+                      var p4 = calcIntersection(D2, A22, min, max);
                       if (drawingSpaceframe) {
-                        result = drawTri(style, [A2, p4, p1], [abcd[e[0]], -1, -1]) || result;
-                        result = drawTri(style, [B2, p2, p3], [abcd[e[1]], -1, -1]) || result;
+                        result = drawTri(style, [A22, p4, p1], [abcd[e[0]], -1, -1]) || result;
+                        result = drawTri(style, [B22, p2, p3], [abcd[e[1]], -1, -1]) || result;
                       } else {
                         result = drawQuad(null, [p1, p2, p3, p4], [-1, -1, -1, -1]) || result;
                       }
@@ -128125,17 +128125,17 @@
                     [3, 0, 1, 2]
                   ].forEach(function(e) {
                     if (ok[e[0]] && !ok[e[1]] && !ok[e[2]] && !ok[e[3]]) {
-                      var A2 = xyzv[e[0]];
-                      var B2 = xyzv[e[1]];
+                      var A22 = xyzv[e[0]];
+                      var B22 = xyzv[e[1]];
                       var C2 = xyzv[e[2]];
                       var D2 = xyzv[e[3]];
-                      var p1 = calcIntersection(B2, A2, min, max);
-                      var p2 = calcIntersection(C2, A2, min, max);
-                      var p3 = calcIntersection(D2, A2, min, max);
+                      var p1 = calcIntersection(B22, A22, min, max);
+                      var p2 = calcIntersection(C2, A22, min, max);
+                      var p3 = calcIntersection(D2, A22, min, max);
                       if (drawingSpaceframe) {
-                        result = drawTri(style, [A2, p1, p2], [abcd[e[0]], -1, -1]) || result;
-                        result = drawTri(style, [A2, p2, p3], [abcd[e[0]], -1, -1]) || result;
-                        result = drawTri(style, [A2, p3, p1], [abcd[e[0]], -1, -1]) || result;
+                        result = drawTri(style, [A22, p1, p2], [abcd[e[0]], -1, -1]) || result;
+                        result = drawTri(style, [A22, p2, p3], [abcd[e[0]], -1, -1]) || result;
+                        result = drawTri(style, [A22, p3, p1], [abcd[e[0]], -1, -1]) || result;
                       } else {
                         result = drawTri(null, [p1, p2, p3], [-1, -1, -1]) || result;
                       }
@@ -128183,31 +128183,31 @@
                 }
                 function beginSection(style, i, j, k, min, max, distRatios) {
                   var result = false;
-                  var A2, B2, C2, D2;
+                  var A22, B22, C2, D2;
                   var makeSection = function() {
-                    result = tryCreateTri(style, [A2, B2, C2], [-1, -1, -1], min, max) || result;
-                    result = tryCreateTri(style, [C2, D2, A2], [-1, -1, -1], min, max) || result;
+                    result = tryCreateTri(style, [A22, B22, C2], [-1, -1, -1], min, max) || result;
+                    result = tryCreateTri(style, [C2, D2, A22], [-1, -1, -1], min, max) || result;
                   };
                   var rX = distRatios[0];
                   var rY = distRatios[1];
                   var rZ = distRatios[2];
                   if (rX) {
-                    A2 = getBetween(getXYZV([getIndex(i, j - 0, k - 0)])[0], getXYZV([getIndex(i - 1, j - 0, k - 0)])[0], rX);
-                    B2 = getBetween(getXYZV([getIndex(i, j - 0, k - 1)])[0], getXYZV([getIndex(i - 1, j - 0, k - 1)])[0], rX);
+                    A22 = getBetween(getXYZV([getIndex(i, j - 0, k - 0)])[0], getXYZV([getIndex(i - 1, j - 0, k - 0)])[0], rX);
+                    B22 = getBetween(getXYZV([getIndex(i, j - 0, k - 1)])[0], getXYZV([getIndex(i - 1, j - 0, k - 1)])[0], rX);
                     C2 = getBetween(getXYZV([getIndex(i, j - 1, k - 1)])[0], getXYZV([getIndex(i - 1, j - 1, k - 1)])[0], rX);
                     D2 = getBetween(getXYZV([getIndex(i, j - 1, k - 0)])[0], getXYZV([getIndex(i - 1, j - 1, k - 0)])[0], rX);
                     makeSection();
                   }
                   if (rY) {
-                    A2 = getBetween(getXYZV([getIndex(i - 0, j, k - 0)])[0], getXYZV([getIndex(i - 0, j - 1, k - 0)])[0], rY);
-                    B2 = getBetween(getXYZV([getIndex(i - 0, j, k - 1)])[0], getXYZV([getIndex(i - 0, j - 1, k - 1)])[0], rY);
+                    A22 = getBetween(getXYZV([getIndex(i - 0, j, k - 0)])[0], getXYZV([getIndex(i - 0, j - 1, k - 0)])[0], rY);
+                    B22 = getBetween(getXYZV([getIndex(i - 0, j, k - 1)])[0], getXYZV([getIndex(i - 0, j - 1, k - 1)])[0], rY);
                     C2 = getBetween(getXYZV([getIndex(i - 1, j, k - 1)])[0], getXYZV([getIndex(i - 1, j - 1, k - 1)])[0], rY);
                     D2 = getBetween(getXYZV([getIndex(i - 1, j, k - 0)])[0], getXYZV([getIndex(i - 1, j - 1, k - 0)])[0], rY);
                     makeSection();
                   }
                   if (rZ) {
-                    A2 = getBetween(getXYZV([getIndex(i - 0, j - 0, k)])[0], getXYZV([getIndex(i - 0, j - 0, k - 1)])[0], rZ);
-                    B2 = getBetween(getXYZV([getIndex(i - 0, j - 1, k)])[0], getXYZV([getIndex(i - 0, j - 1, k - 1)])[0], rZ);
+                    A22 = getBetween(getXYZV([getIndex(i - 0, j - 0, k)])[0], getXYZV([getIndex(i - 0, j - 0, k - 1)])[0], rZ);
+                    B22 = getBetween(getXYZV([getIndex(i - 0, j - 1, k)])[0], getXYZV([getIndex(i - 0, j - 1, k - 1)])[0], rZ);
                     C2 = getBetween(getXYZV([getIndex(i - 1, j - 1, k)])[0], getXYZV([getIndex(i - 1, j - 1, k - 1)])[0], rZ);
                     D2 = getBetween(getXYZV([getIndex(i - 1, j - 0, k)])[0], getXYZV([getIndex(i - 1, j - 0, k - 1)])[0], rZ);
                     makeSection();
@@ -130486,13 +130486,13 @@
                 function mesh(topology) {
                   return object(topology, meshArcs.apply(this, arguments));
                 }
-                function meshArcs(topology, object2, filter) {
+                function meshArcs(topology, object2, filter2) {
                   var arcs, i, n;
-                  if (arguments.length > 1) arcs = extractArcs(topology, object2, filter);
+                  if (arguments.length > 1) arcs = extractArcs(topology, object2, filter2);
                   else for (i = 0, arcs = new Array(n = topology.arcs.length); i < n; ++i) arcs[i] = i;
                   return { type: "MultiLineString", arcs: stitch(topology, arcs) };
                 }
-                function extractArcs(topology, object2, filter) {
+                function extractArcs(topology, object2, filter2) {
                   var arcs = [], geomsByArc = [], geom;
                   function extract0(i) {
                     var j = i < 0 ? ~i : i;
@@ -130525,10 +130525,10 @@
                     }
                   }
                   geometry(object2);
-                  geomsByArc.forEach(filter == null ? function(geoms) {
+                  geomsByArc.forEach(filter2 == null ? function(geoms) {
                     arcs.push(geoms[0].i);
                   } : function(geoms) {
-                    if (filter(geoms[0].g, geoms[geoms.length - 1].g)) arcs.push(geoms[0].i);
+                    if (filter2(geoms[0].g, geoms[geoms.length - 1].g)) arcs.push(geoms[0].i);
                   });
                   return arcs;
                 }
@@ -133989,12 +133989,12 @@
                     var pa = cartesian(a), pb = cartesian(b);
                     var n1 = [1, 0, 0], n2 = cartesianCross(pa, pb), n2n2 = cartesianDot(n2, n2), n1n2 = n2[0], determinant = n2n2 - n1n2 * n1n2;
                     if (!determinant) return !two && a;
-                    var c1 = cr * n2n2 / determinant, c2 = -cr * n1n2 / determinant, n1xn2 = cartesianCross(n1, n2), A5 = cartesianScale(n1, c1), B2 = cartesianScale(n2, c2);
-                    cartesianAddInPlace(A5, B2);
-                    var u = n1xn2, w = cartesianDot(A5, u), uu = cartesianDot(u, u), t22 = w * w - uu * (cartesianDot(A5, A5) - 1);
+                    var c1 = cr * n2n2 / determinant, c2 = -cr * n1n2 / determinant, n1xn2 = cartesianCross(n1, n2), A52 = cartesianScale(n1, c1), B22 = cartesianScale(n2, c2);
+                    cartesianAddInPlace(A52, B22);
+                    var u = n1xn2, w = cartesianDot(A52, u), uu = cartesianDot(u, u), t22 = w * w - uu * (cartesianDot(A52, A52) - 1);
                     if (t22 < 0) return;
                     var t = sqrt(t22), q = cartesianScale(u, (-w - t) / uu);
-                    cartesianAddInPlace(q, A5);
+                    cartesianAddInPlace(q, A52);
                     q = spherical(q);
                     if (!two) return q;
                     var lambda02 = a[0], lambda12 = b[0], phi02 = a[1], phi12 = b[1], z;
@@ -134003,7 +134003,7 @@
                     if (!polar && phi12 < phi02) z = phi02, phi02 = phi12, phi12 = z;
                     if (meridian ? polar ? phi02 + phi12 > 0 ^ q[1] < (abs(q[0] - lambda02) < epsilon ? phi02 : phi12) : phi02 <= q[1] && q[1] <= phi12 : delta2 > pi ^ (lambda02 <= q[0] && q[0] <= lambda12)) {
                       var q1 = cartesianScale(u, (-w + t) / uu);
-                      cartesianAddInPlace(q1, A5);
+                      cartesianAddInPlace(q1, A52);
                       return [q, spherical(q1)];
                     }
                   }
@@ -134404,7 +134404,7 @@
                 function interpolate(a, b) {
                   var x02 = a[0] * radians2, y02 = a[1] * radians2, x12 = b[0] * radians2, y12 = b[1] * radians2, cy0 = cos(y02), sy0 = sin(y02), cy1 = cos(y12), sy1 = sin(y12), kx0 = cy0 * cos(x02), ky0 = cy0 * sin(x02), kx1 = cy1 * cos(x12), ky1 = cy1 * sin(x12), d = 2 * asin(sqrt(haversin(y12 - y02) + cy0 * cy1 * haversin(x12 - x02))), k = sin(d);
                   var interpolate2 = d ? function(t) {
-                    var B2 = sin(t *= d) / k, A5 = sin(d - t) / k, x = A5 * kx0 + B2 * kx1, y = A5 * ky0 + B2 * ky1, z = A5 * sy0 + B2 * sy1;
+                    var B22 = sin(t *= d) / k, A52 = sin(d - t) / k, x = A52 * kx0 + B22 * kx1, y = A52 * ky0 + B22 * ky1, z = A52 * sy0 + B22 * sy1;
                     return [
                       atan2(y, x) * degrees3,
                       atan2(z, sqrt(x * x + y * y)) * degrees3
@@ -135195,24 +135195,24 @@
                 function conicEquidistant() {
                   return conicProjection(conicEquidistantRaw).scale(131.154).center([0, 13.9389]);
                 }
-                var A1 = 1.340264, A2 = -0.081106, A3 = 893e-6, A4 = 3796e-6, M = sqrt(3) / 2, iterations = 12;
+                var A12 = 1.340264, A22 = -0.081106, A32 = 893e-6, A42 = 3796e-6, M = sqrt(3) / 2, iterations = 12;
                 function equalEarthRaw(lambda, phi) {
                   var l = asin(M * sin(phi)), l2 = l * l, l6 = l2 * l2 * l2;
                   return [
-                    lambda * cos(l) / (M * (A1 + 3 * A2 * l2 + l6 * (7 * A3 + 9 * A4 * l2))),
-                    l * (A1 + A2 * l2 + l6 * (A3 + A4 * l2))
+                    lambda * cos(l) / (M * (A12 + 3 * A22 * l2 + l6 * (7 * A32 + 9 * A42 * l2))),
+                    l * (A12 + A22 * l2 + l6 * (A32 + A42 * l2))
                   ];
                 }
                 equalEarthRaw.invert = function(x, y) {
                   var l = y, l2 = l * l, l6 = l2 * l2 * l2;
                   for (var i = 0, delta, fy, fpy; i < iterations; ++i) {
-                    fy = l * (A1 + A2 * l2 + l6 * (A3 + A4 * l2)) - y;
-                    fpy = A1 + 3 * A2 * l2 + l6 * (7 * A3 + 9 * A4 * l2);
+                    fy = l * (A12 + A22 * l2 + l6 * (A32 + A42 * l2)) - y;
+                    fpy = A12 + 3 * A22 * l2 + l6 * (7 * A32 + 9 * A42 * l2);
                     l -= delta = fy / fpy, l2 = l * l, l6 = l2 * l2 * l2;
                     if (abs(delta) < epsilon22) break;
                   }
                   return [
-                    M * x * (A1 + 3 * A2 * l2 + l6 * (7 * A3 + 9 * A4 * l2)) / cos(l),
+                    M * x * (A12 + 3 * A22 * l2 + l6 * (7 * A32 + 9 * A42 * l2)) / cos(l),
                     asin(sin(l) / M)
                   ];
                 };
@@ -135520,7 +135520,7 @@
                   forward.invert = function(x, y) {
                     var lambda = 0, phi = 0, i = 50;
                     do {
-                      var cosLambda = cos(lambda), sinLambda = sin(lambda), cosPhi = cos(phi), sinPhi = sin(phi), A3 = 1 + cosPhi, fx = A3 * sinLambda - x, fy = k2 + sinPhi * cosPhi0 - A3 * sinPhi0 * cosLambda - y, dxdLambda = A3 * cosLambda / 2, dxdPhi = -sinLambda * sinPhi, dydLambda = sinPhi0 * A3 * sinLambda / 2, dydPhi = cosPhi0 * cosPhi + sinPhi0 * cosLambda * sinPhi, denominator = dxdPhi * dydLambda - dydPhi * dxdLambda, dLambda = (fy * dxdPhi - fx * dydPhi) / denominator / 2, dPhi = (fx * dydLambda - fy * dxdLambda) / denominator;
+                      var cosLambda = cos(lambda), sinLambda = sin(lambda), cosPhi = cos(phi), sinPhi = sin(phi), A32 = 1 + cosPhi, fx = A32 * sinLambda - x, fy = k2 + sinPhi * cosPhi0 - A32 * sinPhi0 * cosLambda - y, dxdLambda = A32 * cosLambda / 2, dxdPhi = -sinLambda * sinPhi, dydLambda = sinPhi0 * A32 * sinLambda / 2, dydPhi = cosPhi0 * cosPhi + sinPhi0 * cosLambda * sinPhi, denominator = dxdPhi * dydLambda - dydPhi * dxdLambda, dLambda = (fy * dxdPhi - fx * dydPhi) / denominator / 2, dPhi = (fx * dydLambda - fy * dxdLambda) / denominator;
                       if (abs(dPhi) > 2) dPhi /= 2;
                       lambda -= dLambda, phi -= dPhi;
                     } while ((abs(dLambda) > epsilon || abs(dPhi) > epsilon) && --i > 0);
@@ -135602,7 +135602,7 @@
                   forward.invert = function(x, y) {
                     var r = sqrt(x * x + y * y);
                     if (r > halfPi) {
-                      var theta = atan2(y, x), theta0 = k2 * round((theta - halfPi) / k2) + halfPi, s = theta > theta0 ? -1 : 1, A3 = r * cos(theta0 - theta), cotAlpha = 1 / tan(s * acos((A3 - pi) / sqrt(pi * (pi - 2 * A3) + r * r)));
+                      var theta = atan2(y, x), theta0 = k2 * round((theta - halfPi) / k2) + halfPi, s = theta > theta0 ? -1 : 1, A32 = r * cos(theta0 - theta), cotAlpha = 1 / tan(s * acos((A32 - pi) / sqrt(pi * (pi - 2 * A32) + r * r)));
                       theta = theta0 + 2 * atan((cotAlpha + s * sqrt(cotAlpha * cotAlpha - 3)) / 3);
                       x = r * cos(theta), y = r * sin(theta);
                     }
@@ -135636,18 +135636,18 @@
                   };
                   return p.scale(87.8076).center([0, 17.1875]).clipAngle(180 - 1e-3);
                 }
-                function hammerRaw(A3, B3) {
-                  if (arguments.length < 2) B3 = A3;
-                  if (B3 === 1) return d3Geo.geoAzimuthalEqualAreaRaw;
-                  if (B3 === Infinity) return hammerQuarticAuthalicRaw;
+                function hammerRaw(A32, B32) {
+                  if (arguments.length < 2) B32 = A32;
+                  if (B32 === 1) return d3Geo.geoAzimuthalEqualAreaRaw;
+                  if (B32 === Infinity) return hammerQuarticAuthalicRaw;
                   function forward(lambda, phi) {
-                    var coordinates = d3Geo.geoAzimuthalEqualAreaRaw(lambda / B3, phi);
-                    coordinates[0] *= A3;
+                    var coordinates = d3Geo.geoAzimuthalEqualAreaRaw(lambda / B32, phi);
+                    coordinates[0] *= A32;
                     return coordinates;
                   }
                   forward.invert = function(x, y) {
-                    var coordinates = d3Geo.geoAzimuthalEqualAreaRaw.invert(x / A3, y);
-                    coordinates[0] *= B3;
+                    var coordinates = d3Geo.geoAzimuthalEqualAreaRaw.invert(x / A32, y);
+                    coordinates[0] *= B32;
                     return coordinates;
                   };
                   return forward;
@@ -135666,10 +135666,10 @@
                   ];
                 };
                 function hammer() {
-                  var B3 = 2, m = d3Geo.geoProjectionMutator(hammerRaw), p = m(B3);
+                  var B32 = 2, m = d3Geo.geoProjectionMutator(hammerRaw), p = m(B32);
                   p.coefficient = function(_) {
-                    if (!arguments.length) return B3;
-                    return m(B3 = +_);
+                    if (!arguments.length) return B32;
+                    return m(B32 = +_);
                   };
                   return p.scale(169.529);
                 }
@@ -136037,10 +136037,10 @@
                   ];
                 }
                 eckert4Raw.invert = function(x, y) {
-                  var A3 = y * sqrt((4 + pi) / pi) / 2, k2 = asin(A3), c = cos(k2);
+                  var A32 = y * sqrt((4 + pi) / pi) / 2, k2 = asin(A32), c = cos(k2);
                   return [
                     x / (2 / sqrt(pi * (4 + pi)) * (1 + c)),
-                    asin((k2 + A3 * (c + 2)) / (2 + halfPi))
+                    asin((k2 + A32 * (c + 2)) / (2 + halfPi))
                   ];
                 };
                 function eckert4() {
@@ -136096,7 +136096,7 @@
                   var lambda = p[0], phi = p[1], i = 20, p;
                   x /= eisenlohrK, y /= eisenlohrK;
                   do {
-                    var _0 = lambda / 2, _1 = phi / 2, s0 = sin(_0), c0 = cos(_0), s1 = sin(_1), c1 = cos(_1), cos1 = cos(phi), k2 = sqrt(cos1), t = s1 / (c1 + sqrt2 * c0 * k2), t22 = t * t, c = sqrt(2 / (1 + t22)), v0 = sqrt2 * c1 + (c0 + s0) * k2, v1 = sqrt2 * c1 + (c0 - s0) * k2, v2 = v0 / v1, v = sqrt(v2), vm1v = v - 1 / v, vp1v = v + 1 / v, fx = c * vm1v - 2 * log(v) - x, fy = c * t * vp1v - 2 * atan(t) - y, deltatDeltaLambda = s1 && sqrt1_2 * k2 * s0 * t22 / s1, deltatDeltaPhi = (sqrt2 * c0 * c1 + k2) / (2 * (c1 + sqrt2 * c0 * k2) * (c1 + sqrt2 * c0 * k2) * k2), deltacDeltat = -0.5 * t * c * c * c, deltacDeltaLambda = deltacDeltat * deltatDeltaLambda, deltacDeltaPhi = deltacDeltat * deltatDeltaPhi, A3 = (A3 = 2 * c1 + sqrt2 * k2 * (c0 - s0)) * A3 * v, deltavDeltaLambda = (sqrt2 * c0 * c1 * k2 + cos1) / A3, deltavDeltaPhi = -(sqrt2 * s0 * s1) / (k2 * A3), deltaxDeltaLambda = vm1v * deltacDeltaLambda - 2 * deltavDeltaLambda / v + c * (deltavDeltaLambda + deltavDeltaLambda / v2), deltaxDeltaPhi = vm1v * deltacDeltaPhi - 2 * deltavDeltaPhi / v + c * (deltavDeltaPhi + deltavDeltaPhi / v2), deltayDeltaLambda = t * vp1v * deltacDeltaLambda - 2 * deltatDeltaLambda / (1 + t22) + c * vp1v * deltatDeltaLambda + c * t * (deltavDeltaLambda - deltavDeltaLambda / v2), deltayDeltaPhi = t * vp1v * deltacDeltaPhi - 2 * deltatDeltaPhi / (1 + t22) + c * vp1v * deltatDeltaPhi + c * t * (deltavDeltaPhi - deltavDeltaPhi / v2), denominator = deltaxDeltaPhi * deltayDeltaLambda - deltayDeltaPhi * deltaxDeltaLambda;
+                    var _0 = lambda / 2, _1 = phi / 2, s0 = sin(_0), c0 = cos(_0), s1 = sin(_1), c1 = cos(_1), cos1 = cos(phi), k2 = sqrt(cos1), t = s1 / (c1 + sqrt2 * c0 * k2), t22 = t * t, c = sqrt(2 / (1 + t22)), v0 = sqrt2 * c1 + (c0 + s0) * k2, v1 = sqrt2 * c1 + (c0 - s0) * k2, v2 = v0 / v1, v = sqrt(v2), vm1v = v - 1 / v, vp1v = v + 1 / v, fx = c * vm1v - 2 * log(v) - x, fy = c * t * vp1v - 2 * atan(t) - y, deltatDeltaLambda = s1 && sqrt1_2 * k2 * s0 * t22 / s1, deltatDeltaPhi = (sqrt2 * c0 * c1 + k2) / (2 * (c1 + sqrt2 * c0 * k2) * (c1 + sqrt2 * c0 * k2) * k2), deltacDeltat = -0.5 * t * c * c * c, deltacDeltaLambda = deltacDeltat * deltatDeltaLambda, deltacDeltaPhi = deltacDeltat * deltatDeltaPhi, A32 = (A32 = 2 * c1 + sqrt2 * k2 * (c0 - s0)) * A32 * v, deltavDeltaLambda = (sqrt2 * c0 * c1 * k2 + cos1) / A32, deltavDeltaPhi = -(sqrt2 * s0 * s1) / (k2 * A32), deltaxDeltaLambda = vm1v * deltacDeltaLambda - 2 * deltavDeltaLambda / v + c * (deltavDeltaLambda + deltavDeltaLambda / v2), deltaxDeltaPhi = vm1v * deltacDeltaPhi - 2 * deltavDeltaPhi / v + c * (deltavDeltaPhi + deltavDeltaPhi / v2), deltayDeltaLambda = t * vp1v * deltacDeltaLambda - 2 * deltatDeltaLambda / (1 + t22) + c * vp1v * deltatDeltaLambda + c * t * (deltavDeltaLambda - deltavDeltaLambda / v2), deltayDeltaPhi = t * vp1v * deltacDeltaPhi - 2 * deltatDeltaPhi / (1 + t22) + c * vp1v * deltatDeltaPhi + c * t * (deltavDeltaPhi - deltavDeltaPhi / v2), denominator = deltaxDeltaPhi * deltayDeltaLambda - deltayDeltaPhi * deltaxDeltaLambda;
                     if (!denominator) break;
                     var deltaLambda = (fy * deltaxDeltaPhi - fx * deltayDeltaPhi) / denominator, deltaPhi = (fx * deltayDeltaLambda - fy * deltaxDeltaLambda) / denominator;
                     lambda -= deltaLambda;
@@ -136679,19 +136679,19 @@
                   return p.scale(239.75);
                 }
                 function hillRaw(K3) {
-                  var L = 1 + K3, sinBt = sin(1 / L), Bt = asin(sinBt), A3 = 2 * sqrt(pi / (B3 = pi + 4 * Bt * L)), B3, rho0 = 0.5 * A3 * (L + sqrt(K3 * (2 + K3))), K22 = K3 * K3, L2 = L * L;
+                  var L = 1 + K3, sinBt = sin(1 / L), Bt = asin(sinBt), A32 = 2 * sqrt(pi / (B32 = pi + 4 * Bt * L)), B32, rho0 = 0.5 * A32 * (L + sqrt(K3 * (2 + K3))), K22 = K3 * K3, L2 = L * L;
                   function forward(lambda, phi) {
                     var t = 1 - sin(phi), rho, omega;
                     if (t && t < 2) {
                       var theta = halfPi - phi, i = 25, delta;
                       do {
                         var sinTheta = sin(theta), cosTheta = cos(theta), Bt_Bt1 = Bt + atan2(sinTheta, L - cosTheta), C2 = 1 + L2 - 2 * L * cosTheta;
-                        theta -= delta = (theta - K22 * Bt - L * sinTheta + C2 * Bt_Bt1 - 0.5 * t * B3) / (2 * L * sinTheta * Bt_Bt1);
+                        theta -= delta = (theta - K22 * Bt - L * sinTheta + C2 * Bt_Bt1 - 0.5 * t * B32) / (2 * L * sinTheta * Bt_Bt1);
                       } while (abs(delta) > epsilon22 && --i > 0);
-                      rho = A3 * sqrt(C2);
+                      rho = A32 * sqrt(C2);
                       omega = lambda * Bt_Bt1 / pi;
                     } else {
-                      rho = A3 * (K3 + t);
+                      rho = A32 * (K3 + t);
                       omega = lambda * Bt / pi;
                     }
                     return [
@@ -136700,10 +136700,10 @@
                     ];
                   }
                   forward.invert = function(x, y) {
-                    var rho2 = x * x + (y -= rho0) * y, cosTheta = (1 + L2 - rho2 / (A3 * A3)) / (2 * L), theta = acos(cosTheta), sinTheta = sin(theta), Bt_Bt1 = Bt + atan2(sinTheta, L - cosTheta);
+                    var rho2 = x * x + (y -= rho0) * y, cosTheta = (1 + L2 - rho2 / (A32 * A32)) / (2 * L), theta = acos(cosTheta), sinTheta = sin(theta), Bt_Bt1 = Bt + atan2(sinTheta, L - cosTheta);
                     return [
                       asin(x / sqrt(rho2)) * pi / Bt_Bt1,
-                      asin(1 - 2 * (theta - K22 * Bt - L * sinTheta + (1 + L2 - 2 * L * cosTheta) * Bt_Bt1) / B3)
+                      asin(1 - 2 * (theta - K22 * Bt - L * sinTheta + (1 + L2 - 2 * L * cosTheta) * Bt_Bt1) / B32)
                     ];
                   };
                   return forward;
@@ -137312,21 +137312,21 @@
                   return d3Geo.geoProjection(mtFlatPolarQuarticRaw).scale(188.209);
                 }
                 function mtFlatPolarSinusoidalRaw(lambda, phi) {
-                  var A3 = sqrt(6 / (4 + pi)), k2 = (1 + pi / 4) * sin(phi), theta = phi / 2;
+                  var A32 = sqrt(6 / (4 + pi)), k2 = (1 + pi / 4) * sin(phi), theta = phi / 2;
                   for (var i = 0, delta; i < 25; i++) {
                     theta -= delta = (theta / 2 + sin(theta) - k2) / (0.5 + cos(theta));
                     if (abs(delta) < epsilon) break;
                   }
                   return [
-                    A3 * (0.5 + cos(theta)) * lambda / 1.5,
-                    A3 * theta
+                    A32 * (0.5 + cos(theta)) * lambda / 1.5,
+                    A32 * theta
                   ];
                 }
                 mtFlatPolarSinusoidalRaw.invert = function(x, y) {
-                  var A3 = sqrt(6 / (4 + pi)), theta = y / A3;
+                  var A32 = sqrt(6 / (4 + pi)), theta = y / A32;
                   if (abs(abs(theta) - halfPi) < epsilon) theta = theta < 0 ? -halfPi : halfPi;
                   return [
-                    1.5 * x / (A3 * (0.5 + cos(theta))),
+                    1.5 * x / (A32 * (0.5 + cos(theta))),
                     asin((theta / 2 + sin(theta)) / (1 + pi / 4))
                   ];
                 };
@@ -138047,9 +138047,9 @@
                 function rectangularPolyconicRaw(phi02) {
                   var sinPhi0 = sin(phi02);
                   function forward(lambda, phi) {
-                    var A3 = sinPhi0 ? tan(lambda * sinPhi0 / 2) / sinPhi0 : lambda / 2;
-                    if (!phi) return [2 * A3, -phi02];
-                    var E2 = 2 * atan(A3 * sin(phi)), cotPhi = 1 / tan(phi);
+                    var A32 = sinPhi0 ? tan(lambda * sinPhi0 / 2) / sinPhi0 : lambda / 2;
+                    if (!phi) return [2 * A32, -phi02];
+                    var E2 = 2 * atan(A32 * sin(phi)), cotPhi = 1 / tan(phi);
                     return [
                       sin(E2) * cotPhi,
                       phi + (1 - cos(E2)) * cotPhi - phi02
@@ -138062,9 +138062,9 @@
                       var tanPhi = tan(phi), secPhi = 1 / cos(phi), j = k2 - 2 * y * phi + phi * phi;
                       phi -= delta = (tanPhi * j + 2 * (phi - y)) / (2 + j * secPhi * secPhi + 2 * (phi - y) * tanPhi);
                     } while (abs(delta) > epsilon && --i > 0);
-                    var E2 = x * (tanPhi = tan(phi)), A3 = tan(abs(y) < abs(phi + 1 / tanPhi) ? asin(E2) * 0.5 : acos(E2) * 0.5 + pi / 4) / sin(phi);
+                    var E2 = x * (tanPhi = tan(phi)), A32 = tan(abs(y) < abs(phi + 1 / tanPhi) ? asin(E2) * 0.5 : acos(E2) * 0.5 + pi / 4) / sin(phi);
                     return [
-                      sinPhi0 ? 2 * atan(sinPhi0 * A3) / sinPhi0 : 2 * A3,
+                      sinPhi0 ? 2 * atan(sinPhi0 * A32) / sinPhi0 : 2 * A32,
                       phi
                     ];
                   };
@@ -138155,10 +138155,10 @@
                   if (!omega) return vertical;
                   var cosOmega = cos(omega), sinOmega = sin(omega);
                   function forward(lambda, phi) {
-                    var coordinates = vertical(lambda, phi), y = coordinates[1], A3 = y * sinOmega / (P - 1) + cosOmega;
+                    var coordinates = vertical(lambda, phi), y = coordinates[1], A32 = y * sinOmega / (P - 1) + cosOmega;
                     return [
-                      coordinates[0] * cosOmega / A3,
-                      y / A3
+                      coordinates[0] * cosOmega / A32,
+                      y / A32
                     ];
                   }
                   forward.invert = function(x, y) {
@@ -138413,10 +138413,10 @@
                   if (abs(phi) < epsilon) return [lambda, 0];
                   var sinTheta = abs(phi / halfPi), theta = asin(sinTheta);
                   if (abs(lambda) < epsilon || abs(abs(phi) - halfPi) < epsilon) return [0, sign(phi) * pi * tan(theta / 2)];
-                  var cosTheta = cos(theta), A3 = abs(pi / lambda - lambda / pi) / 2, A22 = A3 * A3, G = cosTheta / (sinTheta + cosTheta - 1), P = G * (2 / sinTheta - 1), P2 = P * P, P2_A2 = P2 + A22, G_P2 = G - P2, Q = A22 + G;
+                  var cosTheta = cos(theta), A32 = abs(pi / lambda - lambda / pi) / 2, A222 = A32 * A32, G = cosTheta / (sinTheta + cosTheta - 1), P = G * (2 / sinTheta - 1), P2 = P * P, P2_A2 = P2 + A222, G_P2 = G - P2, Q = A222 + G;
                   return [
-                    sign(lambda) * pi * (A3 * G_P2 + sqrt(A22 * G_P2 * G_P2 - P2_A2 * (G * G - P2))) / P2_A2,
-                    sign(phi) * pi * (P * Q - A3 * sqrt((A22 + 1) * P2_A2 - Q * Q)) / P2_A2
+                    sign(lambda) * pi * (A32 * G_P2 + sqrt(A222 * G_P2 * G_P2 - P2_A2 * (G * G - P2))) / P2_A2,
+                    sign(phi) * pi * (P * Q - A32 * sqrt((A222 + 1) * P2_A2 - Q * Q)) / P2_A2
                   ];
                 }
                 vanDerGrintenRaw.invert = function(x, y) {
@@ -138435,18 +138435,18 @@
                   if (abs(phi) < epsilon) return [lambda, 0];
                   var sinTheta = abs(phi / halfPi), theta = asin(sinTheta);
                   if (abs(lambda) < epsilon || abs(abs(phi) - halfPi) < epsilon) return [0, sign(phi) * pi * tan(theta / 2)];
-                  var cosTheta = cos(theta), A3 = abs(pi / lambda - lambda / pi) / 2, A22 = A3 * A3, x12 = cosTheta * (sqrt(1 + A22) - A3 * cosTheta) / (1 + A22 * sinTheta * sinTheta);
+                  var cosTheta = cos(theta), A32 = abs(pi / lambda - lambda / pi) / 2, A222 = A32 * A32, x12 = cosTheta * (sqrt(1 + A222) - A32 * cosTheta) / (1 + A222 * sinTheta * sinTheta);
                   return [
                     sign(lambda) * pi * x12,
-                    sign(phi) * pi * sqrt(1 - x12 * (2 * A3 + x12))
+                    sign(phi) * pi * sqrt(1 - x12 * (2 * A32 + x12))
                   ];
                 }
                 vanDerGrinten2Raw.invert = function(x, y) {
                   if (!x) return [0, halfPi * sin(2 * atan(y / pi))];
-                  var x12 = abs(x / pi), A3 = (1 - x12 * x12 - (y /= pi) * y) / (2 * x12), A22 = A3 * A3, B3 = sqrt(A22 + 1);
+                  var x12 = abs(x / pi), A32 = (1 - x12 * x12 - (y /= pi) * y) / (2 * x12), A222 = A32 * A32, B32 = sqrt(A222 + 1);
                   return [
-                    sign(x) * pi * (B3 - A3),
-                    sign(y) * halfPi * sin(2 * atan2(sqrt((1 - 2 * A3 * x12) * (A3 + B3) - x12), sqrt(B3 + A3 + x12)))
+                    sign(x) * pi * (B32 - A32),
+                    sign(y) * halfPi * sin(2 * atan2(sqrt((1 - 2 * A32 * x12) * (A32 + B32) - x12), sqrt(B32 + A32 + x12)))
                   ];
                 };
                 function vanDerGrinten2() {
@@ -138456,17 +138456,17 @@
                   if (abs(phi) < epsilon) return [lambda, 0];
                   var sinTheta = phi / halfPi, theta = asin(sinTheta);
                   if (abs(lambda) < epsilon || abs(abs(phi) - halfPi) < epsilon) return [0, pi * tan(theta / 2)];
-                  var A3 = (pi / lambda - lambda / pi) / 2, y12 = sinTheta / (1 + cos(theta));
+                  var A32 = (pi / lambda - lambda / pi) / 2, y12 = sinTheta / (1 + cos(theta));
                   return [
-                    pi * (sign(lambda) * sqrt(A3 * A3 + 1 - y12 * y12) - A3),
+                    pi * (sign(lambda) * sqrt(A32 * A32 + 1 - y12 * y12) - A32),
                     pi * y12
                   ];
                 }
                 vanDerGrinten3Raw.invert = function(x, y) {
                   if (!y) return [x, 0];
-                  var y12 = y / pi, A3 = (pi * pi * (1 - y12 * y12) - x * x) / (2 * pi * x);
+                  var y12 = y / pi, A32 = (pi * pi * (1 - y12 * y12) - x * x) / (2 * pi * x);
                   return [
-                    x ? pi * (sign(x) * sqrt(A3 * A3 + 1) - A3) : 0,
+                    x ? pi * (sign(x) * sqrt(A32 * A32 + 1) - A32) : 0,
                     halfPi * sin(2 * atan(y12))
                   ];
                 };
@@ -138477,7 +138477,7 @@
                   if (!phi) return [lambda, 0];
                   var phi02 = abs(phi);
                   if (!lambda || phi02 === halfPi) return [0, phi];
-                  var B3 = phi02 / halfPi, B22 = B3 * B3, C2 = (8 * B3 - B22 * (B22 + 2) - 5) / (2 * B22 * (B3 - 1)), C22 = C2 * C2, BC = B3 * C2, B_C2 = B22 + C22 + 2 * BC, B_3C = B3 + 3 * C2, lambda0 = lambda / halfPi, lambda1 = lambda0 + 1 / lambda0, D2 = sign(abs(lambda) - halfPi) * sqrt(lambda1 * lambda1 - 4), D22 = D2 * D2, F = B_C2 * (B22 + C22 * D22 - 1) + (1 - B22) * (B22 * (B_3C * B_3C + 4 * C22) + 12 * BC * C22 + 4 * C22 * C22), x12 = (D2 * (B_C2 + C22 - 1) + 2 * sqrt(F)) / (4 * B_C2 + D22);
+                  var B32 = phi02 / halfPi, B222 = B32 * B32, C2 = (8 * B32 - B222 * (B222 + 2) - 5) / (2 * B222 * (B32 - 1)), C22 = C2 * C2, BC = B32 * C2, B_C2 = B222 + C22 + 2 * BC, B_3C = B32 + 3 * C2, lambda0 = lambda / halfPi, lambda1 = lambda0 + 1 / lambda0, D2 = sign(abs(lambda) - halfPi) * sqrt(lambda1 * lambda1 - 4), D22 = D2 * D2, F = B_C2 * (B222 + C22 * D22 - 1) + (1 - B222) * (B222 * (B_3C * B_3C + 4 * C22) + 12 * BC * C22 + 4 * C22 * C22), x12 = (D2 * (B_C2 + C22 - 1) + 2 * sqrt(F)) / (4 * B_C2 + D22);
                   return [
                     sign(lambda) * halfPi * x12,
                     sign(phi) * halfPi * sqrt(1 + D2 * abs(x12) - x12 * x12)
@@ -138487,14 +138487,14 @@
                   var delta;
                   if (!x || !y) return [x, y];
                   y /= pi;
-                  var x12 = sign(x) * x / halfPi, D2 = (x12 * x12 - 1 + 4 * y * y) / abs(x12), D22 = D2 * D2, B3 = 2 * y, i = 50;
+                  var x12 = sign(x) * x / halfPi, D2 = (x12 * x12 - 1 + 4 * y * y) / abs(x12), D22 = D2 * D2, B32 = 2 * y, i = 50;
                   do {
-                    var B22 = B3 * B3, C2 = (8 * B3 - B22 * (B22 + 2) - 5) / (2 * B22 * (B3 - 1)), C_ = (3 * B3 - B22 * B3 - 10) / (2 * B22 * B3), C22 = C2 * C2, BC = B3 * C2, B_C = B3 + C2, B_C2 = B_C * B_C, B_3C = B3 + 3 * C2, F = B_C2 * (B22 + C22 * D22 - 1) + (1 - B22) * (B22 * (B_3C * B_3C + 4 * C22) + C22 * (12 * BC + 4 * C22)), F_ = -2 * B_C * (4 * BC * C22 + (1 - 4 * B22 + 3 * B22 * B22) * (1 + C_) + C22 * (-6 + 14 * B22 - D22 + (-8 + 8 * B22 - 2 * D22) * C_) + BC * (-8 + 12 * B22 + (-10 + 10 * B22 - D22) * C_)), sqrtF = sqrt(F), f = D2 * (B_C2 + C22 - 1) + 2 * sqrtF - x12 * (4 * B_C2 + D22), f_ = D2 * (2 * C2 * C_ + 2 * B_C * (1 + C_)) + F_ / sqrtF - 8 * B_C * (D2 * (-1 + C22 + B_C2) + 2 * sqrtF) * (1 + C_) / (D22 + 4 * B_C2);
-                    B3 -= delta = f / f_;
+                    var B222 = B32 * B32, C2 = (8 * B32 - B222 * (B222 + 2) - 5) / (2 * B222 * (B32 - 1)), C_ = (3 * B32 - B222 * B32 - 10) / (2 * B222 * B32), C22 = C2 * C2, BC = B32 * C2, B_C = B32 + C2, B_C2 = B_C * B_C, B_3C = B32 + 3 * C2, F = B_C2 * (B222 + C22 * D22 - 1) + (1 - B222) * (B222 * (B_3C * B_3C + 4 * C22) + C22 * (12 * BC + 4 * C22)), F_ = -2 * B_C * (4 * BC * C22 + (1 - 4 * B222 + 3 * B222 * B222) * (1 + C_) + C22 * (-6 + 14 * B222 - D22 + (-8 + 8 * B222 - 2 * D22) * C_) + BC * (-8 + 12 * B222 + (-10 + 10 * B222 - D22) * C_)), sqrtF = sqrt(F), f = D2 * (B_C2 + C22 - 1) + 2 * sqrtF - x12 * (4 * B_C2 + D22), f_ = D2 * (2 * C2 * C_ + 2 * B_C * (1 + C_)) + F_ / sqrtF - 8 * B_C * (D2 * (-1 + C22 + B_C2) + 2 * sqrtF) * (1 + C_) / (D22 + 4 * B_C2);
+                    B32 -= delta = f / f_;
                   } while (delta > epsilon && --i > 0);
                   return [
                     sign(x) * (sqrt(D2 * D2 + 4) + D2) * pi / 4,
-                    halfPi * B3
+                    halfPi * B32
                   ];
                 };
                 function vanDerGrinten4() {
@@ -138550,8 +138550,8 @@
                 function wagner7() {
                   return wagner().poleline(65).parallels(60).inflation(0).ratio(200).scale(172.633);
                 }
-                var A2 = 4 * pi + 3 * sqrt(3), B2 = 2 * sqrt(2 * pi * sqrt(3) / A2);
-                var wagner4Raw = mollweideBromleyRaw(B2 * sqrt(3) / pi, B2, A2 / 6);
+                var A22 = 4 * pi + 3 * sqrt(3), B22 = 2 * sqrt(2 * pi * sqrt(3) / A22);
+                var wagner4Raw = mollweideBromleyRaw(B22 * sqrt(3) / pi, B22, A22 / 6);
                 function wagner4() {
                   return d3Geo.geoProjection(wagner4Raw).scale(176.84);
                 }
@@ -154358,7 +154358,7 @@ void main() {
                     }
                     scope(block);
                   }
-                  function emitSetOptions(env, scope, options, filter) {
+                  function emitSetOptions(env, scope, options, filter2) {
                     var shared = env.shared;
                     var CURRENT_VARS = env.current;
                     var CURRENT_STATE = shared.current;
@@ -154366,7 +154366,7 @@ void main() {
                     var VALUE;
                     sortState(Object.keys(options)).forEach(function(param) {
                       var defn = options[param];
-                      if (filter && !filter(defn)) {
+                      if (filter2 && !filter2(defn)) {
                         return;
                       }
                       var variable = defn.append(env, scope);
@@ -154517,7 +154517,7 @@ void main() {
                     emitProfileEnd(end);
                     scope.exit("if(", USE_PROFILE, "){", end, "}");
                   }
-                  function emitAttributes(env, scope, args, attributes, filter) {
+                  function emitAttributes(env, scope, args, attributes, filter2) {
                     var shared = env.shared;
                     function typeLength(x) {
                       switch (x) {
@@ -154680,12 +154680,12 @@ void main() {
                       var arg = args.attributes[name2];
                       var record;
                       if (arg) {
-                        if (!filter(arg)) {
+                        if (!filter2(arg)) {
                           return;
                         }
                         record = arg.append(env, scope);
                       } else {
-                        if (!filter(SCOPE_DECL)) {
+                        if (!filter2(SCOPE_DECL)) {
                           return;
                         }
                         var scopeAttrib = env.scopeAttrib(name2);
@@ -154701,7 +154701,7 @@ void main() {
                       );
                     });
                   }
-                  function emitUniforms(env, scope, args, uniforms, filter, isBatchInnerLoop) {
+                  function emitUniforms(env, scope, args, uniforms, filter2, isBatchInnerLoop) {
                     var shared = env.shared;
                     var GL = shared.gl;
                     var infix;
@@ -154714,7 +154714,7 @@ void main() {
                       var LOCATION = UNIFORM + ".location";
                       var VALUE;
                       if (arg) {
-                        if (!filter(arg)) {
+                        if (!filter2(arg)) {
                           continue;
                         }
                         if (isStatic(arg)) {
@@ -154796,7 +154796,7 @@ void main() {
                           VALUE = arg.append(env, scope);
                         }
                       } else {
-                        if (!filter(SCOPE_DECL)) {
+                        if (!filter2(SCOPE_DECL)) {
                           continue;
                         }
                         VALUE = scope.def(shared.uniforms, "[", stringStore.id(name2), "]");
@@ -164161,7 +164161,7 @@ void main() {
                     }
                     scope(block);
                   }
-                  function emitSetOptions(env, scope, options, filter) {
+                  function emitSetOptions(env, scope, options, filter2) {
                     var shared = env.shared;
                     var CURRENT_VARS = env.current;
                     var CURRENT_STATE = shared.current;
@@ -164169,7 +164169,7 @@ void main() {
                     var VALUE;
                     sortState(Object.keys(options)).forEach(function(param) {
                       var defn = options[param];
-                      if (filter && !filter(defn)) {
+                      if (filter2 && !filter2(defn)) {
                         return;
                       }
                       var variable = defn.append(env, scope);
@@ -164320,7 +164320,7 @@ void main() {
                     emitProfileEnd(end);
                     scope.exit("if(", USE_PROFILE, "){", end, "}");
                   }
-                  function emitAttributes(env, scope, args, attributes, filter) {
+                  function emitAttributes(env, scope, args, attributes, filter2) {
                     var shared = env.shared;
                     function typeLength(x) {
                       switch (x) {
@@ -164483,12 +164483,12 @@ void main() {
                       var arg = args.attributes[name2];
                       var record;
                       if (arg) {
-                        if (!filter(arg)) {
+                        if (!filter2(arg)) {
                           return;
                         }
                         record = arg.append(env, scope);
                       } else {
-                        if (!filter(SCOPE_DECL)) {
+                        if (!filter2(SCOPE_DECL)) {
                           return;
                         }
                         var scopeAttrib = env.scopeAttrib(name2);
@@ -164504,7 +164504,7 @@ void main() {
                       );
                     });
                   }
-                  function emitUniforms(env, scope, args, uniforms, filter, isBatchInnerLoop) {
+                  function emitUniforms(env, scope, args, uniforms, filter2, isBatchInnerLoop) {
                     var shared = env.shared;
                     var GL = shared.gl;
                     var infix;
@@ -164517,7 +164517,7 @@ void main() {
                       var LOCATION = UNIFORM + ".location";
                       var VALUE;
                       if (arg) {
-                        if (!filter(arg)) {
+                        if (!filter2(arg)) {
                           continue;
                         }
                         if (isStatic(arg)) {
@@ -164599,7 +164599,7 @@ void main() {
                           VALUE = arg.append(env, scope);
                         }
                       } else {
-                        if (!filter(SCOPE_DECL)) {
+                        if (!filter2(SCOPE_DECL)) {
                           continue;
                         }
                         VALUE = scope.def(shared.uniforms, "[", stringStore.id(name2), "]");
@@ -168333,7 +168333,7 @@ void main() {
               }
               function dragend(lThis, d) {
                 var brush = d.brush;
-                var filter = brush.filter;
+                var filter2 = brush.filter;
                 var s = brush.svgBrush;
                 if (!s._dragging) {
                   mousemove(lThis, d);
@@ -168367,11 +168367,11 @@ void main() {
                   }
                   s.brushCallback(d);
                   renderHighlight(lThis.parentNode);
-                  s.brushEndCallback(brush.filterSpecified ? filter.getConsolidated() : []);
+                  s.brushEndCallback(brush.filterSpecified ? filter2.getConsolidated() : []);
                   return;
                 }
                 var mergeIntervals = function() {
-                  filter.set(filter.getConsolidated());
+                  filter2.set(filter2.getConsolidated());
                 };
                 if (d.ordinal) {
                   var a = d.unitTickvals;
@@ -168395,7 +168395,7 @@ void main() {
                 } else {
                   mergeIntervals();
                 }
-                s.brushEndCallback(brush.filterSpecified ? filter.getConsolidated() : []);
+                s.brushEndCallback(brush.filterSpecified ? filter2.getConsolidated() : []);
               }
               function mousemove(lThis, d) {
                 var y = d.height - d3.mouse(lThis)[1] - 2 * c.verticalPadding;
@@ -168484,24 +168484,24 @@ void main() {
                 return result;
               }
               function makeFilter() {
-                var filter = [];
+                var filter2 = [];
                 var consolidated;
                 var bounds;
                 return {
                   set: function(a) {
-                    filter = a.map(function(d) {
+                    filter2 = a.map(function(d) {
                       return d.slice().sort(sortAsc);
                     }).sort(startAsc);
-                    if (filter.length === 1 && filter[0][0] === -Infinity && filter[0][1] === Infinity) {
-                      filter = [[0, -1]];
+                    if (filter2.length === 1 && filter2[0][0] === -Infinity && filter2[0][1] === Infinity) {
+                      filter2 = [[0, -1]];
                     }
-                    consolidated = dedupeRealRanges(filter);
-                    bounds = filter.reduce(function(p, n) {
+                    consolidated = dedupeRealRanges(filter2);
+                    bounds = filter2.reduce(function(p, n) {
                       return [Math.min(p[0], n[0]), Math.max(p[1], n[1])];
                     }, [Infinity, -Infinity]);
                   },
                   get: function() {
-                    return filter.slice();
+                    return filter2.slice();
                   },
                   getConsolidated: function() {
                     return consolidated;
@@ -168512,10 +168512,10 @@ void main() {
                 };
               }
               function makeBrush(state, rangeSpecified, initialRange, brushStartCallback, brushCallback, brushEndCallback) {
-                var filter = makeFilter();
-                filter.set(initialRange);
+                var filter2 = makeFilter();
+                filter2.set(initialRange);
                 return {
-                  filter,
+                  filter: filter2,
                   filterSpecified: rangeSpecified,
                   // there's a difference between not filtering and filtering a non-proper subset
                   svgBrush: {
@@ -176268,7 +176268,7 @@ void main() {
                       "property-type": "constant"
                     }
                   };
-                  var filter = {
+                  var filter2 = {
                     type: "array",
                     value: "*"
                   };
@@ -177518,7 +177518,7 @@ void main() {
                     layout_symbol,
                     layout_raster,
                     layout_hillshade,
-                    filter,
+                    filter: filter2,
                     filter_operator,
                     geometry_type,
                     "function": {
@@ -183154,18 +183154,18 @@ void main() {
                     }
                     return errors;
                   }
-                  function isExpressionFilter(filter2) {
-                    if (filter2 === true || filter2 === false) {
+                  function isExpressionFilter(filter22) {
+                    if (filter22 === true || filter22 === false) {
                       return true;
                     }
-                    if (!Array.isArray(filter2) || filter2.length === 0) {
+                    if (!Array.isArray(filter22) || filter22.length === 0) {
                       return false;
                     }
-                    switch (filter2[0]) {
+                    switch (filter22[0]) {
                       case "has":
-                        return filter2.length >= 2 && filter2[1] !== "$id" && filter2[1] !== "$type";
+                        return filter22.length >= 2 && filter22[1] !== "$id" && filter22[1] !== "$type";
                       case "in":
-                        return filter2.length >= 3 && (typeof filter2[1] !== "string" || Array.isArray(filter2[2]));
+                        return filter22.length >= 3 && (typeof filter22[1] !== "string" || Array.isArray(filter22[2]));
                       case "!in":
                       case "!has":
                       case "none":
@@ -183176,10 +183176,10 @@ void main() {
                       case ">=":
                       case "<":
                       case "<=":
-                        return filter2.length !== 3 || (Array.isArray(filter2[1]) || Array.isArray(filter2[2]));
+                        return filter22.length !== 3 || (Array.isArray(filter22[1]) || Array.isArray(filter22[2]));
                       case "any":
                       case "all":
-                        for (var i = 0, list = filter2.slice(1); i < list.length; i += 1) {
+                        for (var i = 0, list = filter22.slice(1); i < list.length; i += 1) {
                           var f = list[i];
                           if (!isExpressionFilter(f) && typeof f !== "boolean") {
                             return false;
@@ -183203,8 +183203,8 @@ void main() {
                       ]
                     }
                   };
-                  function createFilter(filter2) {
-                    if (filter2 === null || filter2 === void 0) {
+                  function createFilter(filter22) {
+                    if (filter22 === null || filter22 === void 0) {
                       return {
                         filter: function() {
                           return true;
@@ -183212,16 +183212,16 @@ void main() {
                         needGeometry: false
                       };
                     }
-                    if (!isExpressionFilter(filter2)) {
-                      filter2 = convertFilter(filter2);
+                    if (!isExpressionFilter(filter22)) {
+                      filter22 = convertFilter(filter22);
                     }
-                    var compiled = createExpression(filter2, filterSpec);
+                    var compiled = createExpression(filter22, filterSpec);
                     if (compiled.result === "error") {
                       throw new Error(compiled.value.map(function(err) {
                         return err.key + ": " + err.message;
                       }).join(", "));
                     } else {
-                      var needGeometry = geometryNeeded(filter2);
+                      var needGeometry = geometryNeeded(filter22);
                       return {
                         filter: function(globalProperties, feature, canonical) {
                           return compiled.value.evaluate(globalProperties, feature, {}, canonical);
@@ -183233,29 +183233,29 @@ void main() {
                   function compare(a, b) {
                     return a < b ? -1 : a > b ? 1 : 0;
                   }
-                  function geometryNeeded(filter2) {
-                    if (!Array.isArray(filter2)) {
+                  function geometryNeeded(filter22) {
+                    if (!Array.isArray(filter22)) {
                       return false;
                     }
-                    if (filter2[0] === "within") {
+                    if (filter22[0] === "within") {
                       return true;
                     }
-                    for (var index = 1; index < filter2.length; index++) {
-                      if (geometryNeeded(filter2[index])) {
+                    for (var index = 1; index < filter22.length; index++) {
+                      if (geometryNeeded(filter22[index])) {
                         return true;
                       }
                     }
                     return false;
                   }
-                  function convertFilter(filter2) {
-                    if (!filter2) {
+                  function convertFilter(filter22) {
+                    if (!filter22) {
                       return true;
                     }
-                    var op = filter2[0];
-                    if (filter2.length <= 1) {
+                    var op = filter22[0];
+                    if (filter22.length <= 1) {
                       return op !== "any";
                     }
-                    var converted = op === "==" ? convertComparisonOp(filter2[1], filter2[2], "==") : op === "!=" ? convertNegation(convertComparisonOp(filter2[1], filter2[2], "==")) : op === "<" || op === ">" || op === "<=" || op === ">=" ? convertComparisonOp(filter2[1], filter2[2], op) : op === "any" ? convertDisjunctionOp(filter2.slice(1)) : op === "all" ? ["all"].concat(filter2.slice(1).map(convertFilter)) : op === "none" ? ["all"].concat(filter2.slice(1).map(convertFilter).map(convertNegation)) : op === "in" ? convertInOp(filter2[1], filter2.slice(2)) : op === "!in" ? convertNegation(convertInOp(filter2[1], filter2.slice(2))) : op === "has" ? convertHasOp(filter2[1]) : op === "!has" ? convertNegation(convertHasOp(filter2[1])) : op === "within" ? filter2 : true;
+                    var converted = op === "==" ? convertComparisonOp(filter22[1], filter22[2], "==") : op === "!=" ? convertNegation(convertComparisonOp(filter22[1], filter22[2], "==")) : op === "<" || op === ">" || op === "<=" || op === ">=" ? convertComparisonOp(filter22[1], filter22[2], op) : op === "any" ? convertDisjunctionOp(filter22.slice(1)) : op === "all" ? ["all"].concat(filter22.slice(1).map(convertFilter)) : op === "none" ? ["all"].concat(filter22.slice(1).map(convertFilter).map(convertNegation)) : op === "in" ? convertInOp(filter22[1], filter22.slice(2)) : op === "!in" ? convertNegation(convertInOp(filter22[1], filter22.slice(2))) : op === "has" ? convertHasOp(filter22[1]) : op === "!has" ? convertNegation(convertHasOp(filter22[1])) : op === "within" ? filter22 : true;
                     return converted;
                   }
                   function convertComparisonOp(property, value, op) {
@@ -183339,10 +183339,10 @@ void main() {
                         ];
                     }
                   }
-                  function convertNegation(filter2) {
+                  function convertNegation(filter22) {
                     return [
                       "!",
-                      filter2
+                      filter22
                     ];
                   }
                   function validateFilter(options) {
@@ -190441,9 +190441,9 @@ void main() {
                             var t = m / n;
                             if (t !== 0.5) {
                               var t23 = t - 0.5;
-                              var A2 = 1.0904 + cosAngle * (-3.2452 + cosAngle * (3.55645 - cosAngle * 1.43519));
-                              var B2 = 0.848013 + cosAngle * (-1.06021 + cosAngle * 0.215638);
-                              t = t + t * t23 * (t - 1) * (A2 * t23 * t23 + B2);
+                              var A22 = 1.0904 + cosAngle * (-3.2452 + cosAngle * (3.55645 - cosAngle * 1.43519));
+                              var B22 = 0.848013 + cosAngle * (-1.06021 + cosAngle * 0.215638);
+                              t = t + t * t23 * (t - 1) * (A22 * t23 * t23 + B22);
                             }
                             var extrude = nextNormal.sub(prevNormal)._mult(t)._add(prevNormal)._unit()._mult(lineTurnsLeft ? -1 : 1);
                             this.addHalfVertex(currentVertex, extrude.x, extrude.y, false, lineTurnsLeft, 0, segment);
@@ -194959,7 +194959,7 @@ void main() {
                       gl2.generateMipmap(gl2.TEXTURE_2D);
                     }
                   };
-                  Texture.prototype.bind = function bind(filter2, wrap2, minFilter) {
+                  Texture.prototype.bind = function bind(filter22, wrap2, minFilter) {
                     var ref = this;
                     var context = ref.context;
                     var gl2 = context.gl;
@@ -194967,10 +194967,10 @@ void main() {
                     if (minFilter === gl2.LINEAR_MIPMAP_NEAREST && !this.isSizePowerOfTwo()) {
                       minFilter = gl2.LINEAR;
                     }
-                    if (filter2 !== this.filter) {
-                      gl2.texParameteri(gl2.TEXTURE_2D, gl2.TEXTURE_MAG_FILTER, filter2);
-                      gl2.texParameteri(gl2.TEXTURE_2D, gl2.TEXTURE_MIN_FILTER, minFilter || filter2);
-                      this.filter = filter2;
+                    if (filter22 !== this.filter) {
+                      gl2.texParameteri(gl2.TEXTURE_2D, gl2.TEXTURE_MAG_FILTER, filter22);
+                      gl2.texParameteri(gl2.TEXTURE_2D, gl2.TEXTURE_MIN_FILTER, minFilter || filter22);
+                      this.filter = filter22;
                     }
                     if (wrap2 !== this.wrap) {
                       gl2.texParameteri(gl2.TEXTURE_2D, gl2.TEXTURE_WRAP_S, wrap2);
@@ -195849,7 +195849,7 @@ void main() {
                   FeatureIndex.prototype.query = function query(args, styleLayers, serializedLayers, sourceFeatureState) {
                     var this$1 = this;
                     this.loadVTLayers();
-                    var params = args.params || {}, pixelsToTileUnits = EXTENT$1 / args.tileSize / args.scale, filter2 = createFilter(params.filter);
+                    var params = args.params || {}, pixelsToTileUnits = EXTENT$1 / args.tileSize / args.scale, filter22 = createFilter(params.filter);
                     var queryGeometry = args.queryGeometry;
                     var queryPadding = args.queryPadding * pixelsToTileUnits;
                     var bounds = getBounds(queryGeometry);
@@ -195873,7 +195873,7 @@ void main() {
                       previousIndex = index;
                       var match = this$1.featureIndexArray.get(index);
                       var featureGeometry = null;
-                      this$1.loadMatchingFeature(result, match.bucketIndex, match.sourceLayerIndex, match.featureIndex, filter2, params.layers, params.availableImages, styleLayers, serializedLayers, sourceFeatureState, function(feature, styleLayer, featureState) {
+                      this$1.loadMatchingFeature(result, match.bucketIndex, match.sourceLayerIndex, match.featureIndex, filter22, params.layers, params.availableImages, styleLayers, serializedLayers, sourceFeatureState, function(feature, styleLayer, featureState) {
                         if (!featureGeometry) {
                           featureGeometry = loadGeometry(feature);
                         }
@@ -195884,7 +195884,7 @@ void main() {
                       loop(k);
                     return result;
                   };
-                  FeatureIndex.prototype.loadMatchingFeature = function loadMatchingFeature(result, bucketIndex, sourceLayerIndex, featureIndex, filter2, filterLayerIDs, availableImages, styleLayers, serializedLayers, sourceFeatureState, intersectionTest) {
+                  FeatureIndex.prototype.loadMatchingFeature = function loadMatchingFeature(result, bucketIndex, sourceLayerIndex, featureIndex, filter22, filterLayerIDs, availableImages, styleLayers, serializedLayers, sourceFeatureState, intersectionTest) {
                     var layerIDs = this.bucketLayerIDs[bucketIndex];
                     if (filterLayerIDs && !arraysIntersect(filterLayerIDs, layerIDs)) {
                       return;
@@ -195892,12 +195892,12 @@ void main() {
                     var sourceLayerName = this.sourceLayerCoder.decode(sourceLayerIndex);
                     var sourceLayer = this.vtLayers[sourceLayerName];
                     var feature = sourceLayer.feature(featureIndex);
-                    if (filter2.needGeometry) {
+                    if (filter22.needGeometry) {
                       var evaluationFeature = toEvaluationFeature(feature, true);
-                      if (!filter2.filter(new EvaluationParameters(this.tileID.overscaledZ), evaluationFeature, this.tileID.canonical)) {
+                      if (!filter22.filter(new EvaluationParameters(this.tileID.overscaledZ), evaluationFeature, this.tileID.canonical)) {
                         return;
                       }
-                    } else if (!filter2.filter(new EvaluationParameters(this.tileID.overscaledZ), feature)) {
+                    } else if (!filter22.filter(new EvaluationParameters(this.tileID.overscaledZ), feature)) {
                       return;
                     }
                     var id2 = this.getId(feature, sourceLayerName);
@@ -195937,10 +195937,10 @@ void main() {
                   FeatureIndex.prototype.lookupSymbolFeatures = function lookupSymbolFeatures(symbolFeatureIndexes, serializedLayers, bucketIndex, sourceLayerIndex, filterSpec2, filterLayerIDs, availableImages, styleLayers) {
                     var result = {};
                     this.loadVTLayers();
-                    var filter2 = createFilter(filterSpec2);
+                    var filter22 = createFilter(filterSpec2);
                     for (var i = 0, list = symbolFeatureIndexes; i < list.length; i += 1) {
                       var symbolFeatureIndex = list[i];
-                      this.loadMatchingFeature(result, bucketIndex, sourceLayerIndex, symbolFeatureIndex, filter2, filterLayerIDs, availableImages, styleLayers, serializedLayers);
+                      this.loadMatchingFeature(result, bucketIndex, sourceLayerIndex, symbolFeatureIndex, filter22, filterLayerIDs, availableImages, styleLayers, serializedLayers);
                     }
                     return result;
                   };
@@ -196154,7 +196154,7 @@ void main() {
                     if (!layer2) {
                       return;
                     }
-                    var filter2 = createFilter(params && params.filter);
+                    var filter22 = createFilter(params && params.filter);
                     var ref = this.tileID.canonical;
                     var z = ref.z;
                     var x = ref.x;
@@ -196166,12 +196166,12 @@ void main() {
                     };
                     for (var i = 0; i < layer2.length; i++) {
                       var feature = layer2.feature(i);
-                      if (filter2.needGeometry) {
+                      if (filter22.needGeometry) {
                         var evaluationFeature = toEvaluationFeature(feature, true);
-                        if (!filter2.filter(new EvaluationParameters(this.tileID.overscaledZ), evaluationFeature, this.tileID.canonical)) {
+                        if (!filter22.filter(new EvaluationParameters(this.tileID.overscaledZ), evaluationFeature, this.tileID.canonical)) {
                           continue;
                         }
-                      } else if (!filter2.filter(new EvaluationParameters(this.tileID.overscaledZ), feature)) {
+                      } else if (!filter22.filter(new EvaluationParameters(this.tileID.overscaledZ), feature)) {
                         continue;
                       }
                       var id2 = featureIndex.getId(feature, sourceLayer);
@@ -201412,7 +201412,7 @@ void main() {
                     }
                     return this;
                   };
-                  TileCache.prototype.filter = function filter(filterFn) {
+                  TileCache.prototype.filter = function filter2(filterFn) {
                     var removed = [];
                     for (var key in this.data) {
                       for (var i = 0, list = this.data[key]; i < list.length; i += 1) {
@@ -206143,7 +206143,7 @@ void main() {
                       }
                       this._updateLayer(layer);
                     };
-                    Style2.prototype.setFilter = function setFilter(layerId, filter, options) {
+                    Style2.prototype.setFilter = function setFilter(layerId, filter2, options) {
                       if (options === void 0)
                         options = {};
                       this._checkLoaded();
@@ -206152,18 +206152,18 @@ void main() {
                         this.fire(new performance2.ErrorEvent(new Error("The layer '" + layerId + "' does not exist in the map's style and cannot be filtered.")));
                         return;
                       }
-                      if (performance2.deepEqual(layer.filter, filter)) {
+                      if (performance2.deepEqual(layer.filter, filter2)) {
                         return;
                       }
-                      if (filter === null || filter === void 0) {
+                      if (filter2 === null || filter2 === void 0) {
                         layer.filter = void 0;
                         this._updateLayer(layer);
                         return;
                       }
-                      if (this._validate(performance2.validateStyle.filter, "layers." + layer.id + ".filter", filter, null, options)) {
+                      if (this._validate(performance2.validateStyle.filter, "layers." + layer.id + ".filter", filter2, null, options)) {
                         return;
                       }
-                      layer.filter = performance2.clone$1(filter);
+                      layer.filter = performance2.clone$1(filter2);
                       this._updateLayer(layer);
                     };
                     Style2.prototype.getFilter = function getFilter(layer) {
@@ -213682,10 +213682,10 @@ void main() {
                       this.style.setLayerZoomRange(layerId, minzoom, maxzoom);
                       return this._update(true);
                     };
-                    Map3.prototype.setFilter = function setFilter(layerId, filter, options) {
+                    Map3.prototype.setFilter = function setFilter(layerId, filter2, options) {
                       if (options === void 0)
                         options = {};
-                      this.style.setFilter(layerId, filter, options);
+                      this.style.setFilter(layerId, filter2, options);
                       return this._update(true);
                     };
                     Map3.prototype.getFilter = function getFilter(layerId) {
@@ -221105,7 +221105,7 @@ void main() {
                     return Array.isArray(t4) ? t4.map(w) : "object" == typeof t4 && t4 ? v(t4, w) : t4;
                   }
                   const _ = {};
-                  function A2(t4) {
+                  function A22(t4) {
                     _[t4] || ("undefined" != typeof console && console.warn(t4), _[t4] = true);
                   }
                   function S(t4, e2, r2) {
@@ -221140,7 +221140,7 @@ void main() {
                       }
                     });
                   }
-                  let C2, B2;
+                  let C2, B22;
                   const V = "AbortError";
                   function E2() {
                     return new Error(V);
@@ -224746,13 +224746,13 @@ Use an identity property function instead: \`{ "type": "identity", "property": $
                     _refreshViews() {
                       this.uint8 = new Uint8Array(this.arrayBuffer), this.int16 = new Int16Array(this.arrayBuffer), this.uint16 = new Uint16Array(this.arrayBuffer), this.uint32 = new Uint32Array(this.arrayBuffer), this.float32 = new Float32Array(this.arrayBuffer);
                     }
-                    emplaceBack(t4, e2, r2, n2, i2, s2, a2, o2, l2, u2, c2, h2, p2, f2, d2, y2, m2, g2, x2, v2, b2, w2, _2, A3, S2, k2, M2, I2) {
+                    emplaceBack(t4, e2, r2, n2, i2, s2, a2, o2, l2, u2, c2, h2, p2, f2, d2, y2, m2, g2, x2, v2, b2, w2, _2, A32, S2, k2, M2, I2) {
                       const z2 = this.length;
-                      return this.resize(z2 + 1), this.emplace(z2, t4, e2, r2, n2, i2, s2, a2, o2, l2, u2, c2, h2, p2, f2, d2, y2, m2, g2, x2, v2, b2, w2, _2, A3, S2, k2, M2, I2);
+                      return this.resize(z2 + 1), this.emplace(z2, t4, e2, r2, n2, i2, s2, a2, o2, l2, u2, c2, h2, p2, f2, d2, y2, m2, g2, x2, v2, b2, w2, _2, A32, S2, k2, M2, I2);
                     }
-                    emplace(t4, e2, r2, n2, i2, s2, a2, o2, l2, u2, c2, h2, p2, f2, d2, y2, m2, g2, x2, v2, b2, w2, _2, A3, S2, k2, M2, I2, z2) {
+                    emplace(t4, e2, r2, n2, i2, s2, a2, o2, l2, u2, c2, h2, p2, f2, d2, y2, m2, g2, x2, v2, b2, w2, _2, A32, S2, k2, M2, I2, z2) {
                       const P2 = 32 * t4, C3 = 16 * t4;
-                      return this.int16[P2 + 0] = e2, this.int16[P2 + 1] = r2, this.int16[P2 + 2] = n2, this.int16[P2 + 3] = i2, this.int16[P2 + 4] = s2, this.int16[P2 + 5] = a2, this.int16[P2 + 6] = o2, this.int16[P2 + 7] = l2, this.uint16[P2 + 8] = u2, this.uint16[P2 + 9] = c2, this.uint16[P2 + 10] = h2, this.uint16[P2 + 11] = p2, this.uint16[P2 + 12] = f2, this.uint16[P2 + 13] = d2, this.uint16[P2 + 14] = y2, this.uint16[P2 + 15] = m2, this.uint16[P2 + 16] = g2, this.uint16[P2 + 17] = x2, this.uint16[P2 + 18] = v2, this.uint16[P2 + 19] = b2, this.uint16[P2 + 20] = w2, this.uint16[P2 + 21] = _2, this.uint16[P2 + 22] = A3, this.uint32[C3 + 12] = S2, this.float32[C3 + 13] = k2, this.float32[C3 + 14] = M2, this.uint16[P2 + 30] = I2, this.uint16[P2 + 31] = z2, t4;
+                      return this.int16[P2 + 0] = e2, this.int16[P2 + 1] = r2, this.int16[P2 + 2] = n2, this.int16[P2 + 3] = i2, this.int16[P2 + 4] = s2, this.int16[P2 + 5] = a2, this.int16[P2 + 6] = o2, this.int16[P2 + 7] = l2, this.uint16[P2 + 8] = u2, this.uint16[P2 + 9] = c2, this.uint16[P2 + 10] = h2, this.uint16[P2 + 11] = p2, this.uint16[P2 + 12] = f2, this.uint16[P2 + 13] = d2, this.uint16[P2 + 14] = y2, this.uint16[P2 + 15] = m2, this.uint16[P2 + 16] = g2, this.uint16[P2 + 17] = x2, this.uint16[P2 + 18] = v2, this.uint16[P2 + 19] = b2, this.uint16[P2 + 20] = w2, this.uint16[P2 + 21] = _2, this.uint16[P2 + 22] = A32, this.uint32[C3 + 12] = S2, this.float32[C3 + 13] = k2, this.float32[C3 + 14] = M2, this.uint16[P2 + 30] = I2, this.uint16[P2 + 31] = z2, t4;
                     }
                   }
                   Ms.prototype.bytesPerElement = 64, wi("StructArrayLayout8i15ui1ul2f2ui64", Ms);
@@ -225131,7 +225131,7 @@ Use an identity property function instead: \`{ "type": "identity", "property": $
                     }
                     prepareSegment(t4, e2, r2, n2) {
                       let i2 = this.segments[this.segments.length - 1];
-                      return t4 > oa.MAX_VERTEX_ARRAY_LENGTH && A2(`Max vertices per segment is ${oa.MAX_VERTEX_ARRAY_LENGTH}: bucket requested ${t4}`), (!i2 || i2.vertexLength + t4 > oa.MAX_VERTEX_ARRAY_LENGTH || i2.sortKey !== n2) && (i2 = { vertexOffset: e2.length, primitiveOffset: r2.length, vertexLength: 0, primitiveLength: 0 }, void 0 !== n2 && (i2.sortKey = n2), this.segments.push(i2)), i2;
+                      return t4 > oa.MAX_VERTEX_ARRAY_LENGTH && A22(`Max vertices per segment is ${oa.MAX_VERTEX_ARRAY_LENGTH}: bucket requested ${t4}`), (!i2 || i2.vertexLength + t4 > oa.MAX_VERTEX_ARRAY_LENGTH || i2.sortKey !== n2) && (i2 = { vertexOffset: e2.length, primitiveOffset: r2.length, vertexLength: 0, primitiveLength: 0 }, void 0 !== n2 && (i2.sortKey = n2), this.segments.push(i2)), i2;
                     }
                     get() {
                       return this.segments;
@@ -225541,7 +225541,7 @@ Use an identity property function instead: \`{ "type": "identity", "property": $
                       const n2 = r2[t5];
                       for (let t6 = 0; t6 < n2.length; t6++) {
                         const r3 = n2[t6], i2 = Math.round(r3.x * e2), s2 = Math.round(r3.y * e2);
-                        r3.x = y(i2, Da, La), r3.y = y(s2, Da, La), (i2 < r3.x || i2 > r3.x + 1 || s2 < r3.y || s2 > r3.y + 1) && A2("Geometry exceeds allowed extent, reduce your vector tile buffer size");
+                        r3.x = y(i2, Da, La), r3.y = y(s2, Da, La), (i2 < r3.x || i2 > r3.x + 1 || s2 < r3.y || s2 > r3.y + 1) && A22("Geometry exceeds allowed extent, reduce your vector tile buffer size");
                       }
                     }
                     return r2;
@@ -226424,10 +226424,10 @@ Use an identity property function instead: \`{ "type": "identity", "property": $
                         for (const e4 of t5) {
                           const t6 = [], r4 = [];
                           for (const i4 of e4) {
-                            const e5 = i4.x, a4 = i4.y, y2 = n3[0] * e5 + n3[4] * a4 + n3[12], m2 = n3[1] * e5 + n3[5] * a4 + n3[13], g2 = n3[2] * e5 + n3[6] * a4 + n3[14], x2 = n3[3] * e5 + n3[7] * a4 + n3[15], v2 = g2 + u3, b2 = x2 + c3, w2 = y2 + h3, _2 = m2 + p3, A3 = g2 + f3, S2 = x2 + d2, k2 = new s((y2 + o3) / b2, (m2 + l3) / b2);
+                            const e5 = i4.x, a4 = i4.y, y2 = n3[0] * e5 + n3[4] * a4 + n3[12], m2 = n3[1] * e5 + n3[5] * a4 + n3[13], g2 = n3[2] * e5 + n3[6] * a4 + n3[14], x2 = n3[3] * e5 + n3[7] * a4 + n3[15], v2 = g2 + u3, b2 = x2 + c3, w2 = y2 + h3, _2 = m2 + p3, A32 = g2 + f3, S2 = x2 + d2, k2 = new s((y2 + o3) / b2, (m2 + l3) / b2);
                             k2.z = v2 / b2, t6.push(k2);
                             const M2 = new s(w2 / S2, _2 / S2);
-                            M2.z = A3 / S2, r4.push(M2);
+                            M2.z = A32 / S2, r4.push(M2);
                           }
                           i3.push(t6), a3.push(r4);
                         }
@@ -226550,9 +226550,9 @@ Use an identity property function instead: \`{ "type": "identity", "property": $
                             this.updateDistance(p2, e4), this.addCurrentVertex(e4, d2, 0, 0, c2), p2 = e4;
                           }
                         }
-                        const A3 = p2 && f2;
-                        let S2 = A3 ? r2 : a2 ? "butt" : n2;
-                        if (A3 && "round" === S2 && (v2 < s2 ? S2 = "miter" : v2 <= 2 && (S2 = "fakeround")), "miter" === S2 && v2 > i2 && (S2 = "bevel"), "bevel" === S2 && (v2 > 2 && (S2 = "flipbevel"), v2 < i2 && (S2 = "miter")), p2 && this.updateDistance(p2, h2), "miter" === S2) m2._mult(v2), this.addCurrentVertex(h2, m2, 0, 0, c2);
+                        const A32 = p2 && f2;
+                        let S2 = A32 ? r2 : a2 ? "butt" : n2;
+                        if (A32 && "round" === S2 && (v2 < s2 ? S2 = "miter" : v2 <= 2 && (S2 = "fakeround")), "miter" === S2 && v2 > i2 && (S2 = "bevel"), "bevel" === S2 && (v2 > 2 && (S2 = "flipbevel"), v2 < i2 && (S2 = "miter")), p2 && this.updateDistance(p2, h2), "miter" === S2) m2._mult(v2), this.addCurrentVertex(h2, m2, 0, 0, c2);
                         else if ("flipbevel" === S2) {
                           if (v2 > 100) m2 = y2.mult(-1);
                           else {
@@ -227149,9 +227149,9 @@ Use an identity property function instead: \`{ "type": "identity", "property": $
                     }
                     addImageSection(t4) {
                       const e2 = t4.image ? t4.image.name : "";
-                      if (0 === e2.length) return void A2("Can't add FormattedSection with an empty image.");
+                      if (0 === e2.length) return void A22("Can't add FormattedSection with an empty image.");
                       const r2 = this.getNextImageSectionCharCode();
-                      r2 ? (this.text += String.fromCharCode(r2), this.sections.push(Ou.forImage(e2)), this.sectionIndex.push(this.sections.length - 1)) : A2("Reached maximum number of images 6401");
+                      r2 ? (this.text += String.fromCharCode(r2), this.sections.push(Ou.forImage(e2)), this.sectionIndex.push(this.sections.length - 1)) : A22("Reached maximum number of images 6401");
                     }
                     getNextImageSectionCharCode() {
                       return this.imageSectionID ? this.imageSectionID >= 63743 ? null : ++this.imageSectionID : (this.imageSectionID = 57344, this.imageSectionID);
@@ -227201,19 +227201,19 @@ Use an identity property function instead: \`{ "type": "identity", "property": $
                         }
                         for (let a4 = 0; a4 < o4.length(); a4++) {
                           const y4 = o4.getSection(a4), m4 = o4.getSectionIndex(a4), g4 = o4.getCharCode(a4);
-                          let x4 = 0, b5 = null, A4 = null, S2 = null, k2 = iu;
+                          let x4 = 0, b5 = null, A42 = null, S2 = null, k2 = iu;
                           const M2 = !(u3 === t.ah.horizontal || !h3 && !Ti(g4) || h3 && (Uu[g4] || (v3 = g4, new RegExp("\\p{sc=Arab}", "u").test(String.fromCodePoint(v3)))));
                           if (y4.imageName) {
                             const t4 = i3[y4.imageName];
                             if (!t4) continue;
-                            S2 = y4.imageName, e3.iconsInText = e3.iconsInText || true, A4 = t4.paddedRect;
+                            S2 = y4.imageName, e3.iconsInText = e3.iconsInText || true, A42 = t4.paddedRect;
                             const r4 = t4.displaySize;
                             y4.scale = y4.scale * iu / p3, b5 = { width: r4[0], height: r4[1], left: Fu, top: -Vu, advance: M2 ? r4[1] : r4[0] }, x4 = l4 + (iu - r4[1] * y4.scale), k2 = b5.advance;
                             const n4 = M2 ? r4[0] * y4.scale - iu * s4 : r4[1] * y4.scale - iu * s4;
                             n4 > 0 && n4 > _3 && (_3 = n4);
                           } else {
                             const t4 = n3[y4.fontStack], e4 = t4 && t4[g4];
-                            if (e4 && e4.rect) A4 = e4.rect, b5 = e4.metrics;
+                            if (e4 && e4.rect) A42 = e4.rect, b5 = e4.metrics;
                             else {
                               const t5 = r3[y4.fontStack], e5 = t5 && t5[g4];
                               if (!e5) continue;
@@ -227221,11 +227221,11 @@ Use an identity property function instead: \`{ "type": "identity", "property": $
                             }
                             x4 = (s4 - y4.scale) * iu;
                           }
-                          M2 ? (e3.verticalizable = true, w4.push({ glyph: g4, imageName: S2, x: f3, y: d3 + x4, vertical: M2, scale: y4.scale, fontStack: y4.fontStack, sectionIndex: m4, metrics: b5, rect: A4 }), f3 += k2 * y4.scale + c3) : (w4.push({ glyph: g4, imageName: S2, x: f3, y: d3 + x4, vertical: M2, scale: y4.scale, fontStack: y4.fontStack, sectionIndex: m4, metrics: b5, rect: A4 }), f3 += b5.advance * y4.scale + c3);
+                          M2 ? (e3.verticalizable = true, w4.push({ glyph: g4, imageName: S2, x: f3, y: d3 + x4, vertical: M2, scale: y4.scale, fontStack: y4.fontStack, sectionIndex: m4, metrics: b5, rect: A42 }), f3 += k2 * y4.scale + c3) : (w4.push({ glyph: g4, imageName: S2, x: f3, y: d3 + x4, vertical: M2, scale: y4.scale, fontStack: y4.fontStack, sectionIndex: m4, metrics: b5, rect: A42 }), f3 += b5.advance * y4.scale + c3);
                         }
                         0 !== w4.length && (y3 = Math.max(f3 - c3, y3), Wu(w4, 0, w4.length - 1, g3, _3)), f3 = 0;
-                        const A3 = a3 * s4 + _3;
-                        b4.lineOffset = Math.max(_3, l4), d3 += A3, m3 = Math.max(A3, m3), ++x3;
+                        const A32 = a3 * s4 + _3;
+                        b4.lineOffset = Math.max(_3, l4), d3 += A32, m3 = Math.max(A32, m3), ++x3;
                       }
                       var v3;
                       const b3 = d3 - Du, { horizontalAlign: w3, verticalAlign: _2 } = Ju(o3);
@@ -227528,8 +227528,8 @@ Use an identity property function instead: \`{ "type": "identity", "property": $
                     addSymbols(e2, r2, n2, i2, s2, a2, o2, l2, u2, c2, h2, p2) {
                       const f2 = e2.indexArray, d2 = e2.layoutVertexArray, y2 = e2.segments.prepareSegment(4 * r2.length, d2, f2, this.canOverlap ? a2.sortKey : void 0), m2 = this.glyphOffsetArray.length, g2 = y2.vertexLength, x2 = this.allowVerticalPlacement && o2 === t.ah.vertical ? Math.PI / 2 : 0, v2 = a2.text && a2.text.sections;
                       for (let t4 = 0; t4 < r2.length; t4++) {
-                        const { tl: i3, tr: s3, bl: o3, br: u3, tex: c3, pixelOffsetTL: h3, pixelOffsetBR: m3, minFontScaleX: g3, minFontScaleY: b2, glyphOffset: w2, isSDF: _2, sectionIndex: A3 } = r2[t4], S2 = y2.vertexLength, k2 = w2[1];
-                        uc(d2, l2.x, l2.y, i3.x, k2 + i3.y, c3.x, c3.y, n2, _2, h3.x, h3.y, g3, b2), uc(d2, l2.x, l2.y, s3.x, k2 + s3.y, c3.x + c3.w, c3.y, n2, _2, m3.x, h3.y, g3, b2), uc(d2, l2.x, l2.y, o3.x, k2 + o3.y, c3.x, c3.y + c3.h, n2, _2, h3.x, m3.y, g3, b2), uc(d2, l2.x, l2.y, u3.x, k2 + u3.y, c3.x + c3.w, c3.y + c3.h, n2, _2, m3.x, m3.y, g3, b2), cc(e2.dynamicLayoutVertexArray, l2, x2), f2.emplaceBack(S2, S2 + 1, S2 + 2), f2.emplaceBack(S2 + 1, S2 + 2, S2 + 3), y2.vertexLength += 4, y2.primitiveLength += 2, this.glyphOffsetArray.emplaceBack(w2[0]), t4 !== r2.length - 1 && A3 === r2[t4 + 1].sectionIndex || e2.programConfigurations.populatePaintArrays(d2.length, a2, a2.index, {}, p2, v2 && v2[A3]);
+                        const { tl: i3, tr: s3, bl: o3, br: u3, tex: c3, pixelOffsetTL: h3, pixelOffsetBR: m3, minFontScaleX: g3, minFontScaleY: b2, glyphOffset: w2, isSDF: _2, sectionIndex: A32 } = r2[t4], S2 = y2.vertexLength, k2 = w2[1];
+                        uc(d2, l2.x, l2.y, i3.x, k2 + i3.y, c3.x, c3.y, n2, _2, h3.x, h3.y, g3, b2), uc(d2, l2.x, l2.y, s3.x, k2 + s3.y, c3.x + c3.w, c3.y, n2, _2, m3.x, h3.y, g3, b2), uc(d2, l2.x, l2.y, o3.x, k2 + o3.y, c3.x, c3.y + c3.h, n2, _2, h3.x, m3.y, g3, b2), uc(d2, l2.x, l2.y, u3.x, k2 + u3.y, c3.x + c3.w, c3.y + c3.h, n2, _2, m3.x, m3.y, g3, b2), cc(e2.dynamicLayoutVertexArray, l2, x2), f2.emplaceBack(S2, S2 + 1, S2 + 2), f2.emplaceBack(S2 + 1, S2 + 2, S2 + 3), y2.vertexLength += 4, y2.primitiveLength += 2, this.glyphOffsetArray.emplaceBack(w2[0]), t4 !== r2.length - 1 && A32 === r2[t4 + 1].sectionIndex || e2.programConfigurations.populatePaintArrays(d2.length, a2, a2.index, {}, p2, v2 && v2[A32]);
                       }
                       e2.placedSymbolArray.emplaceBack(l2.x, l2.y, m2, this.glyphOffsetArray.length - m2, g2, u2, c2, l2.segment, n2 ? n2[0] : 0, n2 ? n2[1] : 0, i2[0], i2[1], o2, 0, false, 0, h2);
                     }
@@ -227942,7 +227942,7 @@ Use an identity property function instead: \`{ "type": "identity", "property": $
                   class Uc {
                     constructor(t4, e2, r2, n2 = 1, i2 = 1, s2 = 1, a2 = 0) {
                       if (this.uid = t4, e2.height !== e2.width) throw new RangeError("DEM tiles must be square");
-                      if (r2 && !["mapbox", "terrarium", "custom"].includes(r2)) return void A2(`"${r2}" is not a valid encoding type. Valid types include "mapbox", "terrarium" and "custom".`);
+                      if (r2 && !["mapbox", "terrarium", "custom"].includes(r2)) return void A22(`"${r2}" is not a valid encoding type. Valid types include "mapbox", "terrarium" and "custom".`);
                       this.stride = e2.height;
                       const o2 = this.dim = e2.height - 2;
                       switch (this.data = new Uint32Array(e2.data.buffer), r2) {
@@ -228229,19 +228229,19 @@ Use an identity property function instead: \`{ "type": "identity", "property": $
                     const i2 = [], a2 = t4.image, o2 = a2.pixelRatio, l2 = a2.paddedRect.w - 2 * ih, u2 = a2.paddedRect.h - 2 * ih;
                     let c2 = { x1: t4.left, y1: t4.top, x2: t4.right, y2: t4.bottom };
                     const h2 = a2.stretchX || [[0, l2]], p2 = a2.stretchY || [[0, u2]], f2 = (t5, e3) => t5 + e3[1] - e3[0], d2 = h2.reduce(f2, 0), y2 = p2.reduce(f2, 0), m2 = l2 - d2, g2 = u2 - y2;
-                    let x2 = 0, v2 = d2, b2 = 0, w2 = y2, _2 = 0, A3 = m2, S2 = 0, k2 = g2;
+                    let x2 = 0, v2 = d2, b2 = 0, w2 = y2, _2 = 0, A32 = m2, S2 = 0, k2 = g2;
                     if (a2.content && n2) {
                       const e3 = a2.content, r3 = e3[2] - e3[0], n3 = e3[3] - e3[1];
-                      (a2.textFitWidth || a2.textFitHeight) && (c2 = tc(t4)), x2 = ah(h2, 0, e3[0]), b2 = ah(p2, 0, e3[1]), v2 = ah(h2, e3[0], e3[2]), w2 = ah(p2, e3[1], e3[3]), _2 = e3[0] - x2, S2 = e3[1] - b2, A3 = r3 - v2, k2 = n3 - w2;
+                      (a2.textFitWidth || a2.textFitHeight) && (c2 = tc(t4)), x2 = ah(h2, 0, e3[0]), b2 = ah(p2, 0, e3[1]), v2 = ah(h2, e3[0], e3[2]), w2 = ah(p2, e3[1], e3[3]), _2 = e3[0] - x2, S2 = e3[1] - b2, A32 = r3 - v2, k2 = n3 - w2;
                     }
                     const M2 = c2.x1, I2 = c2.y1, z2 = c2.x2 - M2, P2 = c2.y2 - I2, C3 = (t5, n3, i3, l3) => {
-                      const u3 = lh(t5.stretch - x2, v2, z2, M2), c3 = uh(t5.fixed - _2, A3, t5.stretch, d2), h3 = lh(n3.stretch - b2, w2, P2, I2), p3 = uh(n3.fixed - S2, k2, n3.stretch, y2), f3 = lh(i3.stretch - x2, v2, z2, M2), m3 = uh(i3.fixed - _2, A3, i3.stretch, d2), g3 = lh(l3.stretch - b2, w2, P2, I2), C4 = uh(l3.fixed - S2, k2, l3.stretch, y2), B3 = new s(u3, h3), V2 = new s(f3, h3), E3 = new s(f3, g3), F2 = new s(u3, g3), T2 = new s(c3 / o2, p3 / o2), $2 = new s(m3 / o2, C4 / o2), L2 = e2 * Math.PI / 180;
+                      const u3 = lh(t5.stretch - x2, v2, z2, M2), c3 = uh(t5.fixed - _2, A32, t5.stretch, d2), h3 = lh(n3.stretch - b2, w2, P2, I2), p3 = uh(n3.fixed - S2, k2, n3.stretch, y2), f3 = lh(i3.stretch - x2, v2, z2, M2), m3 = uh(i3.fixed - _2, A32, i3.stretch, d2), g3 = lh(l3.stretch - b2, w2, P2, I2), C4 = uh(l3.fixed - S2, k2, l3.stretch, y2), B32 = new s(u3, h3), V2 = new s(f3, h3), E3 = new s(f3, g3), F2 = new s(u3, g3), T2 = new s(c3 / o2, p3 / o2), $2 = new s(m3 / o2, C4 / o2), L2 = e2 * Math.PI / 180;
                       if (L2) {
                         const t6 = Math.sin(L2), e3 = Math.cos(L2), r3 = [e3, -t6, t6, e3];
-                        B3._matMult(r3), V2._matMult(r3), F2._matMult(r3), E3._matMult(r3);
+                        B32._matMult(r3), V2._matMult(r3), F2._matMult(r3), E3._matMult(r3);
                       }
                       const D3 = t5.stretch + t5.fixed, O2 = n3.stretch + n3.fixed;
-                      return { tl: B3, tr: V2, bl: F2, br: E3, tex: { x: a2.paddedRect.x + ih + D3, y: a2.paddedRect.y + ih + O2, w: i3.stretch + i3.fixed - D3, h: l3.stretch + l3.fixed - O2 }, writingMode: void 0, glyphOffset: [0, 0], sectionIndex: 0, pixelOffsetTL: T2, pixelOffsetBR: $2, minFontScaleX: A3 / o2 / z2, minFontScaleY: k2 / o2 / P2, isSDF: r2 };
+                      return { tl: B32, tr: V2, bl: F2, br: E3, tex: { x: a2.paddedRect.x + ih + D3, y: a2.paddedRect.y + ih + O2, w: i3.stretch + i3.fixed - D3, h: l3.stretch + l3.fixed - O2 }, writingMode: void 0, glyphOffset: [0, 0], sectionIndex: 0, pixelOffsetTL: T2, pixelOffsetBR: $2, minFontScaleX: A32 / o2 / z2, minFontScaleY: k2 / o2 / P2, isSDF: r2 };
                     };
                     if (n2 && (a2.stretchX || a2.stretchY)) {
                       const t5 = oh(h2, m2, d2), e3 = oh(p2, g2, y2);
@@ -228480,22 +228480,22 @@ Use an identity property function instead: \`{ "type": "identity", "property": $
                     })(f2, r2, h2, e2.tilePixelRatio), S2 = f2.get("text-max-angle") / 180 * Math.PI, k2 = "viewport" !== f2.get("text-rotation-alignment") && "point" !== f2.get("symbol-placement"), M2 = "map" === f2.get("icon-rotation-alignment") && "point" !== f2.get("symbol-placement"), I2 = f2.get("symbol-placement"), z2 = b2 / 2, P2 = f2.get("icon-text-fit");
                     let C3;
                     i2 && "none" !== P2 && (e2.allowVerticalPlacement && n2.vertical && (C3 = ec(i2, n2.vertical, P2, f2.get("icon-text-fit-padding"), d2, m2)), y2 && (i2 = ec(i2, y2, P2, f2.get("icon-text-fit-padding"), d2, m2)));
-                    const B3 = (l3, p3) => {
+                    const B32 = (l3, p3) => {
                       p3.x < 0 || p3.x >= $a || p3.y < 0 || p3.y >= $a || (function(e3, r3, n3, i3, s3, a3, o3, l4, u3, c3, h3, p4, f3, d3, y3, m3, g3, x3, v3, b3, w3, _3, S3, k3, M3) {
                         const I3 = e3.addToLineVertexArray(r3, n3);
-                        let z3, P3, C4, B4, V2 = 0, E3 = 0, F2 = 0, T2 = 0, $2 = -1, L2 = -1;
+                        let z3, P3, C4, B42, V2 = 0, E3 = 0, F2 = 0, T2 = 0, $2 = -1, L2 = -1;
                         const D3 = {};
                         let O2 = ma("");
                         if (e3.allowVerticalPlacement && i3.vertical) {
                           const t4 = l4.layout.get("text-rotate").evaluate(w3, {}, k3) + 90;
-                          C4 = new ch(u3, r3, c3, h3, p4, i3.vertical, f3, d3, y3, t4), o3 && (B4 = new ch(u3, r3, c3, h3, p4, o3, g3, x3, y3, t4));
+                          C4 = new ch(u3, r3, c3, h3, p4, i3.vertical, f3, d3, y3, t4), o3 && (B42 = new ch(u3, r3, c3, h3, p4, o3, g3, x3, y3, t4));
                         }
                         if (s3) {
                           const n4 = l4.layout.get("icon-rotate").evaluate(w3, {}), i4 = "none" !== l4.layout.get("icon-text-fit"), a4 = sh(s3, n4, S3, i4), f4 = o3 ? sh(o3, n4, S3, i4) : void 0;
                           P3 = new ch(u3, r3, c3, h3, p4, s3, g3, x3, false, n4), V2 = 4 * a4.length;
                           const d4 = e3.iconSizeData;
                           let y4 = null;
-                          "source" === d4.kind ? (y4 = [nc * l4.layout.get("icon-size").evaluate(w3, {})], y4[0] > ic && A2(`${e3.layerIds[0]}: Value for "icon-size" is >= ${rc}. Reduce your "icon-size".`)) : "composite" === d4.kind && (y4 = [nc * _3.compositeIconSizes[0].evaluate(w3, {}, k3), nc * _3.compositeIconSizes[1].evaluate(w3, {}, k3)], (y4[0] > ic || y4[1] > ic) && A2(`${e3.layerIds[0]}: Value for "icon-size" is >= ${rc}. Reduce your "icon-size".`)), e3.addSymbols(e3.icon, a4, y4, b3, v3, w3, t.ah.none, r3, I3.lineStartIndex, I3.lineLength, -1, k3), $2 = e3.icon.placedSymbolArray.length - 1, f4 && (E3 = 4 * f4.length, e3.addSymbols(e3.icon, f4, y4, b3, v3, w3, t.ah.vertical, r3, I3.lineStartIndex, I3.lineLength, -1, k3), L2 = e3.icon.placedSymbolArray.length - 1);
+                          "source" === d4.kind ? (y4 = [nc * l4.layout.get("icon-size").evaluate(w3, {})], y4[0] > ic && A22(`${e3.layerIds[0]}: Value for "icon-size" is >= ${rc}. Reduce your "icon-size".`)) : "composite" === d4.kind && (y4 = [nc * _3.compositeIconSizes[0].evaluate(w3, {}, k3), nc * _3.compositeIconSizes[1].evaluate(w3, {}, k3)], (y4[0] > ic || y4[1] > ic) && A22(`${e3.layerIds[0]}: Value for "icon-size" is >= ${rc}. Reduce your "icon-size".`)), e3.addSymbols(e3.icon, a4, y4, b3, v3, w3, t.ah.none, r3, I3.lineStartIndex, I3.lineLength, -1, k3), $2 = e3.icon.placedSymbolArray.length - 1, f4 && (E3 = 4 * f4.length, e3.addSymbols(e3.icon, f4, y4, b3, v3, w3, t.ah.vertical, r3, I3.lineStartIndex, I3.lineLength, -1, k3), L2 = e3.icon.placedSymbolArray.length - 1);
                         }
                         const j2 = Object.keys(i3.horizontal);
                         for (const n4 of j2) {
@@ -228509,12 +228509,12 @@ Use an identity property function instead: \`{ "type": "identity", "property": $
                           if (F2 += _h(e3, r3, s4, a3, l4, y3, w3, m3, I3, i3.vertical ? t.ah.horizontal : t.ah.horizontalOnly, o4 ? j2 : [n4], D3, $2, _3, k3), o4) break;
                         }
                         i3.vertical && (T2 += _h(e3, r3, i3.vertical, a3, l4, y3, w3, m3, I3, t.ah.vertical, ["vertical"], D3, L2, _3, k3));
-                        const R2 = z3 ? z3.boxStartIndex : e3.collisionBoxArray.length, U2 = z3 ? z3.boxEndIndex : e3.collisionBoxArray.length, q2 = C4 ? C4.boxStartIndex : e3.collisionBoxArray.length, N2 = C4 ? C4.boxEndIndex : e3.collisionBoxArray.length, Z2 = P3 ? P3.boxStartIndex : e3.collisionBoxArray.length, G2 = P3 ? P3.boxEndIndex : e3.collisionBoxArray.length, K3 = B4 ? B4.boxStartIndex : e3.collisionBoxArray.length, X2 = B4 ? B4.boxEndIndex : e3.collisionBoxArray.length;
+                        const R2 = z3 ? z3.boxStartIndex : e3.collisionBoxArray.length, U2 = z3 ? z3.boxEndIndex : e3.collisionBoxArray.length, q2 = C4 ? C4.boxStartIndex : e3.collisionBoxArray.length, N2 = C4 ? C4.boxEndIndex : e3.collisionBoxArray.length, Z2 = P3 ? P3.boxStartIndex : e3.collisionBoxArray.length, G2 = P3 ? P3.boxEndIndex : e3.collisionBoxArray.length, K3 = B42 ? B42.boxStartIndex : e3.collisionBoxArray.length, X2 = B42 ? B42.boxEndIndex : e3.collisionBoxArray.length;
                         let H2 = -1;
                         const Y2 = (t4, e4) => t4 && t4.circleDiameter ? Math.max(t4.circleDiameter, e4) : e4;
-                        H2 = Y2(z3, H2), H2 = Y2(C4, H2), H2 = Y2(P3, H2), H2 = Y2(B4, H2);
+                        H2 = Y2(z3, H2), H2 = Y2(C4, H2), H2 = Y2(P3, H2), H2 = Y2(B42, H2);
                         const J2 = H2 > -1 ? 1 : 0;
-                        J2 && (H2 *= M3 / iu), e3.glyphOffsetArray.length >= dc.MAX_GLYPHS && A2("Too many glyphs being rendered in a tile. See https://github.com/mapbox/mapbox-gl-js/issues/2907"), void 0 !== w3.sortKey && e3.addToSortKeyRanges(e3.symbolInstances.length, w3.sortKey);
+                        J2 && (H2 *= M3 / iu), e3.glyphOffsetArray.length >= dc.MAX_GLYPHS && A22("Too many glyphs being rendered in a tile. See https://github.com/mapbox/mapbox-gl-js/issues/2907"), void 0 !== w3.sortKey && e3.addToSortKeyRanges(e3.symbolInstances.length, w3.sortKey);
                         const W2 = vh(l4, w3, k3), [Q2, tt2] = (function(e4, r4) {
                           const n4 = e4.length, i4 = null == r4 ? void 0 : r4.values;
                           if ((null == i4 ? void 0 : i4.length) > 0) for (let r5 = 0; r5 < i4.length; r5 += 2) {
@@ -228528,19 +228528,19 @@ Use an identity property function instead: \`{ "type": "identity", "property": $
                     };
                     if ("line" === I2) for (const t4 of Hc(r2.geometry, 0, 0, $a, $a)) {
                       const r3 = rh(t4, b2, S2, n2.vertical || y2, i2, 24, x2, e2.overscaling, $a);
-                      for (const n3 of r3) y2 && Sh(e2, y2.text, z2, n3) || B3(t4, n3);
+                      for (const n3 of r3) y2 && Sh(e2, y2.text, z2, n3) || B32(t4, n3);
                     }
                     else if ("line-center" === I2) {
                       for (const t4 of r2.geometry) if (t4.length > 1) {
                         const e3 = eh(t4, S2, n2.vertical || y2, i2, 24, x2);
-                        e3 && B3(t4, e3);
+                        e3 && B32(t4, e3);
                       }
                     } else if ("Polygon" === r2.type) for (const t4 of xr(r2.geometry, 0)) {
                       const e3 = ph(t4, 16);
-                      B3(t4[0], new Yc(e3.x, e3.y, 0));
+                      B32(t4[0], new Yc(e3.x, e3.y, 0));
                     }
-                    else if ("LineString" === r2.type) for (const t4 of r2.geometry) B3(t4, new Yc(t4[0].x, t4[0].y, 0));
-                    else if ("Point" === r2.type) for (const t4 of r2.geometry) for (const e3 of t4) B3([e3], new Yc(e3.x, e3.y, 0));
+                    else if ("LineString" === r2.type) for (const t4 of r2.geometry) B32(t4, new Yc(t4[0].x, t4[0].y, 0));
+                    else if ("Point" === r2.type) for (const t4 of r2.geometry) for (const e3 of t4) B32([e3], new Yc(e3.x, e3.y, 0));
                   }
                   function _h(t4, e2, r2, n2, i2, a2, o2, l2, u2, c2, h2, p2, f2, d2, y2) {
                     const m2 = (function(t5, e3, r3, n3, i3, a3, o3, l3) {
@@ -228557,7 +228557,7 @@ Use an identity property function instead: \`{ "type": "identity", "property": $
                         const g3 = i3 ? [n4.x + m3, n4.y] : [0, 0];
                         let x3 = i3 ? [0, 0] : [n4.x + m3 + r3[0], n4.y + r3[1] - d3], v2 = [0, 0];
                         y3 && (v2 = x3, x3 = [0, 0]);
-                        const b2 = n4.metrics.isDoubleResolution ? 2 : 1, w2 = (n4.metrics.left - h3) * n4.scale - m3 + x3[0], _2 = (-n4.metrics.top - h3) * n4.scale + x3[1], A3 = w2 + a4.w / b2 * n4.scale / f3, S2 = _2 + a4.h / b2 * n4.scale / f3, k2 = new s(w2, _2), M2 = new s(A3, _2), I2 = new s(w2, S2), z2 = new s(A3, S2);
+                        const b2 = n4.metrics.isDoubleResolution ? 2 : 1, w2 = (n4.metrics.left - h3) * n4.scale - m3 + x3[0], _2 = (-n4.metrics.top - h3) * n4.scale + x3[1], A32 = w2 + a4.w / b2 * n4.scale / f3, S2 = _2 + a4.h / b2 * n4.scale / f3, k2 = new s(w2, _2), M2 = new s(A32, _2), I2 = new s(w2, S2), z2 = new s(A32, S2);
                         if (y3) {
                           const t7 = new s(-m3, m3 - Du), e4 = -Math.PI / 2, r4 = iu / 2 - m3, i4 = new s(5 - Du - r4, -(n4.imageName ? r4 : 0)), a5 = new s(...v2);
                           k2._rotateAround(e4, t7)._add(i4)._add(a5), M2._rotateAround(e4, t7)._add(i4)._add(a5), I2._rotateAround(e4, t7)._add(i4)._add(a5), z2._rotateAround(e4, t7)._add(i4)._add(a5);
@@ -228572,7 +228572,7 @@ Use an identity property function instead: \`{ "type": "identity", "property": $
                       return c3;
                     })(0, r2, l2, i2, a2, o2, n2, t4.allowVerticalPlacement), g2 = t4.textSizeData;
                     let x2 = null;
-                    "source" === g2.kind ? (x2 = [nc * i2.layout.get("text-size").evaluate(o2, {})], x2[0] > ic && A2(`${t4.layerIds[0]}: Value for "text-size" is >= ${rc}. Reduce your "text-size".`)) : "composite" === g2.kind && (x2 = [nc * d2.compositeTextSizes[0].evaluate(o2, {}, y2), nc * d2.compositeTextSizes[1].evaluate(o2, {}, y2)], (x2[0] > ic || x2[1] > ic) && A2(`${t4.layerIds[0]}: Value for "text-size" is >= ${rc}. Reduce your "text-size".`)), t4.addSymbols(t4.text, m2, x2, l2, a2, o2, c2, e2, u2.lineStartIndex, u2.lineLength, f2, y2);
+                    "source" === g2.kind ? (x2 = [nc * i2.layout.get("text-size").evaluate(o2, {})], x2[0] > ic && A22(`${t4.layerIds[0]}: Value for "text-size" is >= ${rc}. Reduce your "text-size".`)) : "composite" === g2.kind && (x2 = [nc * d2.compositeTextSizes[0].evaluate(o2, {}, y2), nc * d2.compositeTextSizes[1].evaluate(o2, {}, y2)], (x2[0] > ic || x2[1] > ic) && A22(`${t4.layerIds[0]}: Value for "text-size" is >= ${rc}. Reduce your "text-size".`)), t4.addSymbols(t4.text, m2, x2, l2, a2, o2, c2, e2, u2.lineStartIndex, u2.lineLength, f2, y2);
                     for (const e3 of h2) p2[e3] = t4.text.placedSymbolArray.length - 1;
                     return 4 * m2.length;
                   }
@@ -228787,8 +228787,8 @@ Use an identity property function instead: \`{ "type": "identity", "property": $
                     }
                     return r2;
                   }, t.N = Pc, t.O = Vc, t.P = s, t.Q = Ec, t.R = Ao, t.S = jc, t.T = Zi, t.U = h, t.V = p, t.W = P, t.X = $a, t.Y = ls, t.Z = $c, t._ = e, t.a = F, t.a$ = function(t4, e2) {
-                    var r2 = t4[0], n2 = t4[1], i2 = t4[2], s2 = t4[3], a2 = t4[4], o2 = t4[5], l2 = t4[6], u2 = t4[7], c2 = t4[8], h2 = t4[9], p2 = t4[10], f2 = t4[11], d2 = t4[12], y2 = t4[13], m2 = t4[14], g2 = t4[15], x2 = e2[0], v2 = e2[1], b2 = e2[2], w2 = e2[3], _2 = e2[4], A3 = e2[5], S2 = e2[6], k2 = e2[7], M2 = e2[8], I2 = e2[9], z2 = e2[10], P2 = e2[11], C3 = e2[12], B3 = e2[13], V2 = e2[14], E3 = e2[15];
-                    return Math.abs(r2 - x2) <= ao * Math.max(1, Math.abs(r2), Math.abs(x2)) && Math.abs(n2 - v2) <= ao * Math.max(1, Math.abs(n2), Math.abs(v2)) && Math.abs(i2 - b2) <= ao * Math.max(1, Math.abs(i2), Math.abs(b2)) && Math.abs(s2 - w2) <= ao * Math.max(1, Math.abs(s2), Math.abs(w2)) && Math.abs(a2 - _2) <= ao * Math.max(1, Math.abs(a2), Math.abs(_2)) && Math.abs(o2 - A3) <= ao * Math.max(1, Math.abs(o2), Math.abs(A3)) && Math.abs(l2 - S2) <= ao * Math.max(1, Math.abs(l2), Math.abs(S2)) && Math.abs(u2 - k2) <= ao * Math.max(1, Math.abs(u2), Math.abs(k2)) && Math.abs(c2 - M2) <= ao * Math.max(1, Math.abs(c2), Math.abs(M2)) && Math.abs(h2 - I2) <= ao * Math.max(1, Math.abs(h2), Math.abs(I2)) && Math.abs(p2 - z2) <= ao * Math.max(1, Math.abs(p2), Math.abs(z2)) && Math.abs(f2 - P2) <= ao * Math.max(1, Math.abs(f2), Math.abs(P2)) && Math.abs(d2 - C3) <= ao * Math.max(1, Math.abs(d2), Math.abs(C3)) && Math.abs(y2 - B3) <= ao * Math.max(1, Math.abs(y2), Math.abs(B3)) && Math.abs(m2 - V2) <= ao * Math.max(1, Math.abs(m2), Math.abs(V2)) && Math.abs(g2 - E3) <= ao * Math.max(1, Math.abs(g2), Math.abs(E3));
+                    var r2 = t4[0], n2 = t4[1], i2 = t4[2], s2 = t4[3], a2 = t4[4], o2 = t4[5], l2 = t4[6], u2 = t4[7], c2 = t4[8], h2 = t4[9], p2 = t4[10], f2 = t4[11], d2 = t4[12], y2 = t4[13], m2 = t4[14], g2 = t4[15], x2 = e2[0], v2 = e2[1], b2 = e2[2], w2 = e2[3], _2 = e2[4], A32 = e2[5], S2 = e2[6], k2 = e2[7], M2 = e2[8], I2 = e2[9], z2 = e2[10], P2 = e2[11], C3 = e2[12], B32 = e2[13], V2 = e2[14], E3 = e2[15];
+                    return Math.abs(r2 - x2) <= ao * Math.max(1, Math.abs(r2), Math.abs(x2)) && Math.abs(n2 - v2) <= ao * Math.max(1, Math.abs(n2), Math.abs(v2)) && Math.abs(i2 - b2) <= ao * Math.max(1, Math.abs(i2), Math.abs(b2)) && Math.abs(s2 - w2) <= ao * Math.max(1, Math.abs(s2), Math.abs(w2)) && Math.abs(a2 - _2) <= ao * Math.max(1, Math.abs(a2), Math.abs(_2)) && Math.abs(o2 - A32) <= ao * Math.max(1, Math.abs(o2), Math.abs(A32)) && Math.abs(l2 - S2) <= ao * Math.max(1, Math.abs(l2), Math.abs(S2)) && Math.abs(u2 - k2) <= ao * Math.max(1, Math.abs(u2), Math.abs(k2)) && Math.abs(c2 - M2) <= ao * Math.max(1, Math.abs(c2), Math.abs(M2)) && Math.abs(h2 - I2) <= ao * Math.max(1, Math.abs(h2), Math.abs(I2)) && Math.abs(p2 - z2) <= ao * Math.max(1, Math.abs(p2), Math.abs(z2)) && Math.abs(f2 - P2) <= ao * Math.max(1, Math.abs(f2), Math.abs(P2)) && Math.abs(d2 - C3) <= ao * Math.max(1, Math.abs(d2), Math.abs(C3)) && Math.abs(y2 - B32) <= ao * Math.max(1, Math.abs(y2), Math.abs(B32)) && Math.abs(m2 - V2) <= ao * Math.max(1, Math.abs(m2), Math.abs(V2)) && Math.abs(g2 - E3) <= ao * Math.max(1, Math.abs(g2), Math.abs(E3));
                   }, t.a0 = oa, t.a1 = Dc, t.a2 = it, t.a3 = (t4) => {
                     const e2 = window.document.createElement("video");
                     return e2.muted = true, new Promise((r2) => {
@@ -228952,8 +228952,8 @@ Use an identity property function instead: \`{ "type": "identity", "property": $
                     for (const s2 of t4) e2 = Math.min(e2, s2.x), r2 = Math.min(r2, s2.y), n2 = Math.max(n2, s2.x), i2 = Math.max(i2, s2.y);
                     return [e2, r2, n2, i2];
                   }, t.ap = iu, t.ar = ac, t.as = function(t4, e2) {
-                    var r2 = e2[0], n2 = e2[1], i2 = e2[2], s2 = e2[3], a2 = e2[4], o2 = e2[5], l2 = e2[6], u2 = e2[7], c2 = e2[8], h2 = e2[9], p2 = e2[10], f2 = e2[11], d2 = e2[12], y2 = e2[13], m2 = e2[14], g2 = e2[15], x2 = r2 * o2 - n2 * a2, v2 = r2 * l2 - i2 * a2, b2 = r2 * u2 - s2 * a2, w2 = n2 * l2 - i2 * o2, _2 = n2 * u2 - s2 * o2, A3 = i2 * u2 - s2 * l2, S2 = c2 * y2 - h2 * d2, k2 = c2 * m2 - p2 * d2, M2 = c2 * g2 - f2 * d2, I2 = h2 * m2 - p2 * y2, z2 = h2 * g2 - f2 * y2, P2 = p2 * g2 - f2 * m2, C3 = x2 * P2 - v2 * z2 + b2 * I2 + w2 * M2 - _2 * k2 + A3 * S2;
-                    return C3 ? (t4[0] = (o2 * P2 - l2 * z2 + u2 * I2) * (C3 = 1 / C3), t4[1] = (i2 * z2 - n2 * P2 - s2 * I2) * C3, t4[2] = (y2 * A3 - m2 * _2 + g2 * w2) * C3, t4[3] = (p2 * _2 - h2 * A3 - f2 * w2) * C3, t4[4] = (l2 * M2 - a2 * P2 - u2 * k2) * C3, t4[5] = (r2 * P2 - i2 * M2 + s2 * k2) * C3, t4[6] = (m2 * b2 - d2 * A3 - g2 * v2) * C3, t4[7] = (c2 * A3 - p2 * b2 + f2 * v2) * C3, t4[8] = (a2 * z2 - o2 * M2 + u2 * S2) * C3, t4[9] = (n2 * M2 - r2 * z2 - s2 * S2) * C3, t4[10] = (d2 * _2 - y2 * b2 + g2 * x2) * C3, t4[11] = (h2 * b2 - c2 * _2 - f2 * x2) * C3, t4[12] = (o2 * k2 - a2 * I2 - l2 * S2) * C3, t4[13] = (r2 * I2 - n2 * k2 + i2 * S2) * C3, t4[14] = (y2 * v2 - d2 * w2 - m2 * x2) * C3, t4[15] = (c2 * w2 - h2 * v2 + p2 * x2) * C3, t4) : null;
+                    var r2 = e2[0], n2 = e2[1], i2 = e2[2], s2 = e2[3], a2 = e2[4], o2 = e2[5], l2 = e2[6], u2 = e2[7], c2 = e2[8], h2 = e2[9], p2 = e2[10], f2 = e2[11], d2 = e2[12], y2 = e2[13], m2 = e2[14], g2 = e2[15], x2 = r2 * o2 - n2 * a2, v2 = r2 * l2 - i2 * a2, b2 = r2 * u2 - s2 * a2, w2 = n2 * l2 - i2 * o2, _2 = n2 * u2 - s2 * o2, A32 = i2 * u2 - s2 * l2, S2 = c2 * y2 - h2 * d2, k2 = c2 * m2 - p2 * d2, M2 = c2 * g2 - f2 * d2, I2 = h2 * m2 - p2 * y2, z2 = h2 * g2 - f2 * y2, P2 = p2 * g2 - f2 * m2, C3 = x2 * P2 - v2 * z2 + b2 * I2 + w2 * M2 - _2 * k2 + A32 * S2;
+                    return C3 ? (t4[0] = (o2 * P2 - l2 * z2 + u2 * I2) * (C3 = 1 / C3), t4[1] = (i2 * z2 - n2 * P2 - s2 * I2) * C3, t4[2] = (y2 * A32 - m2 * _2 + g2 * w2) * C3, t4[3] = (p2 * _2 - h2 * A32 - f2 * w2) * C3, t4[4] = (l2 * M2 - a2 * P2 - u2 * k2) * C3, t4[5] = (r2 * P2 - i2 * M2 + s2 * k2) * C3, t4[6] = (m2 * b2 - d2 * A32 - g2 * v2) * C3, t4[7] = (c2 * A32 - p2 * b2 + f2 * v2) * C3, t4[8] = (a2 * z2 - o2 * M2 + u2 * S2) * C3, t4[9] = (n2 * M2 - r2 * z2 - s2 * S2) * C3, t4[10] = (d2 * _2 - y2 * b2 + g2 * x2) * C3, t4[11] = (h2 * b2 - c2 * _2 - f2 * x2) * C3, t4[12] = (o2 * k2 - a2 * I2 - l2 * S2) * C3, t4[13] = (r2 * I2 - n2 * k2 + i2 * S2) * C3, t4[14] = (y2 * v2 - d2 * w2 - m2 * x2) * C3, t4[15] = (c2 * w2 - h2 * v2 + p2 * x2) * C3, t4) : null;
                   }, t.at = bh, t.au = Ju, t.av = Mh, t.aw = function() {
                     const t4 = {}, e2 = G.$version;
                     for (const r2 in G.$root) {
@@ -229052,7 +229052,7 @@ Use an identity property function instead: \`{ "type": "identity", "property": $
                       let x2 = false;
                       if (i3.icon && i3.icon.name) {
                         const t4 = e2.imageMap[i3.icon.name];
-                        t4 && (m2 = Qu(e2.imagePositions[i3.icon.name], n2.get("icon-offset").evaluate(i3, {}, e2.canonical), n2.get("icon-anchor").evaluate(i3, {}, e2.canonical)), x2 = !!t4.sdf, void 0 === e2.bucket.sdfIcons ? e2.bucket.sdfIcons = x2 : e2.bucket.sdfIcons !== x2 && A2("Style sheet warning: Cannot mix SDF and non-SDF icons in one buffer"), (t4.pixelRatio !== e2.bucket.pixelRatio || 0 !== n2.get("icon-rotate").constantOr(1)) && (e2.bucket.iconsNeedLinear = true));
+                        t4 && (m2 = Qu(e2.imagePositions[i3.icon.name], n2.get("icon-offset").evaluate(i3, {}, e2.canonical), n2.get("icon-anchor").evaluate(i3, {}, e2.canonical)), x2 = !!t4.sdf, void 0 === e2.bucket.sdfIcons ? e2.bucket.sdfIcons = x2 : e2.bucket.sdfIcons !== x2 && A22("Style sheet warning: Cannot mix SDF and non-SDF icons in one buffer"), (t4.pixelRatio !== e2.bucket.pixelRatio || 0 !== n2.get("icon-rotate").constantOr(1)) && (e2.bucket.iconsNeedLinear = true));
                       }
                       const v2 = Ah(d2.horizontal) || d2.vertical;
                       e2.bucket.iconsInText = !!v2 && v2.iconsInText, (v2 || m2) && wh(e2.bucket, i3, d2, m2, e2.imageMap, s2, p2, f2, g2, x2, e2.canonical);
@@ -229075,9 +229075,9 @@ Use an identity property function instead: \`{ "type": "identity", "property": $
                       }
                       return (function(t5, e2, r3, n3, i3) {
                         const s3 = t5.width, a2 = t5.height;
-                        C2 && B2 || (C2 = new OffscreenCanvas(s3, a2), B2 = C2.getContext("2d", { willReadFrequently: true })), C2.width = s3, C2.height = a2, B2.drawImage(t5, 0, 0, s3, a2);
-                        const o2 = B2.getImageData(e2, r3, n3, i3);
-                        return B2.clearRect(0, 0, s3, a2), o2.data;
+                        C2 && B22 || (C2 = new OffscreenCanvas(s3, a2), B22 = C2.getContext("2d", { willReadFrequently: true })), C2.width = s3, C2.height = a2, B22.drawImage(t5, 0, 0, s3, a2);
+                        const o2 = B22.getImageData(e2, r3, n3, i3);
+                        return B22.clearRect(0, 0, s3, a2), o2.data;
                       })(t4, r2, n2, i2, s2);
                     });
                   }, t.bx = Uc, t.by = r, t.bz = n, t.c = E2, t.d = (t4) => e(void 0, void 0, void 0, function* () {
@@ -229099,7 +229099,7 @@ Use an identity property function instead: \`{ "type": "identity", "property": $
                     n2.src = t4.byteLength ? URL.createObjectURL(i2) : z;
                   }), t.g = T, t.h = (t4, e2) => O(g(t4, { type: "json" }), e2), t.i = k, t.j = N, t.k = q, t.l = (t4, e2) => O(g(t4, { type: "arrayBuffer" }), e2), t.m = O, t.n = function(t4) {
                     return new Iu(t4).readFields(Pu, []);
-                  }, t.o = _o, t.p = Eu, t.q = rs, t.r = di, t.s = j, t.t = xi, t.u = fi, t.v = G, t.w = A2, t.x = function([t4, e2, r2]) {
+                  }, t.o = _o, t.p = Eu, t.q = rs, t.r = di, t.s = j, t.t = xi, t.u = fi, t.v = G, t.w = A22, t.x = function([t4, e2, r2]) {
                     return e2 += 90, e2 *= Math.PI / 180, r2 *= Math.PI / 180, { x: t4 * Math.cos(e2) * Math.sin(r2), y: t4 * Math.sin(e2) * Math.sin(r2), z: t4 * Math.cos(r2) };
                   }, t.y = Ce, t.z = Ui;
                 });
@@ -229456,7 +229456,7 @@ Use an identity property function instead: \`{ "type": "identity", "property": $
                       const n2 = this.trees[this._limitZoom(t4)], a2 = n2.range(G(o2), j(r2), G(s2), j(i2)), l2 = n2.data, c2 = [];
                       for (const e3 of a2) {
                         const t5 = this.stride * e3;
-                        c2.push(l2[t5 + O] > 1 ? A2(l2, t5, this.clusterProps) : this.points[l2[t5 + L]]);
+                        c2.push(l2[t5 + O] > 1 ? A22(l2, t5, this.clusterProps) : this.points[l2[t5 + L]]);
                       }
                       return c2;
                     }
@@ -229468,7 +229468,7 @@ Use an identity property function instead: \`{ "type": "identity", "property": $
                       const n2 = this.options.radius / (this.options.extent * Math.pow(2, o2 - 1)), a2 = s2.within(r2[t4 * this.stride], r2[t4 * this.stride + 1], n2), l2 = [];
                       for (const t5 of a2) {
                         const o3 = t5 * this.stride;
-                        r2[o3 + 4] === e2 && l2.push(r2[o3 + O] > 1 ? A2(r2, o3, this.clusterProps) : this.points[r2[o3 + L]]);
+                        r2[o3 + 4] === e2 && l2.push(r2[o3 + O] > 1 ? A22(r2, o3, this.clusterProps) : this.points[r2[o3 + L]]);
                       }
                       if (0 === l2.length) throw new Error(i2);
                       return l2;
@@ -229572,7 +229572,7 @@ Use an identity property function instead: \`{ "type": "identity", "property": $
                       return o2 && s2 === i2 ? Object.assign({}, s2) : s2;
                     }
                   }
-                  function A2(e2, t4, o2) {
+                  function A22(e2, t4, o2) {
                     return { type: "Feature", id: e2[t4 + L], properties: E2(e2, t4, o2), geometry: { type: "Point", coordinates: [(i2 = e2[t4], 360 * (i2 - 0.5)), R(e2[t4 + 1])] } };
                     var i2;
                   }
@@ -229657,12 +229657,12 @@ Use an identity property function instead: \`{ "type": "identity", "property": $
                     e2.push(J(l2, r2, a2, t4.properties));
                   }
                   function V(e2, t4) {
-                    t4.push(H(e2[0]), B2(e2[1]), 0);
+                    t4.push(H(e2[0]), B22(e2[1]), 0);
                   }
                   function X(e2, t4, o2, i2) {
                     let s2, r2, n2 = 0;
                     for (let o3 = 0; o3 < e2.length; o3++) {
-                      const a3 = H(e2[o3][0]), l2 = B2(e2[o3][1]);
+                      const a3 = H(e2[o3][0]), l2 = B22(e2[o3][1]);
                       t4.push(a3, l2, 0), o3 > 0 && (n2 += i2 ? (s2 * l2 - a3 * r2) / 2 : Math.sqrt(Math.pow(a3 - s2, 2) + Math.pow(l2 - r2, 2))), s2 = a3, r2 = l2;
                     }
                     const a2 = t4.length - 3;
@@ -229677,7 +229677,7 @@ Use an identity property function instead: \`{ "type": "identity", "property": $
                   function H(e2) {
                     return e2 / 360 + 0.5;
                   }
-                  function B2(e2) {
+                  function B22(e2) {
                     const t4 = Math.sin(e2 * Math.PI / 180), o2 = 0.5 - 0.25 * Math.log((1 + t4) / (1 - t4)) / Math.PI;
                     return o2 < 0 ? 0 : o2 > 1 ? 1 : o2;
                   }
@@ -230647,7 +230647,7 @@ Use an identity property function instead: \`{ "type": "identity", "property": $
                     }
                   }
                   const M = new e.q({ "sky-color": new e.D(e.v.sky["sky-color"]), "horizon-color": new e.D(e.v.sky["horizon-color"]), "fog-color": new e.D(e.v.sky["fog-color"]), "fog-ground-blend": new e.D(e.v.sky["fog-ground-blend"]), "horizon-fog-blend": new e.D(e.v.sky["horizon-fog-blend"]), "sky-horizon-blend": new e.D(e.v.sky["sky-horizon-blend"]), "atmosphere-blend": new e.D(e.v.sky["atmosphere-blend"]) });
-                  class A2 extends e.E {
+                  class A22 extends e.E {
                     constructor(t4) {
                       super(), this._transitionable = new e.T(M), this.setSky(t4), this._transitioning = this._transitionable.untransitioned(), this.recalculate(new e.z(0));
                     }
@@ -230771,9 +230771,9 @@ Use an identity property function instead: \`{ "type": "identity", "property": $
                     }
                   }
                   const F = Math.floor(o.hardwareConcurrency / 2);
-                  let B2, O;
+                  let B22, O;
                   function N() {
-                    return B2 || (B2 = new L()), B2;
+                    return B22 || (B22 = new L()), B22;
                   }
                   L.workerCount = e.C(globalThis) ? Math.max(Math.min(F, 3), 1) : 1;
                   class U {
@@ -232600,7 +232600,7 @@ Use an identity property function instead: \`{ "type": "identity", "property": $
                         var P3, D4;
                         if (i2[t5.crossTileID]) return;
                         if (_2) return void (this.placements[t5.crossTileID] = new Ut(false, false, false));
-                        let M2 = false, A3 = false, R2 = true, k2 = null, L2 = { box: null, placeable: false, offscreen: null }, F2 = { box: null, placeable: false, offscreen: null }, B3 = null, O2 = null, N2 = null, U2 = 0, j2 = 0, Z2 = 0;
+                        let M2 = false, A32 = false, R2 = true, k2 = null, L2 = { box: null, placeable: false, offscreen: null }, F2 = { box: null, placeable: false, offscreen: null }, B32 = null, O2 = null, N2 = null, U2 = 0, j2 = 0, Z2 = 0;
                         p3.textFeatureIndex ? U2 = p3.textFeatureIndex : t5.useRuntimeCollisionCircles && (U2 = t5.featureIndex), p3.verticalTextFeatureIndex && (j2 = p3.verticalTextFeatureIndex);
                         const q2 = p3.textBox;
                         if (q2) {
@@ -232653,20 +232653,20 @@ Use an identity property function instead: \`{ "type": "identity", "property": $
                             }
                           }
                         }
-                        if (B3 = L2, M2 = B3 && B3.placeable, R2 = B3 && B3.offscreen, t5.useRuntimeCollisionCircles) {
+                        if (B32 = L2, M2 = B32 && B32.placeable, R2 = B32 && B32.offscreen, t5.useRuntimeCollisionCircles) {
                           const i3 = s2.text.placedSymbolArray.get(t5.centerJustifiedTextSymbolIndex), n3 = e.ai(s2.textSizeData, m2, i3), d3 = o2.get("text-padding");
                           O2 = this.collisionIndex.placeCollisionCircles(x2, i3, s2.lineVertexArray, s2.glyphOffsetArray, n3, l2, h2, c2, u2, a2, I2, f2.predicate, t5.collisionCircleDiameter, d3, r2, z2), O2.circles.length && O2.collisionDetected && !a2 && e.w("Collisions detected, but collision boxes are not shown"), M2 = y2 || O2.circles.length > 0 && !O2.collisionDetected, R2 = R2 && O2.offscreen;
                         }
                         if (p3.iconFeatureIndex && (Z2 = p3.iconFeatureIndex), p3.iconBox) {
                           const t6 = (t7) => this.collisionIndex.placeCollisionBox(t7, b2, d2, l2, h2, I2, T2, n2, f2.predicate, z2, E3 && k2 ? k2 : void 0);
-                          F2 && F2.placeable && p3.verticalIconBox ? (N2 = t6(p3.verticalIconBox), A3 = N2.placeable) : (N2 = t6(p3.iconBox), A3 = N2.placeable), R2 = R2 && N2.offscreen;
+                          F2 && F2.placeable && p3.verticalIconBox ? (N2 = t6(p3.verticalIconBox), A32 = N2.placeable) : (N2 = t6(p3.iconBox), A32 = N2.placeable), R2 = R2 && N2.offscreen;
                         }
                         const V2 = g2 || 0 === t5.numHorizontalGlyphVertices && 0 === t5.numVerticalGlyphVertices, G2 = v2 || 0 === t5.numIconVertices;
-                        V2 || G2 ? G2 ? V2 || (A3 = A3 && M2) : M2 = A3 && M2 : A3 = M2 = A3 && M2;
-                        const H2 = A3 && N2.placeable;
-                        if (M2 && B3.placeable && this.collisionIndex.insertCollisionBox(B3.box, x2, o2.get("text-ignore-placement"), s2.bucketInstanceId, F2 && F2.placeable && j2 ? j2 : U2, f2.ID), H2 && this.collisionIndex.insertCollisionBox(N2.box, b2, o2.get("icon-ignore-placement"), s2.bucketInstanceId, Z2, f2.ID), O2 && M2 && this.collisionIndex.insertCollisionCircles(O2.circles, x2, o2.get("text-ignore-placement"), s2.bucketInstanceId, U2, f2.ID), a2 && this.storeCollisionData(s2.bucketInstanceId, w3, p3, B3, N2, O2), 0 === t5.crossTileID) throw new Error("symbolInstance.crossTileID can't be 0");
+                        V2 || G2 ? G2 ? V2 || (A32 = A32 && M2) : M2 = A32 && M2 : A32 = M2 = A32 && M2;
+                        const H2 = A32 && N2.placeable;
+                        if (M2 && B32.placeable && this.collisionIndex.insertCollisionBox(B32.box, x2, o2.get("text-ignore-placement"), s2.bucketInstanceId, F2 && F2.placeable && j2 ? j2 : U2, f2.ID), H2 && this.collisionIndex.insertCollisionBox(N2.box, b2, o2.get("icon-ignore-placement"), s2.bucketInstanceId, Z2, f2.ID), O2 && M2 && this.collisionIndex.insertCollisionCircles(O2.circles, x2, o2.get("text-ignore-placement"), s2.bucketInstanceId, U2, f2.ID), a2 && this.storeCollisionData(s2.bucketInstanceId, w3, p3, B32, N2, O2), 0 === t5.crossTileID) throw new Error("symbolInstance.crossTileID can't be 0");
                         if (0 === s2.bucketInstanceId) throw new Error("bucket.bucketInstanceId can't be 0");
-                        this.placements[t5.crossTileID] = new Ut(M2 || C3, A3 || S2, R2 || s2.justReloaded), i2[t5.crossTileID] = true;
+                        this.placements[t5.crossTileID] = new Ut(M2 || C3, A32 || S2, R2 || s2.justReloaded), i2[t5.crossTileID] = true;
                       };
                       if (P2) {
                         if (0 !== t4.symbolInstanceStart) throw new Error("bucket.bucketInstanceId should be 0");
@@ -233055,7 +233055,7 @@ Use an identity property function instead: \`{ "type": "identity", "property": $
                       if (!i2.validate || !ce(this, e.u(o2))) {
                         this._loaded = true, this.stylesheet = o2;
                         for (const t5 in o2.sources) this.addSource(t5, o2.sources[t5], { validate: false });
-                        o2.sprite ? this._loadSprite(o2.sprite) : this.imageManager.setLoaded(true), this.glyphManager.setURL(o2.glyphs), this._createLayers(), this.light = new D2(this.stylesheet.light), this.sky = new A2(this.stylesheet.sky), this.map.setTerrain(null !== (s2 = this.stylesheet.terrain) && void 0 !== s2 ? s2 : null), this.fire(new e.k("data", { dataType: "style" })), this.fire(new e.k("style.load"));
+                        o2.sprite ? this._loadSprite(o2.sprite) : this.imageManager.setLoaded(true), this.glyphManager.setURL(o2.glyphs), this._createLayers(), this.light = new D2(this.stylesheet.light), this.sky = new A22(this.stylesheet.sky), this.map.setTerrain(null !== (s2 = this.stylesheet.terrain) && void 0 !== s2 ? s2 : null), this.fire(new e.k("data", { dataType: "style" })), this.fire(new e.k("style.load"));
                       }
                     }
                     _createLayers() {
@@ -234449,11 +234449,11 @@ uniform ${i3} ${a3} u_${s3};
                       const u3 = o2 ? h3.text : h3.icon;
                       if (!u3 || !u3.segments.get().length || !u3.hasVisibleVertices) continue;
                       const d3 = u3.programConfigurations.get(a2.id), _3 = o2 || h3.sdfIcons, I3 = o2 ? h3.textSizeData : h3.iconSizeData, S2 = v2 || 0 !== m2.pitch, z2 = t4.useProgram($i(_3, o2, h3), d3), D3 = e.ag(I3, m2.zoom), M2 = t4.style.map.terrain && t4.style.map.terrain.getTerrainData(l3);
-                      let A3, R2, k2, L2, F2 = [0, 0], B3 = null;
-                      if (o2) R2 = s3.glyphAtlasTexture, k2 = p2.LINEAR, A3 = s3.glyphAtlasTexture.size, h3.iconsInText && (F2 = s3.imageAtlasTexture.size, B3 = s3.imageAtlasTexture, L2 = S2 || t4.options.rotating || t4.options.zooming || "composite" === I3.kind || "camera" === I3.kind ? p2.LINEAR : p2.NEAREST);
+                      let A32, R2, k2, L2, F2 = [0, 0], B32 = null;
+                      if (o2) R2 = s3.glyphAtlasTexture, k2 = p2.LINEAR, A32 = s3.glyphAtlasTexture.size, h3.iconsInText && (F2 = s3.imageAtlasTexture.size, B32 = s3.imageAtlasTexture, L2 = S2 || t4.options.rotating || t4.options.zooming || "composite" === I3.kind || "camera" === I3.kind ? p2.LINEAR : p2.NEAREST);
                       else {
                         const e2 = 1 !== a2.layout.get("icon-size").constantOr(0) || h3.iconsNeedLinear;
-                        R2 = s3.imageAtlasTexture, k2 = _3 || t4.options.rotating || t4.options.zooming || e2 || S2 ? p2.LINEAR : p2.NEAREST, A3 = s3.imageAtlasTexture.size;
+                        R2 = s3.imageAtlasTexture, k2 = _3 || t4.options.rotating || t4.options.zooming || e2 || S2 ? p2.LINEAR : p2.NEAREST, A32 = s3.imageAtlasTexture.size;
                       }
                       const O2 = Bt(s3, 1, t4.transform.zoom), N2 = b2 ? l3.posMatrix : Vi, U2 = gt(N2, v2, g2, t4.transform, O2), j2 = vt(N2, v2, g2, t4.transform, O2), Z2 = vt(l3.posMatrix, v2, g2, t4.transform, O2), q2 = f2.translatePosition(t4.transform, s3, r2, n2), V2 = E3 && h3.hasTextData(), G2 = "none" !== a2.layout.get("icon-text-fit") && V2 && h3.hasIconData();
                       if (x2) {
@@ -234462,8 +234462,8 @@ uniform ${i3} ${a3} u_${s3};
                       }
                       const H2 = l3.posMatrix, W2 = o2 && E3 || G2, $2 = x2 || W2 ? Vi : U2, X2 = j2, K3 = _3 && 0 !== a2.paint.get(o2 ? "text-halo-width" : "icon-halo-width").constantOr(1);
                       let J2;
-                      J2 = _3 ? h3.iconsInText ? Ve(I3.kind, D3, y2, v2, x2, W2, t4, H2, $2, X2, q2, A3, F2, C3) : qe(I3.kind, D3, y2, v2, x2, W2, t4, H2, $2, X2, q2, o2, A3, true, C3) : Ze(I3.kind, D3, y2, v2, x2, W2, t4, H2, $2, X2, q2, o2, A3, C3);
-                      const Y2 = { program: z2, buffers: u3, uniformValues: J2, atlasTexture: R2, atlasTextureIcon: B3, atlasInterpolation: k2, atlasInterpolationIcon: L2, isSDF: _3, hasHalo: K3 };
+                      J2 = _3 ? h3.iconsInText ? Ve(I3.kind, D3, y2, v2, x2, W2, t4, H2, $2, X2, q2, A32, F2, C3) : qe(I3.kind, D3, y2, v2, x2, W2, t4, H2, $2, X2, q2, o2, A32, true, C3) : Ze(I3.kind, D3, y2, v2, x2, W2, t4, H2, $2, X2, q2, o2, A32, C3);
+                      const Y2 = { program: z2, buffers: u3, uniformValues: J2, atlasTexture: R2, atlasTextureIcon: B32, atlasInterpolation: k2, atlasInterpolationIcon: L2, isSDF: _3, hasHalo: K3 };
                       if (w2 && h3.canOverlap) {
                         T2 = true;
                         const t5 = u3.segments.get();
@@ -236798,14 +236798,14 @@ uniform ${i3} ${a3} u_${s3};
                       }, M2 = function(t5) {
                         return w2 * ((S2(z2) * (C3(e2 = z2 + b2 * t5) / S2(e2)) - C3(z2)) / E3) / I2;
                         var e2;
-                      }, A3 = (P2(true) - z2) / b2;
-                      if (Math.abs(I2) < 1e-6 || !isFinite(A3)) {
+                      }, A32 = (P2(true) - z2) / b2;
+                      if (Math.abs(I2) < 1e-6 || !isFinite(A32)) {
                         if (Math.abs(w2 - T2) < 1e-6) return this.easeTo(t4, i2);
                         const e2 = T2 < w2 ? -1 : 1;
-                        A3 = Math.abs(Math.log(T2 / w2)) / b2, M2 = () => 0, D3 = (t5) => Math.exp(e2 * b2 * t5);
+                        A32 = Math.abs(Math.log(T2 / w2)) / b2, M2 = () => 0, D3 = (t5) => Math.exp(e2 * b2 * t5);
                       }
-                      return t4.duration = "duration" in t4 ? +t4.duration : 1e3 * A3 / ("screenSpeed" in t4 ? +t4.screenSpeed / b2 : +t4.speed), t4.maxDuration && t4.duration > t4.maxDuration && (t4.duration = 0), this._zooming = true, this._rotating = n2 !== c2, this._pitching = u2 !== l2, this._padding = !s2.isPaddingEqual(d2), this._prepareEase(i2, false), this.terrain && this._prepareElevation(f2), this._ease((a3) => {
-                        const o2 = a3 * A3, m3 = 1 / D3(o2);
+                      return t4.duration = "duration" in t4 ? +t4.duration : 1e3 * A32 / ("screenSpeed" in t4 ? +t4.screenSpeed / b2 : +t4.speed), t4.maxDuration && t4.duration > t4.maxDuration && (t4.duration = 0), this._zooming = true, this._rotating = n2 !== c2, this._pitching = u2 !== l2, this._padding = !s2.isPaddingEqual(d2), this._prepareEase(i2, false), this.terrain && this._prepareElevation(f2), this._ease((a3) => {
+                        const o2 = a3 * A32, m3 = 1 / D3(o2);
                         s2.zoom = 1 === a3 ? g2 : r2 + s2.scaleZoom(m3), this._rotating && (s2.bearing = e.y.number(n2, c2, a3)), this._pitching && (s2.pitch = e.y.number(l2, u2, a3)), this._padding && (s2.interpolatePadding(h2, d2, a3), p2 = s2.centerPoint.add(_2)), this.terrain && !t4.freezeElevation && this._updateElevation(a3);
                         const v3 = 1 === a3 ? f2 : s2.unproject(x2.add(y2.mult(M2(o2))).mult(m3));
                         s2.setLocationAtPoint(s2.renderWorldCopies ? v3.wrap() : v3, p2), this._applyUpdatedTransform(s2), this._fireMoveEvents(i2);
@@ -238379,8 +238379,8 @@ uniform ${i3} ${a3} u_${s3};
                       it[t5] = e2;
                     })(t4, i2);
                   }), t.clearPrewarmedResources = function() {
-                    const t4 = B2;
-                    t4 && (t4.isPreloaded() && 1 === t4.numActive() ? (t4.release(k), B2 = null) : console.warn("Could not clear WebWorkers since there are active Map instances that still reference it. The pre-warmed WebWorker pool can only be cleared when all map instances have been removed with map.remove()"));
+                    const t4 = B22;
+                    t4 && (t4.isPreloaded() && 1 === t4.numActive() ? (t4.release(k), B22 = null) : console.warn("Could not clear WebWorkers since there are active Map instances that still reference it. The pre-warmed WebWorker pool can only be cleared when all map instances have been removed with map.remove()"));
                   }, t.getMaxParallelImageRequests = function() {
                     return e.a.MAX_PARALLEL_IMAGE_REQUESTS;
                   }, t.getRTLTextPluginStatus = function() {
@@ -243819,14 +243819,14 @@ uniform ${i3} ${a3} u_${s3};
                 var circuits = [];
                 var stack = [];
                 var blocked = [];
-                var B2 = {};
+                var B22 = {};
                 var Ak = [];
                 var s;
                 function unblock(u) {
                   blocked[u] = false;
-                  if (B2.hasOwnProperty(u)) {
-                    Object.keys(B2[u]).forEach(function(w) {
-                      delete B2[u][w];
+                  if (B22.hasOwnProperty(u)) {
+                    Object.keys(B22[u]).forEach(function(w) {
+                      delete B22[u][w];
                       if (blocked[w]) {
                         unblock(w);
                       }
@@ -243853,10 +243853,10 @@ uniform ${i3} ${a3} u_${s3};
                   } else {
                     for (i2 = 0; i2 < Ak[v].length; i2++) {
                       w = Ak[v][i2];
-                      var entry = B2[w];
+                      var entry = B22[w];
                       if (!entry) {
                         entry = {};
-                        B2[w] = entry;
+                        B22[w] = entry;
                       }
                       entry[w] = true;
                     }
@@ -243921,7 +243921,7 @@ uniform ${i3} ${a3} u_${s3};
                       for (var j = 0; j < Ak[i].length; j++) {
                         var vertexId = Ak[i][j];
                         blocked[+vertexId] = false;
-                        B2[vertexId] = {};
+                        B22[vertexId] = {};
                       }
                     }
                     circuit(s);
@@ -264336,6 +264336,165 @@ uniform ${i3} ${a3} u_${s3};
     }
   });
 
+  // src/audio.ts
+  function ensure(t) {
+    if (t !== true) {
+      throw new Error("Ensure failed!");
+    }
+  }
+  function filter(B, A, input) {
+    ensure(A.length === B.length);
+    ensure(A[0] === 1);
+    const x = new Float64Array(input);
+    const output = new Float64Array(input.length);
+    for (let i = 0; i < A.length; ++i) {
+      for (let j = 0; j <= i; ++j) {
+        output[i] -= A[j] * output[i - j];
+        output[i] += B[j] * x[i - j];
+      }
+    }
+    for (let i = A.length; i < input.length; ++i) {
+      for (let j = 0; j < A.length; ++j) {
+        output[i] -= A[j] * output[i - j];
+        output[i] += B[j] * x[i - j];
+      }
+    }
+    return output;
+  }
+  function combineFilteredAudio(band_125, band_250, band_500, band_1000, band_2000, band_4000) {
+    ensure(new Set([...arguments].map((i) => i.length)).size === 1);
+    const audio_125 = filter(B0, A0, band_125);
+    const audio_250 = filter(B1, A1, band_250);
+    const audio_500 = filter(B2, A2, band_500);
+    const audio_1000 = filter(B3, A3, band_1000);
+    const audio_2000 = filter(B4, A4, band_2000);
+    const audio_4000 = filter(B5, A5, band_4000);
+    const output = new Float32Array(band_125.length);
+    let maxVal = 0;
+    for (let i = 0; i < audio_125.length; ++i) {
+      output[i] = audio_125[i] + audio_250[i] + audio_500[i] + audio_1000[i] + audio_2000[i] + audio_4000[i];
+      maxVal = Math.max(maxVal, Math.abs(output[i]));
+    }
+    for (let i = 0; i < output.length; ++i) {
+      output[i] /= maxVal;
+    }
+    return output;
+  }
+  var A0, A1, A2, A3, A4, A5, B0, B1, B2, B3, B4, B5;
+  var init_audio = __esm({
+    "src/audio.ts"() {
+      "use strict";
+      A0 = [
+        1,
+        -5.97710280273096,
+        14.8865696804245,
+        -19.7752371006017,
+        14.7773215278572,
+        -5.88969646032918,
+        0.978145155399091
+      ];
+      A1 = [
+        1,
+        -5.95261778163623,
+        14.7673459816632,
+        -19.5430940912569,
+        14.5513887157824,
+        -5.77979012308764,
+        0.956767299736394
+      ];
+      A2 = [
+        1,
+        -5.89895954268595,
+        14.5121134493874,
+        -19.0579107531048,
+        14.090719754987,
+        -5.56136155784429,
+        0.915398724423662
+      ];
+      A3 = [
+        1,
+        -5.77342904194451,
+        13.9388867314386,
+        -18.0128785058685,
+        13.1407882124164,
+        -5.13128137368724,
+        0.837918571956601
+      ];
+      A4 = [
+        1,
+        -5.45398042338919,
+        12.5790535567913,
+        -15.6974643781023,
+        11.1774733875855,
+        -4.30667765748868,
+        0.70186274596409
+      ];
+      A5 = [
+        1,
+        -4.57926317858504,
+        9.33236799409301,
+        -10.7411395683285,
+        7.35796347695069,
+        -2.84721146218067,
+        0.491195076831595
+      ];
+      B0 = [
+        16674007995305e-20,
+        0,
+        -500220239859151e-21,
+        0,
+        500220239859151e-21,
+        0,
+        -16674007995305e-20
+      ];
+      B1 = [
+        131938414947782e-20,
+        0,
+        -395815244843347e-20,
+        0,
+        395815244843347e-20,
+        0,
+        -131938414947782e-20
+      ];
+      B2 = [
+        103281444898781e-19,
+        0,
+        -309844334696344e-19,
+        0,
+        309844334696344e-19,
+        0,
+        -103281444898781e-19
+      ];
+      B3 = [
+        791670726788158e-19,
+        0,
+        -237501218036447e-18,
+        0,
+        237501218036447e-18,
+        0,
+        -791670726788158e-19
+      ];
+      B4 = [
+        583056136559946e-18,
+        0,
+        -0.00174916840967984,
+        0,
+        0.00174916840967984,
+        0,
+        -583056136559946e-18
+      ];
+      B5 = [
+        0.00399558738785181,
+        0,
+        -0.0119867621635554,
+        0,
+        0.0119867621635554,
+        0,
+        -0.00399558738785181
+      ];
+    }
+  });
+
   // src/specular_ray_tracing.ts
   function rand() {
     return Math.random() * 2 - 1;
@@ -264696,17 +264855,17 @@ uniform ${i3} ${a3} u_${s3};
     let output2000 = new Float32Array(SAMPLE_RATE * OUTPUT_AUDIO_LENGTH);
     let output4000 = new Float32Array(SAMPLE_RATE * OUTPUT_AUDIO_LENGTH);
     for (let i = 0; i < settings.numberOfPasses; i++) {
-      const result2 = await intersectionsRunner.runPass(settings.rayCount);
+      const result = await intersectionsRunner.runPass(settings.rayCount);
       let t = 10;
-      for (let j = 0; j < result2[0].length; j += 2) {
-        const index = Math.round(SAMPLE_RATE * (result2[0][j] / SPEED_OF_SOUND));
-        const air_absorption = Math.exp(-result2[0][j] * AIR_ABSORPTION_COEFF);
-        output125[index] += result2[0][j + 1] * air_absorption;
-        output250[index] += result2[1][j + 1] * air_absorption;
-        output500[index] += result2[2][j + 1] * air_absorption;
-        output1000[index] += result2[3][j + 1] * air_absorption;
-        output2000[index] += result2[4][j + 1] * air_absorption;
-        output4000[index] += result2[5][j + 1] * air_absorption;
+      for (let j = 0; j < result[0].length; j += 2) {
+        const index = Math.round(SAMPLE_RATE * (result[0][j] / SPEED_OF_SOUND));
+        const air_absorption = Math.exp(-result[0][j] * AIR_ABSORPTION_COEFF);
+        output125[index] += result[0][j + 1] * air_absorption;
+        output250[index] += result[1][j + 1] * air_absorption;
+        output500[index] += result[2][j + 1] * air_absorption;
+        output1000[index] += result[3][j + 1] * air_absorption;
+        output2000[index] += result[4][j + 1] * air_absorption;
+        output4000[index] += result[5][j + 1] * air_absorption;
       }
     }
     const directSoundDistance = Math.sqrt(
@@ -264725,33 +264884,21 @@ uniform ${i3} ${a3} u_${s3};
     console.log(
       `Added ${directSoundIntensity} to ${directSoundIndex} (${directSoundDistance}m = ${directSoundDistance / SPEED_OF_SOUND}s)`
     );
+    const outputAudio = combineFilteredAudio(
+      output125,
+      output250,
+      output500,
+      output1000,
+      output2000,
+      output4000
+    );
     console.timeEnd("Total (excluding setup)");
     console.timeEnd("Total (including setup)");
-    console.log(`
-band125 = [
-  ${output125.join(",")}
-];
-band250 = [
-  ${output250.join(",")}
-];
-band500 = [
-  ${output500.join(",")}
-];
-band1000 = [
-  ${output1000.join(",")}
-];
-band2000 = [
-  ${output2000.join(",")}
-];
-band4000 = [
-  ${output4000.join(",")}
-];
-    `);
-    const result = await intersectionsRunner.runPass(settings.rayCount);
+    console.log(outputAudio.join(","));
     return {
       rays,
       triangles,
-      result: result[0]
+      result: outputAudio
     };
   }
   async function plotRaySpecularReflections() {
@@ -264771,8 +264918,8 @@ band4000 = [
     plotSpecularReflections(triangles, rayPositions, SHOW_FACES);
   }
   async function stressTestRaySpecularReflections() {
-    const { rays, triangles, result } = await runRayIntersections(STRESS_TEST_SETTINGS);
-    console.log(result);
+    const { result } = await runRayIntersections(STRESS_TEST_SETTINGS);
+    return result;
   }
   var MAX_STORAGE_BUFFER_SIZE, SHOW_FACES, OUTPUT_AUDIO_LENGTH, SOURCE_POSITION, RECEIVER_POSITION, AIR_ABSORPTION_COEFF, CUBE_FACES, PLOT_SETTINGS, ipp, STRESS_TEST_SETTINGS, SpecularRayIntersections;
   var init_specular_ray_tracing = __esm({
@@ -264783,6 +264930,7 @@ band4000 = [
       init_draw();
       init_floatarrays();
       init_orient_surfaces();
+      init_audio();
       MAX_STORAGE_BUFFER_SIZE = 134217728;
       SHOW_FACES = false;
       OUTPUT_AUDIO_LENGTH = 4;
@@ -265254,7 +265402,10 @@ band4000 = [
   var require_index = __commonJS({
     "src/index.ts"() {
       init_specular_ray_tracing();
+      init_constants();
       init_ray_intersections2();
+      var audioToPlay = new Float32Array();
+      var ctx = null;
       async function withDisabled(element, fn) {
         const text = element.innerText;
         element.innerText = "Running";
@@ -265270,15 +265421,33 @@ band4000 = [
         );
         document.querySelector("#run-stress")?.addEventListener(
           "click",
-          (e) => withDisabled(
-            e.target,
-            stressTestRaySpecularReflections
-          )
+          (e) => withDisabled(e.target, async () => {
+            audioToPlay = await stressTestRaySpecularReflections() || new Float32Array();
+            const playBtn = document.querySelector("#play-audio");
+            if (playBtn instanceof HTMLButtonElement) {
+              playBtn.disabled = false;
+            }
+          })
         );
         document.querySelector("#run-tests")?.addEventListener(
           "click",
           (e) => withDisabled(e.target, runRayIntersectionTests)
         );
+        document.querySelector("#play-audio")?.addEventListener("click", (e) => {
+          ctx = ctx || new AudioContext();
+          const sourceBuffer = ctx.createBuffer(1, audioToPlay.length, SAMPLE_RATE);
+          const channel0 = sourceBuffer.getChannelData(0);
+          for (let i = 0; i < audioToPlay.length; ++i) {
+            channel0[i] = audioToPlay[i];
+          }
+          const source = ctx.createBufferSource();
+          source.buffer = sourceBuffer;
+          const gainNode = ctx.createGain();
+          gainNode.gain.value = 1;
+          source.connect(gainNode);
+          gainNode.connect(ctx.destination);
+          source.start(0);
+        });
       });
     }
   });
