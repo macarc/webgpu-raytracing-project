@@ -264364,9 +264364,16 @@ uniform ${i3} ${a3} u_${s3};
     dx: f32,
     dy: f32,
     dz: f32,
-    // TODO: these should really be integers.
+    nx: f32,
+    ny: f32,
+    nz: f32,
     distanceTravelled: f32,
-    bounceCount: f32,
+    intensity125: f32,
+    intensity250: f32,
+    intensity500: f32,
+    intensity1000: f32,
+    intensity2000: f32,
+    intensity4000: f32,
   }
 
   struct Point {
@@ -264393,7 +264400,22 @@ uniform ${i3} ${a3} u_${s3};
   var<storage, read> triangleBuffer: array<Triangle>;
 
   @group(0) @binding(2)
-  var<storage, read_write> output: array<Hit>;
+  var<storage, read_write> band_125: array<Hit>;
+
+  @group(0) @binding(3)
+  var<storage, read_write> band_250: array<Hit>;
+
+  @group(0) @binding(4)
+  var<storage, read_write> band_500: array<Hit>;
+
+  @group(0) @binding(5)
+  var<storage, read_write> band_1000: array<Hit>;
+
+  @group(0) @binding(6)
+  var<storage, read_write> band_2000: array<Hit>;
+
+  @group(0) @binding(7)
+  var<storage, read_write> band_4000: array<Hit>;
 
   @compute @workgroup_size(${WORKGROUP_SIZE})
   fn main(
@@ -264426,11 +264448,17 @@ uniform ${i3} ${a3} u_${s3};
     var rayposition = vec3f(initialRay.x, initialRay.y, initialRay.z);
     var raydirection = vec3f(initialRay.dx, initialRay.dy, initialRay.dz);
     var raydistancetravelled = initialRay.distanceTravelled;
-    let rayinitialbouncecount = initialRay.bounceCount;
 
-    let receiverRadius = 1.0;
-    let receiverRadius2 = pow(receiverRadius, 2.0);
-    let receiverPosition = vec3(8.5, 0.0, 0.0);
+    var intensity_125 = initialRay.intensity125;
+    var intensity_250 = initialRay.intensity250;
+    var intensity_500 = initialRay.intensity500;
+    var intensity_1000 = initialRay.intensity1000;
+    var intensity_2000 = initialRay.intensity2000;
+    var intensity_4000 = initialRay.intensity4000;
+
+    var lastsurfacenormal = vec3(initialRay.nx, initialRay.ny, initialRay.nz);
+
+    let receiverPosition = vec3(${RECEIVER_POSITION.join(",")});
 
     for (var n: u32 = 0; n < ${intersectionCount}; n++) {
       let index = rayIndex * ${intersectionCount} + n;
@@ -264438,6 +264466,11 @@ uniform ${i3} ${a3} u_${s3};
       // TODO: infinity
       var distance = 1e10;
       var closestTriangleIndex = triangleCount;
+      var receiverRayTriangleDistance = 1e10; // TODO: infinity.
+
+      let vecToReceiver = receiverPosition - rayposition;
+      let directionToReceiver = normalize(vecToReceiver);
+      let distanceToReceiver = length(vecToReceiver);
 
       for (var i = 0; i < triangleCount; i++) {
         let triangle = triangleBuffer[i];
@@ -264447,8 +264480,34 @@ uniform ${i3} ${a3} u_${s3};
         let edge2 = vec3f(triangle.v1, triangle.v2, triangle.v3);
         let offset = vec3f(rayposition.x - triangle.x, rayposition.y - triangle.y, rayposition.z - triangle.z);
 
-        let ray_cross_e2 = cross(raydirection, edge2);
         let offset_cross_e1 = cross(offset, edge1);
+
+        // Ray-trace to receiver.
+        {
+          // TODO: negative?
+          let ray_cross_e2 = cross(directionToReceiver, edge2);
+
+          // NOTE: greater than 0 iff ray is incident on backface.
+          let dir = -dot(edge1, ray_cross_e2);  // directionToReceiver.(e1 x e2)
+
+          let det = dot(edge1, ray_cross_e2);
+          let inv_det = 1.0 / det;
+
+          let u = inv_det * dot(offset, ray_cross_e2);
+          let v = inv_det * dot(directionToReceiver, offset_cross_e1);
+
+          let t = inv_det * dot(edge2, offset_cross_e1);
+
+          // TODO: remove if?
+          if (abs(det) < eps) || (u < -eps) || (v < -eps) || (u + v > eps1) {
+
+          } else if (t > eps && dir >= 0) {
+            receiverRayTriangleDistance = min(receiverRayTriangleDistance, t);
+          }
+        }
+
+        // Ray-trace normal ray.
+        let ray_cross_e2 = cross(raydirection, edge2);
 
         // NOTE: greater than 0 iff ray is incident on backface.
         let dir = -dot(edge1, ray_cross_e2);  // raydirection.(e1 x e2)
@@ -264472,23 +264531,55 @@ uniform ${i3} ${a3} u_${s3};
         }
       }
 
-      output[index].intensity = 0;
+      band_125[index].intensity = 0;
+      band_250[index].intensity = 0;
+      band_500[index].intensity = 0;
+      band_1000[index].intensity = 0;
+      band_2000[index].intensity = 0;
+      band_4000[index].intensity = 0;
 
-      // This should always be true.
-      if (closestTriangleIndex < triangleCount) {
-        // Get distance from receiver
-        let vecToReceiver = receiverPosition - rayposition;
-        let distanceToClosestPoint = dot(vecToReceiver, raydirection);
-        let distanceFromReceiver = length(vecToReceiver - distanceToClosestPoint * raydirection); // sqrt(pow(length(vecToReceiver), 2) - pow(distanceToClosestPoint, 2));
+      // If the ray to the receiver did not hit a triangle before hitting the receiver,
+      // add the contribution to the output.
+      if (receiverRayTriangleDistance >= distanceToReceiver) {
+        let cosNormalAngleToReceiver = dot(directionToReceiver, -lastsurfacenormal);
 
-        let time = raydistancetravelled + abs(distanceToClosestPoint);
-        let intensity = pow(0.9, f32(n) + rayinitialbouncecount);
+        // Only count if the ray is not intersecting the last surface.
+        if (cosNormalAngleToReceiver > 0) {
+          let distance = raydistancetravelled + distanceToReceiver;
 
-        if (distanceFromReceiver <= receiverRadius && abs(distanceToClosestPoint) <= distance) {
-          output[index].time = time;
-          output[index].intensity = intensity;
+          // TODO: this is a waste of memory.
+          band_125[index].time = distance;
+          band_250[index].time = distance;
+          band_500[index].time = distance;
+          band_1000[index].time = distance;
+          band_2000[index].time = distance;
+          band_4000[index].time = distance;
+
+          band_125[index].intensity = intensity_125 * cosNormalAngleToReceiver;
+          band_250[index].intensity = intensity_250 * cosNormalAngleToReceiver;
+          band_500[index].intensity = intensity_500 * cosNormalAngleToReceiver;
+          band_1000[index].intensity = intensity_1000 * cosNormalAngleToReceiver;
+          band_2000[index].intensity = intensity_2000 * cosNormalAngleToReceiver;
+          band_4000[index].intensity = intensity_4000 * cosNormalAngleToReceiver;
         }
+      }
 
+      // let distanceToClosestReceiverPoint = dot(vecToReceiver, raydirection);
+      // let distanceFromRayToReceiver = length(vecToReceiver - distanceToClosestReceiverPoint*raydirection);
+
+      // let receiverRadius = 1.0;
+
+      // if (distanceFromRayToReceiver <= receiverRadius && abs(distanceToClosestReceiverPoint) <= distance) {
+      //   band_125[index].intensity += intensity_125;
+      //   band_250[index].intensity += intensity_250;
+      //   band_500[index].intensity += intensity_500;
+      //   band_1000[index].intensity += intensity_1000;
+      //   band_2000[index].intensity += intensity_2000;
+      //   band_4000[index].intensity += intensity_4000;
+      // }
+
+      // This should always be true - it should always intersect a triangle.
+      if (closestTriangleIndex < triangleCount) {
         let triangle = triangleBuffer[closestTriangleIndex];
         let edge1 = vec3f(triangle.u1, triangle.u2, triangle.u3);
         let edge2 = vec3f(triangle.v1, triangle.v2, triangle.v3);
@@ -264500,6 +264591,24 @@ uniform ${i3} ${a3} u_${s3};
         rayposition = newposition;
         raydirection = reflected;
         raydistancetravelled += distance;
+        lastsurfacenormal = triangleNormal;
+
+        // Carpet, heavy
+        // intensity_125 *= 0.63;
+        // intensity_250 *= 0.59;
+        // intensity_500 *= 0.37;
+        // intensity_1000 *= 0.15;
+        // intensity_2000 *= 0.04;
+        // intensity_4000 *= 0.08;
+
+
+        // Concrete
+        intensity_125 *= 0.88;
+        intensity_250 *= 0.91;
+        intensity_500 *= 0.93;
+        intensity_1000 *= 0.95;
+        intensity_2000 *= 0.95;
+        intensity_4000 *= 0.96;
       }
     }
 
@@ -264511,8 +264620,24 @@ uniform ${i3} ${a3} u_${s3};
     rayBuffer[rayIndex].dx = raydirection.x;
     rayBuffer[rayIndex].dy = raydirection.y;
     rayBuffer[rayIndex].dz = raydirection.z;
+    rayBuffer[rayIndex].nx = lastsurfacenormal.x;
+    rayBuffer[rayIndex].ny = lastsurfacenormal.y;
+    rayBuffer[rayIndex].nz = lastsurfacenormal.z;
     rayBuffer[rayIndex].distanceTravelled = raydistancetravelled;
-    rayBuffer[rayIndex].bounceCount = rayinitialbouncecount + ${intersectionCount};
+    rayBuffer[rayIndex].intensity125 = intensity_125;
+    rayBuffer[rayIndex].intensity250 = intensity_250;
+    rayBuffer[rayIndex].intensity500 = intensity_500;
+    rayBuffer[rayIndex].intensity1000 = intensity_1000;
+    rayBuffer[rayIndex].intensity2000 = intensity_2000;
+    rayBuffer[rayIndex].intensity4000 = intensity_4000;
+
+
+    intensity_125 = initialRay.intensity125;
+    intensity_250 = initialRay.intensity250;
+    intensity_500 = initialRay.intensity500;
+    intensity_1000 = initialRay.intensity1000;
+    intensity_2000 = initialRay.intensity2000;
+    intensity_4000 = initialRay.intensity4000;
   }
 `
     );
@@ -264521,25 +264646,10 @@ uniform ${i3} ${a3} u_${s3};
     console.time("Total (including setup)");
     console.log("Creating geometry");
     const rays = [];
-    const unorientedTriangles = [];
-    if (PLOT_CUBE) {
-      unorientedTriangles.push(...CUBE_FACES);
-    } else {
-      for (let i = 0; i < settings.triangleCount; ++i) {
-        unorientedTriangles.push({
-          p1: [rand() * 100, rand() * 100, rand() * 100],
-          p2: [rand() * 100, rand() * 100, rand() * 100],
-          p3: [rand() * 100, rand() * 100, rand() * 100]
-        });
-      }
-    }
-    const triangles = await orientTriangles(unorientedTriangles);
+    const triangles = await orientTriangles(CUBE_FACES);
     for (let i = 0; i < settings.rayCount; ++i) {
       rays.push({
-        // NOTE: placing at the exact origin [0,0,0] causes artefacts.
-        // TODO: once diffusion has been implemented, try [0,0,0] again.
-        position: [0.1, -0.1, -0.1],
-        // [0, 0, 0]
+        position: SOURCE_POSITION,
         direction: randomPointOnUnitSphere()
       });
     }
@@ -264554,30 +264664,94 @@ uniform ${i3} ${a3} u_${s3};
     const intersectionsRunner = new SpecularRayIntersections(
       gpuDevice,
       new Float32Array(
-        rays.flatMap((ray) => [...ray.position, ...ray.direction, 0, 0])
+        rays.flatMap((ray) => [
+          ...ray.position,
+          ...ray.direction,
+          ...[0, 0, 0],
+          0,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ])
       ),
       trianglesToFloatArray(triangles),
-      new Float32Array(outputSize),
+      [
+        new Float32Array(outputSize),
+        new Float32Array(outputSize),
+        new Float32Array(outputSize),
+        new Float32Array(outputSize),
+        new Float32Array(outputSize),
+        new Float32Array(outputSize)
+      ],
       specularRayIntersectionShaderCode(settings.intersectionsPerPass)
     );
     console.time("Total (excluding setup)");
-    let output = new Float32Array(SAMPLE_RATE * OUTPUT_AUDIO_LENGTH);
+    let output125 = new Float32Array(SAMPLE_RATE * OUTPUT_AUDIO_LENGTH);
+    let output250 = new Float32Array(SAMPLE_RATE * OUTPUT_AUDIO_LENGTH);
+    let output500 = new Float32Array(SAMPLE_RATE * OUTPUT_AUDIO_LENGTH);
+    let output1000 = new Float32Array(SAMPLE_RATE * OUTPUT_AUDIO_LENGTH);
+    let output2000 = new Float32Array(SAMPLE_RATE * OUTPUT_AUDIO_LENGTH);
+    let output4000 = new Float32Array(SAMPLE_RATE * OUTPUT_AUDIO_LENGTH);
     for (let i = 0; i < settings.numberOfPasses; i++) {
       const result2 = await intersectionsRunner.runPass(settings.rayCount);
-      console.log(result2);
-      for (let j = 0; j < result2.length; j += 2) {
-        const AIR_ABSORPTION_COEFF = 13e-4;
-        output[Math.round(SAMPLE_RATE * result2[j] / SPEED_OF_SOUND)] += result2[j + 1] * Math.exp(-result2[j] * AIR_ABSORPTION_COEFF);
+      let t = 10;
+      for (let j = 0; j < result2[0].length; j += 2) {
+        const index = Math.round(SAMPLE_RATE * (result2[0][j] / SPEED_OF_SOUND));
+        const air_absorption = Math.exp(-result2[0][j] * AIR_ABSORPTION_COEFF);
+        output125[index] += result2[0][j + 1] * air_absorption;
+        output250[index] += result2[1][j + 1] * air_absorption;
+        output500[index] += result2[2][j + 1] * air_absorption;
+        output1000[index] += result2[3][j + 1] * air_absorption;
+        output2000[index] += result2[4][j + 1] * air_absorption;
+        output4000[index] += result2[5][j + 1] * air_absorption;
       }
     }
-    const result = await intersectionsRunner.runPass(settings.rayCount);
+    const directSoundDistance = Math.sqrt(
+      Math.pow(SOURCE_POSITION[0] - RECEIVER_POSITION[0], 2) + Math.pow(SOURCE_POSITION[1] - RECEIVER_POSITION[1], 2) + Math.pow(SOURCE_POSITION[1] - RECEIVER_POSITION[1], 2)
+    );
+    const directSoundIndex = Math.round(
+      SAMPLE_RATE * (directSoundDistance / SPEED_OF_SOUND)
+    );
+    const directSoundIntensity = rays.length / (4 * Math.PI * directSoundDistance ** 2) * Math.exp(-directSoundDistance * AIR_ABSORPTION_COEFF);
+    output125[directSoundIndex] += directSoundIntensity;
+    output250[directSoundIndex] += directSoundIntensity;
+    output500[directSoundIndex] += directSoundIntensity;
+    output1000[directSoundIndex] += directSoundIntensity;
+    output2000[directSoundIndex] += directSoundIntensity;
+    output4000[directSoundIndex] += directSoundIntensity;
+    console.log(
+      `Added ${directSoundIntensity} to ${directSoundIndex} (${directSoundDistance}m = ${directSoundDistance / SPEED_OF_SOUND}s)`
+    );
     console.timeEnd("Total (excluding setup)");
     console.timeEnd("Total (including setup)");
-    console.log("Output", output.join(","));
+    console.log(`
+band125 = [
+  ${output125.join(",")}
+];
+band250 = [
+  ${output250.join(",")}
+];
+band500 = [
+  ${output500.join(",")}
+];
+band1000 = [
+  ${output1000.join(",")}
+];
+band2000 = [
+  ${output2000.join(",")}
+];
+band4000 = [
+  ${output4000.join(",")}
+];
+    `);
+    const result = await intersectionsRunner.runPass(settings.rayCount);
     return {
       rays,
       triangles,
-      result
+      result: result[0]
     };
   }
   async function plotRaySpecularReflections() {
@@ -264600,7 +264774,7 @@ uniform ${i3} ${a3} u_${s3};
     const { rays, triangles, result } = await runRayIntersections(STRESS_TEST_SETTINGS);
     console.log(result);
   }
-  var MAX_STORAGE_BUFFER_SIZE, PLOT_CUBE, SHOW_FACES, OUTPUT_AUDIO_LENGTH, CUBE_FACES, PLOT_SETTINGS, ipp, STRESS_TEST_SETTINGS, SpecularRayIntersections;
+  var MAX_STORAGE_BUFFER_SIZE, SHOW_FACES, OUTPUT_AUDIO_LENGTH, SOURCE_POSITION, RECEIVER_POSITION, AIR_ABSORPTION_COEFF, CUBE_FACES, PLOT_SETTINGS, ipp, STRESS_TEST_SETTINGS, SpecularRayIntersections;
   var init_specular_ray_tracing = __esm({
     "src/specular_ray_tracing.ts"() {
       "use strict";
@@ -264610,9 +264784,11 @@ uniform ${i3} ${a3} u_${s3};
       init_floatarrays();
       init_orient_surfaces();
       MAX_STORAGE_BUFFER_SIZE = 134217728;
-      PLOT_CUBE = true;
       SHOW_FACES = false;
       OUTPUT_AUDIO_LENGTH = 4;
+      SOURCE_POSITION = [0.1, -0.1, -0.1];
+      RECEIVER_POSITION = [8.5, 0, 0];
+      AIR_ABSORPTION_COEFF = 13e-4;
       CUBE_FACES = [
         // Bottom face.
         {
@@ -264682,15 +264858,13 @@ uniform ${i3} ${a3} u_${s3};
         }
       ];
       PLOT_SETTINGS = {
-        rayCount: PLOT_CUBE ? 10 : 1e3,
-        triangleCount: 50,
+        rayCount: 10,
         intersectionsPerPass: 5,
         numberOfPasses: 1
       };
       ipp = Math.floor(MAX_STORAGE_BUFFER_SIZE / (2 * FLOAT32_SIZE * 2e4));
       STRESS_TEST_SETTINGS = {
         rayCount: 2e4,
-        triangleCount: 3e3,
         intersectionsPerPass: ipp,
         numberOfPasses: Math.ceil(2e4 / ipp)
       };
@@ -264698,9 +264872,9 @@ uniform ${i3} ${a3} u_${s3};
         device;
         computePipeline;
         bindGroup;
-        outputBuffer;
-        stagingBuffer;
-        constructor(gpuDevice, rays, triangles, output, code) {
+        outputBuffers;
+        stagingBuffers;
+        constructor(gpuDevice, rays, triangles, outputs, code) {
           this.device = gpuDevice;
           const rayBuffer = this.device.createBuffer({
             size: rays.length * FLOAT32_SIZE,
@@ -264710,14 +264884,18 @@ uniform ${i3} ${a3} u_${s3};
             size: triangles.length * FLOAT32_SIZE,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
           });
-          this.outputBuffer = this.device.createBuffer({
-            size: output.length * FLOAT32_SIZE,
-            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
-          });
-          this.stagingBuffer = this.device.createBuffer({
-            size: output.length * FLOAT32_SIZE,
-            usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
-          });
+          this.outputBuffers = outputs.map(
+            (output) => this.device.createBuffer({
+              size: output.length * FLOAT32_SIZE,
+              usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
+            })
+          );
+          this.stagingBuffers = outputs.map(
+            (output) => this.device.createBuffer({
+              size: output.length * FLOAT32_SIZE,
+              usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
+            })
+          );
           const bindGroupLayout = this.device.createBindGroupLayout({
             entries: [
               {
@@ -264734,7 +264912,37 @@ uniform ${i3} ${a3} u_${s3};
               },
               {
                 binding: 2,
-                // output buffer
+                // band 125
+                visibility: GPUShaderStage.COMPUTE,
+                buffer: { type: "storage" }
+              },
+              {
+                binding: 3,
+                // band 250
+                visibility: GPUShaderStage.COMPUTE,
+                buffer: { type: "storage" }
+              },
+              {
+                binding: 4,
+                // band 500
+                visibility: GPUShaderStage.COMPUTE,
+                buffer: { type: "storage" }
+              },
+              {
+                binding: 5,
+                // band 1000
+                visibility: GPUShaderStage.COMPUTE,
+                buffer: { type: "storage" }
+              },
+              {
+                binding: 6,
+                // band 2000
+                visibility: GPUShaderStage.COMPUTE,
+                buffer: { type: "storage" }
+              },
+              {
+                binding: 7,
+                // band 4000
                 visibility: GPUShaderStage.COMPUTE,
                 buffer: { type: "storage" }
               }
@@ -264745,7 +264953,10 @@ uniform ${i3} ${a3} u_${s3};
             entries: [
               { binding: 0, resource: { buffer: rayBuffer } },
               { binding: 1, resource: { buffer: triangleBuffer } },
-              { binding: 2, resource: { buffer: this.outputBuffer } }
+              ...this.outputBuffers.map((buffer, i) => ({
+                binding: 2 + i,
+                resource: { buffer }
+              }))
             ]
           });
           const shaderModule = this.device.createShaderModule({ code });
@@ -264757,7 +264968,9 @@ uniform ${i3} ${a3} u_${s3};
           });
           this.device.queue.writeBuffer(rayBuffer, 0, rays);
           this.device.queue.writeBuffer(triangleBuffer, 0, triangles);
-          this.device.queue.writeBuffer(this.outputBuffer, 0, output);
+          for (let i = 0; i < outputs.length; i++) {
+            this.device.queue.writeBuffer(this.outputBuffers[i], 0, outputs[i]);
+          }
         }
         async runPass(instancesCount) {
           const commandEncoder = this.device.createCommandEncoder();
@@ -264766,24 +264979,28 @@ uniform ${i3} ${a3} u_${s3};
           passEncoder.setBindGroup(0, this.bindGroup);
           passEncoder.dispatchWorkgroups(Math.ceil(instancesCount / WORKGROUP_SIZE));
           passEncoder.end();
-          commandEncoder.copyBufferToBuffer(
-            this.outputBuffer,
-            0,
-            this.stagingBuffer,
-            0,
-            this.stagingBuffer.size
-          );
+          for (let i = 0; i < this.outputBuffers.length; i++) {
+            commandEncoder.copyBufferToBuffer(
+              this.outputBuffers[i],
+              0,
+              this.stagingBuffers[i],
+              0,
+              this.stagingBuffers[i].size
+            );
+          }
           console.time("run");
           this.device.queue.submit([commandEncoder.finish()]);
-          await this.stagingBuffer.mapAsync(
-            GPUMapMode.READ,
-            0,
-            this.stagingBuffer.size
+          await Promise.all(
+            this.stagingBuffers.map(
+              (buffer) => buffer.mapAsync(GPUMapMode.READ, 0, buffer.size)
+            )
           );
           console.timeEnd("run");
-          const arrayDataOutput = this.stagingBuffer.getMappedRange().slice();
-          this.stagingBuffer.unmap();
-          return new Float32Array(arrayDataOutput);
+          const arrayDataOutput = this.stagingBuffers.map(
+            (buffer) => buffer.getMappedRange().slice()
+          );
+          this.stagingBuffers.forEach((buffer) => buffer.unmap());
+          return arrayDataOutput.map((buffer) => new Float32Array(buffer));
         }
       };
     }
