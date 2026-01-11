@@ -12,9 +12,11 @@
     "build-watch": "esbuild src/index.ts --sourcemap --watch --bundle --outfile=public/index.js"
   },
   "devDependencies": {
+    "@types/mithril": "^2.2.7",
     "@types/plotly.js": "^3.0.7",
     "@webgpu/types": "^0.1.65",
     "esbuild": "^0.25.10",
+    "mithril": "^2.3.8",
     "plotly.js-dist": "^3.1.1",
     "typescript": "^5.9.3"
   }
