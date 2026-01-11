@@ -16,9 +16,6 @@ type Vec3 = [number, number, number];
 // From WebGPU specification
 const MAX_STORAGE_BUFFER_SIZE = 134217728;
 
-// TODO: allow setting this somehow.
-const OUTPUT_AUDIO_LENGTH = 4; // seconds.
-
 // NOTE: placing at the exact origin [0,0,0] causes artefacts.
 // TODO: once diffusion has been implemented, try [0,0,0] again.
 const SOURCE_POSITION: Vec3 = [0.1, -0.1, -0.1];
@@ -30,6 +27,7 @@ const AIR_ABSORPTION_COEFF = 0.0013;
 export interface Settings {
   rayCount: number;
   minBounces: number;
+  audioDuration: number;
   geometry: Triangle[];
 }
 
@@ -513,6 +511,7 @@ class SpecularRayTracer {
 
 export async function rayTrace(
   settings: Settings,
+  update: (bounces: number, totalBounces: number) => void,
 ): Promise<Float32Array<ArrayBuffer> | null> {
   console.time("Total (including setup)");
   console.log("Creating geometry");
@@ -544,6 +543,8 @@ export async function rayTrace(
 
   const bouncesPerPass = Math.min(settings.minBounces, maximumBouncesPerPass);
   const numberOfPasses = Math.ceil(settings.minBounces / bouncesPerPass);
+
+  const numberOfBounces = numberOfPasses * bouncesPerPass;
 
   const outputSize = 2 * bouncesPerPass * settings.rayCount;
 
@@ -582,12 +583,14 @@ export async function rayTrace(
   console.time("Total (excluding setup)");
 
   // TODO BUG: don't cut this off arbitrarily.
-  let output125 = new Float32Array(SAMPLE_RATE * OUTPUT_AUDIO_LENGTH);
-  let output250 = new Float32Array(SAMPLE_RATE * OUTPUT_AUDIO_LENGTH);
-  let output500 = new Float32Array(SAMPLE_RATE * OUTPUT_AUDIO_LENGTH);
-  let output1000 = new Float32Array(SAMPLE_RATE * OUTPUT_AUDIO_LENGTH);
-  let output2000 = new Float32Array(SAMPLE_RATE * OUTPUT_AUDIO_LENGTH);
-  let output4000 = new Float32Array(SAMPLE_RATE * OUTPUT_AUDIO_LENGTH);
+  let output125 = new Float32Array(SAMPLE_RATE * settings.audioDuration);
+  let output250 = new Float32Array(SAMPLE_RATE * settings.audioDuration);
+  let output500 = new Float32Array(SAMPLE_RATE * settings.audioDuration);
+  let output1000 = new Float32Array(SAMPLE_RATE * settings.audioDuration);
+  let output2000 = new Float32Array(SAMPLE_RATE * settings.audioDuration);
+  let output4000 = new Float32Array(SAMPLE_RATE * settings.audioDuration);
+
+  update(0, numberOfBounces);
 
   for (let i = 0; i < numberOfPasses; i++) {
     // Run the shader and get the result.
@@ -605,7 +608,11 @@ export async function rayTrace(
       output2000[index] += result[4][j + 1] * air_absorption;
       output4000[index] += result[5][j + 1] * air_absorption;
     }
+
+    update(i * bouncesPerPass, numberOfBounces);
   }
+
+  update(numberOfBounces, numberOfBounces);
 
   // TODO BUG: need to raytrace this to check it is line-of-sight
   //           (otherwise there will be no direct sound).
