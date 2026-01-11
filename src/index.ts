@@ -1,9 +1,6 @@
-import {
-  plotRaySpecularReflections,
-  stressTestRaySpecularReflections,
-} from "./specular_ray_tracing";
+import { rayTrace, Settings } from "./ray_tracing";
 import { SAMPLE_RATE } from "./constants";
-import { runRayIntersectionTests } from "./testing/ray_intersections";
+import { CUBE_FACES } from "./geometry_data";
 
 let audioToPlay = new Float32Array();
 let ctx: AudioContext | null = null;
@@ -20,29 +17,23 @@ async function withDisabled(
   element.disabled = false;
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-  document
-    .querySelector("#run-plot")
-    ?.addEventListener("click", (e) =>
-      withDisabled(e.target as HTMLButtonElement, plotRaySpecularReflections),
-    );
+const RAY_TRACING_SETTINGS: Settings = {
+  rayCount: 20000,
+  maxBounces: 20000,
+  geometry: CUBE_FACES,
+};
 
-  document.querySelector("#run-stress")?.addEventListener("click", (e) =>
+document.addEventListener("DOMContentLoaded", () => {
+  document.querySelector("#run-raytracing")?.addEventListener("click", (e) =>
     withDisabled(e.target as HTMLButtonElement, async () => {
       audioToPlay =
-        (await stressTestRaySpecularReflections()) || new Float32Array();
+        (await rayTrace(RAY_TRACING_SETTINGS)) || new Float32Array();
       const playBtn = document.querySelector("#play-audio");
       if (playBtn instanceof HTMLButtonElement) {
         playBtn.disabled = false;
       }
     }),
   );
-
-  document
-    .querySelector("#run-tests")
-    ?.addEventListener("click", (e) =>
-      withDisabled(e.target as HTMLButtonElement, runRayIntersectionTests),
-    );
 
   document.querySelector("#play-audio")?.addEventListener("click", (e) => {
     ctx = ctx || new AudioContext();

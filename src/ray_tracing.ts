@@ -1,4 +1,4 @@
-import { getGPUDevice } from "./lib";
+import { getGPUDevice } from "./webgpu";
 import {
   FLOAT32_SIZE,
   Ray,
@@ -7,17 +7,14 @@ import {
   Triangle,
   WORKGROUP_SIZE,
 } from "./constants";
-import { plotSpecularReflections } from "./draw";
 import { trianglesToFloatArray } from "./floatarrays";
 import { orientTriangles } from "./orient_surfaces";
-import { combineFilteredAudio, createAudioBlobURL } from "./audio";
+import { combineFilteredAudio } from "./dsp";
 
 type Vec3 = [number, number, number];
 
 // From WebGPU specification
 const MAX_STORAGE_BUFFER_SIZE = 134217728;
-
-const SHOW_FACES = false;
 
 // TODO: allow setting this somehow.
 const OUTPUT_AUDIO_LENGTH = 4; // seconds.
@@ -30,96 +27,11 @@ const RECEIVER_POSITION: Vec3 = [8.5, 0.0, 0.0];
 // TODO: frequency dependent.
 const AIR_ABSORPTION_COEFF = 0.0013;
 
-const CUBE_FACES: Triangle[] = [
-  // Bottom face.
-  {
-    p1: [-10, -10, -10],
-    p2: [10, -10, -10],
-    p3: [-10, 10, -10],
-  },
-  {
-    p1: [10, -10, -10],
-    p2: [10, 10, -10],
-    p3: [-10, 10, -10],
-  },
-  // Top face.
-  {
-    p1: [-10, -10, 10],
-    p2: [10, -10, 10],
-    p3: [-10, 10, 10],
-  },
-  {
-    p1: [10, -10, 10],
-    p2: [10, 10, 10],
-    p3: [-10, 10, 10],
-  },
-
-  // Left face.
-  {
-    p1: [-10, -10, -10],
-    p2: [-10, 10, 10],
-    p3: [-10, -10, 10],
-  },
-  {
-    p1: [-10, -10, -10],
-    p2: [-10, 10, -10],
-    p3: [-10, 10, 10],
-  },
-  // Right face.
-  {
-    p1: [10, -10, -10],
-    p2: [10, 10, 10],
-    p3: [10, -10, 10],
-  },
-  {
-    p1: [10, -10, -10],
-    p2: [10, 10, -10],
-    p3: [10, 10, 10],
-  },
-
-  // Front face.
-  {
-    p1: [-10, -10, -10],
-    p2: [10, -10, 10],
-    p3: [-10, -10, 10],
-  },
-  {
-    p1: [-10, -10, -10],
-    p2: [10, -10, -10],
-    p3: [10, -10, 10],
-  },
-  // Back face.
-  {
-    p1: [-10, 10, -10],
-    p2: [10, 10, 10],
-    p3: [-10, 10, 10],
-  },
-  {
-    p1: [-10, 10, -10],
-    p2: [10, 10, -10],
-    p3: [10, 10, 10],
-  },
-];
-
-interface Settings {
+export interface Settings {
   rayCount: number;
-  intersectionsPerPass: number;
-  numberOfPasses: number;
+  maxBounces: number;
+  geometry: Triangle[];
 }
-
-const PLOT_SETTINGS: Settings = {
-  rayCount: 10,
-  intersectionsPerPass: 5,
-  numberOfPasses: 1,
-};
-
-const ipp = Math.floor(MAX_STORAGE_BUFFER_SIZE / (2 * FLOAT32_SIZE * 20000));
-
-const STRESS_TEST_SETTINGS: Settings = {
-  rayCount: 20000,
-  intersectionsPerPass: ipp,
-  numberOfPasses: Math.ceil(20000 / ipp),
-};
 
 /**
  *
@@ -146,7 +58,7 @@ function randomPointOnUnitSphere(): Vec3 {
   return [x / r, y / r, z / r];
 }
 
-function specularRayIntersectionShaderCode(intersectionCount: number) {
+function specularRayIntersectionShaderCode(bounceCount: number) {
   return /* wgsl */ `
   struct Ray {
     x: f32,
@@ -251,8 +163,8 @@ function specularRayIntersectionShaderCode(intersectionCount: number) {
 
     let receiverPosition = vec3(${RECEIVER_POSITION.join(",")});
 
-    for (var n: u32 = 0; n < ${intersectionCount}; n++) {
-      let index = rayIndex * ${intersectionCount} + n;
+    for (var n: u32 = 0; n < ${bounceCount}; n++) {
+      let index = rayIndex * ${bounceCount} + n;
 
       // TODO: infinity
       var distance = 1e10;
@@ -433,7 +345,7 @@ function specularRayIntersectionShaderCode(intersectionCount: number) {
 `;
 }
 
-class SpecularRayIntersections {
+class SpecularRayTracer {
   device: GPUDevice;
   computePipeline: GPUComputePipeline;
   bindGroup: GPUBindGroup;
@@ -599,18 +511,16 @@ class SpecularRayIntersections {
   }
 }
 
-async function runRayIntersections(settings: Settings): Promise<{
-  rays: Ray[];
-  triangles: Triangle[];
-  result: Float32Array<ArrayBuffer> | null;
-}> {
+export async function rayTrace(
+  settings: Settings,
+): Promise<Float32Array<ArrayBuffer> | null> {
   console.time("Total (including setup)");
   console.log("Creating geometry");
   const rays: Ray[] = [];
 
   // Create the geometry.
   // Orient the triangles so that they all face outwards.
-  const triangles = await orientTriangles(CUBE_FACES);
+  const triangles = await orientTriangles(settings.geometry);
 
   // Create the rays.
   for (let i = 0; i < settings.rayCount; ++i) {
@@ -626,13 +536,20 @@ async function runRayIntersections(settings: Settings): Promise<{
     throw new Error("Aborted due to null GPU device");
   }
 
-  const outputSize = 2 * settings.intersectionsPerPass * settings.rayCount;
+  // Number of bounces per pass is limited by how large the output buffer is allowed to be.
+  // Each ray outputs 2 floats (distance and intensity) per bounce.
+  const bouncesPerPass = Math.floor(
+    MAX_STORAGE_BUFFER_SIZE / (2 * FLOAT32_SIZE * settings.rayCount),
+  );
+  const numberOfPasses = Math.ceil(settings.maxBounces / bouncesPerPass);
+
+  const outputSize = 2 * bouncesPerPass * settings.rayCount;
 
   if (outputSize > MAX_STORAGE_BUFFER_SIZE) {
     console.log("Output buffer is too large, will not work");
   }
 
-  const intersectionsRunner = new SpecularRayIntersections(
+  const rayTracer = new SpecularRayTracer(
     gpuDevice,
     new Float32Array(
       rays.flatMap((ray) => [
@@ -657,7 +574,7 @@ async function runRayIntersections(settings: Settings): Promise<{
       new Float32Array(outputSize),
       new Float32Array(outputSize),
     ],
-    specularRayIntersectionShaderCode(settings.intersectionsPerPass),
+    specularRayIntersectionShaderCode(bouncesPerPass),
   );
 
   console.time("Total (excluding setup)");
@@ -670,9 +587,9 @@ async function runRayIntersections(settings: Settings): Promise<{
   let output2000 = new Float32Array(SAMPLE_RATE * OUTPUT_AUDIO_LENGTH);
   let output4000 = new Float32Array(SAMPLE_RATE * OUTPUT_AUDIO_LENGTH);
 
-  for (let i = 0; i < settings.numberOfPasses; i++) {
+  for (let i = 0; i < numberOfPasses; i++) {
     // Run the shader and get the result.
-    const result = await intersectionsRunner.runPass(settings.rayCount);
+    const result = await rayTracer.runPass(settings.rayCount);
 
     let t = 10;
 
@@ -708,10 +625,6 @@ async function runRayIntersections(settings: Settings): Promise<{
   output2000[directSoundIndex] += directSoundIntensity;
   output4000[directSoundIndex] += directSoundIntensity;
 
-  console.log(
-    `Added ${directSoundIntensity} to ${directSoundIndex} (${directSoundDistance}m = ${directSoundDistance / SPEED_OF_SOUND}s)`,
-  );
-
   const outputAudio = combineFilteredAudio(
     output125,
     output250,
@@ -726,40 +639,5 @@ async function runRayIntersections(settings: Settings): Promise<{
 
   console.log(outputAudio.join(","));
 
-  return {
-    rays,
-    triangles,
-    result: outputAudio,
-  };
-}
-
-export async function plotRaySpecularReflections() {
-  const { rays, triangles, result } = await runRayIntersections(PLOT_SETTINGS);
-  console.log(result);
-  console.log("plotting...");
-
-  const rayPositions: Vec3[][] = [];
-
-  for (const ray of rays) {
-    rayPositions.push([ray.position]);
-  }
-
-  // TODO: now broken!!
-  if (result) {
-    for (let i = 0; i < (result?.length || 0); i += 3) {
-      rayPositions[
-        Math.floor(i / (3 * PLOT_SETTINGS.intersectionsPerPass))
-      ].push([result[i], result[i + 1], result[i + 2]]);
-    }
-  }
-
-  console.log(rayPositions);
-
-  plotSpecularReflections(triangles, rayPositions, SHOW_FACES);
-}
-
-export async function stressTestRaySpecularReflections(): Promise<Float32Array<ArrayBuffer> | null> {
-  const { result } = await runRayIntersections(STRESS_TEST_SETTINGS);
-
-  return result;
+  return outputAudio;
 }

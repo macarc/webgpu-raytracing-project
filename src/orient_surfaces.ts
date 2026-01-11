@@ -1,4 +1,4 @@
-import { runShader } from "./lib";
+import { runShader } from "./webgpu";
 import { WORKGROUP_SIZE } from "./constants";
 import { Triangle } from "./constants";
 import { trianglesToFloatArray } from "./floatarrays";

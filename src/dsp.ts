@@ -135,7 +135,3 @@ export function combineFilteredAudio(
 
   return output;
 }
-
-export function createAudioBlobURL(audio: Float32Array<ArrayBuffer>) {
-  return URL.createObjectURL(new Blob([audio]));
-}

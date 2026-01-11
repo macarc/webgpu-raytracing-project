@@ -1,11 +1,5 @@
 import { Ray, Triangle } from "./constants";
 
-export function raysToFloatArray(rays: Ray[]): Float32Array<ArrayBuffer> {
-  return new Float32Array(
-    rays.flatMap((ray) => [...ray.position, ...ray.direction]),
-  );
-}
-
 export function trianglesToFloatArray(
   triangles: Triangle[],
 ): Float32Array<ArrayBuffer> {
@@ -20,11 +14,4 @@ export function trianglesToFloatArray(
       triangle.p3[2] - triangle.p1[2],
     ]),
   );
-}
-
-// Create the result data - this is initially infinity (i.e. no intersection).
-export function initialIntersectionsFloatArray(
-  count: number,
-): Float32Array<ArrayBuffer> {
-  return new Float32Array(count).fill(Infinity);
 }
