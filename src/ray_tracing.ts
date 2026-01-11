@@ -29,7 +29,7 @@ const AIR_ABSORPTION_COEFF = 0.0013;
 
 export interface Settings {
   rayCount: number;
-  maxBounces: number;
+  minBounces: number;
   geometry: Triangle[];
 }
 
@@ -538,10 +538,12 @@ export async function rayTrace(
 
   // Number of bounces per pass is limited by how large the output buffer is allowed to be.
   // Each ray outputs 2 floats (distance and intensity) per bounce.
-  const bouncesPerPass = Math.floor(
+  const maximumBouncesPerPass = Math.floor(
     MAX_STORAGE_BUFFER_SIZE / (2 * FLOAT32_SIZE * settings.rayCount),
   );
-  const numberOfPasses = Math.ceil(settings.maxBounces / bouncesPerPass);
+
+  const bouncesPerPass = Math.min(settings.minBounces, maximumBouncesPerPass);
+  const numberOfPasses = Math.ceil(settings.minBounces / bouncesPerPass);
 
   const outputSize = 2 * bouncesPerPass * settings.rayCount;
 

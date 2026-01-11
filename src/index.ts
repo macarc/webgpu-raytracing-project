@@ -5,7 +5,7 @@ import m from "mithril";
 
 let state = {
   rayCount: 20000,
-  maxBounces: 20000,
+  minBounces: 5000,
   geometry: CUBE_FACES,
   audioToPlay: null as Float32Array | null,
   ctx: null as AudioContext | null,
@@ -69,9 +69,9 @@ let AppView = {
           m("input", {
             type: "number",
             min: "0",
-            value: state.maxBounces,
+            value: state.minBounces,
             oninput: function (e: InputEvent) {
-              state.maxBounces = parseInt((e.target as HTMLInputElement).value);
+              state.minBounces = parseInt((e.target as HTMLInputElement).value);
             },
           }),
         ]),

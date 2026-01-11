@@ -815,10 +815,11 @@
     if (!gpuDevice) {
       throw new Error("Aborted due to null GPU device");
     }
-    const bouncesPerPass = Math.floor(
+    const maximumBouncesPerPass = Math.floor(
       MAX_STORAGE_BUFFER_SIZE / (2 * FLOAT32_SIZE * settings.rayCount)
     );
-    const numberOfPasses = Math.ceil(settings.maxBounces / bouncesPerPass);
+    const bouncesPerPass = Math.min(settings.minBounces, maximumBouncesPerPass);
+    const numberOfPasses = Math.ceil(settings.minBounces / bouncesPerPass);
     const outputSize = 2 * bouncesPerPass * settings.rayCount;
     if (outputSize > MAX_STORAGE_BUFFER_SIZE) {
       console.log("Output buffer is too large, will not work");
@@ -2715,7 +2716,7 @@
       var import_mithril = __toESM(require_mithril());
       var state = {
         rayCount: 2e4,
-        maxBounces: 2e4,
+        minBounces: 5e3,
         geometry: CUBE_FACES,
         audioToPlay: null,
         ctx: null,
@@ -2767,9 +2768,9 @@
                 (0, import_mithril.default)("input", {
                   type: "number",
                   min: "0",
-                  value: state.maxBounces,
+                  value: state.minBounces,
                   oninput: function(e) {
-                    state.maxBounces = parseInt(e.target.value);
+                    state.minBounces = parseInt(e.target.value);
                   }
                 })
               ]),
