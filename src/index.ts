@@ -14,6 +14,7 @@ let state = {
   ctx: null as AudioContext | null,
   running: false,
   rayTracingProgress: [0, 0] as [number, number],
+  source: null as AudioBufferSourceNode | null,
 
   runRaytracing: async function () {
     state.running = true;
@@ -37,6 +38,9 @@ let state = {
       state.ctx = new AudioContext();
     }
 
+    // Stop the audio if it is already playing.
+    state.source?.stop();
+
     // Create the buffer to play.
     const sourceBuffer = state.ctx.createBuffer(
       1,
@@ -49,12 +53,12 @@ let state = {
     }
 
     // Create the audio buffer source to play.
-    const source = state.ctx.createBufferSource();
-    source.buffer = sourceBuffer;
+    state.source = state.ctx.createBufferSource();
+    state.source.buffer = sourceBuffer;
 
     // Start playing the audio buffer source.
-    source.connect(state.ctx.destination);
-    source.start(0);
+    state.source.connect(state.ctx.destination);
+    state.source.start(0);
   },
 };
 

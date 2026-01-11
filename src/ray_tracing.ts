@@ -20,6 +20,7 @@ const MAX_STORAGE_BUFFER_SIZE = 134217728;
 // TODO: once diffusion has been implemented, try [0,0,0] again.
 const SOURCE_POSITION: Vec3 = [0.1, -0.1, -0.1];
 const RECEIVER_POSITION: Vec3 = [8.5, 0.0, 0.0];
+const RECEIVER_RADIUS = 1.0;
 
 // TODO: frequency dependent.
 const AIR_ABSORPTION_COEFF = 0.0013;
@@ -239,14 +240,24 @@ function specularRayIntersectionShaderCode(bounceCount: number) {
       band_2000[index].intensity = 0;
       band_4000[index].intensity = 0;
 
+
+      // Scattering coefficient.
+      let s = 0.3;
+
       // If the ray to the receiver did not hit a triangle before hitting the receiver,
       // add the contribution to the output.
       if (receiverRayTriangleDistance >= distanceToReceiver) {
         let cosNormalAngleToReceiver = dot(directionToReceiver, -lastsurfacenormal);
 
+        let rayVecToClosestReceiverPoint = dot(vecToReceiver, raydirection);
+        let distanceFromRayToReceiver = length(vecToReceiver - rayVecToClosestReceiverPoint);
+        let additionDueToRay = f32(distanceFromRayToReceiver <= ${RECEIVER_RADIUS});
+
         // Only count if the ray is not intersecting the last surface.
         if (cosNormalAngleToReceiver > 0) {
           let distance = raydistancetravelled + distanceToReceiver;
+
+          let totalIntensity = (1-s) * additionDueToRay + s * cosNormalAngleToReceiver;
 
           // TODO: this is a waste of memory.
           band_125[index].time = distance;
@@ -256,28 +267,14 @@ function specularRayIntersectionShaderCode(bounceCount: number) {
           band_2000[index].time = distance;
           band_4000[index].time = distance;
 
-          band_125[index].intensity = intensity_125 * cosNormalAngleToReceiver;
-          band_250[index].intensity = intensity_250 * cosNormalAngleToReceiver;
-          band_500[index].intensity = intensity_500 * cosNormalAngleToReceiver;
-          band_1000[index].intensity = intensity_1000 * cosNormalAngleToReceiver;
-          band_2000[index].intensity = intensity_2000 * cosNormalAngleToReceiver;
-          band_4000[index].intensity = intensity_4000 * cosNormalAngleToReceiver;
+          band_125[index].intensity = intensity_125 * totalIntensity;
+          band_250[index].intensity = intensity_250 * totalIntensity;
+          band_500[index].intensity = intensity_500 * totalIntensity;
+          band_1000[index].intensity = intensity_1000 * totalIntensity;
+          band_2000[index].intensity = intensity_2000 * totalIntensity;
+          band_4000[index].intensity = intensity_4000 * totalIntensity;
         }
       }
-
-      // let distanceToClosestReceiverPoint = dot(vecToReceiver, raydirection);
-      // let distanceFromRayToReceiver = length(vecToReceiver - distanceToClosestReceiverPoint*raydirection);
-
-      // let receiverRadius = 1.0;
-
-      // if (distanceFromRayToReceiver <= receiverRadius && abs(distanceToClosestReceiverPoint) <= distance) {
-      //   band_125[index].intensity += intensity_125;
-      //   band_250[index].intensity += intensity_250;
-      //   band_500[index].intensity += intensity_500;
-      //   band_1000[index].intensity += intensity_1000;
-      //   band_2000[index].intensity += intensity_2000;
-      //   band_4000[index].intensity += intensity_4000;
-      // }
 
       // This should always be true - it should always intersect a triangle.
       if (closestTriangleIndex < triangleCount) {
@@ -304,11 +301,19 @@ function specularRayIntersectionShaderCode(bounceCount: number) {
 
 
         // Concrete
-        intensity_125 *= 0.88;
-        intensity_250 *= 0.91;
-        intensity_500 *= 0.93;
+        // intensity_125 *= 0.88;
+        // intensity_250 *= 0.91;
+        // intensity_500 *= 0.93;
+        // intensity_1000 *= 0.95;
+        // intensity_2000 *= 0.95;
+        // intensity_4000 *= 0.96;
+
+        // Plaster
+        intensity_125 *= 0.86;
+        intensity_250 *= 0.90;
+        intensity_500 *= 0.94;
         intensity_1000 *= 0.95;
-        intensity_2000 *= 0.95;
+        intensity_2000 *= 0.96;
         intensity_4000 *= 0.96;
       }
     }
@@ -590,9 +595,9 @@ export async function rayTrace(
   let output2000 = new Float32Array(SAMPLE_RATE * settings.audioDuration);
   let output4000 = new Float32Array(SAMPLE_RATE * settings.audioDuration);
 
-  update(0, numberOfBounces);
-
   for (let i = 0; i < numberOfPasses; i++) {
+    update(i * bouncesPerPass, numberOfBounces);
+
     // Run the shader and get the result.
     const result = await rayTracer.runPass(settings.rayCount);
 
@@ -608,31 +613,9 @@ export async function rayTrace(
       output2000[index] += result[4][j + 1] * air_absorption;
       output4000[index] += result[5][j + 1] * air_absorption;
     }
-
-    update(i * bouncesPerPass, numberOfBounces);
   }
 
   update(numberOfBounces, numberOfBounces);
-
-  // TODO BUG: need to raytrace this to check it is line-of-sight
-  //           (otherwise there will be no direct sound).
-  const directSoundDistance = Math.sqrt(
-    Math.pow(SOURCE_POSITION[0] - RECEIVER_POSITION[0], 2) +
-      Math.pow(SOURCE_POSITION[1] - RECEIVER_POSITION[1], 2) +
-      Math.pow(SOURCE_POSITION[1] - RECEIVER_POSITION[1], 2),
-  );
-  const directSoundIndex = Math.round(
-    SAMPLE_RATE * (directSoundDistance / SPEED_OF_SOUND),
-  );
-  const directSoundIntensity =
-    (rays.length / (4 * Math.PI * directSoundDistance ** 2)) *
-    Math.exp(-directSoundDistance * AIR_ABSORPTION_COEFF);
-  output125[directSoundIndex] += directSoundIntensity;
-  output250[directSoundIndex] += directSoundIntensity;
-  output500[directSoundIndex] += directSoundIntensity;
-  output1000[directSoundIndex] += directSoundIntensity;
-  output2000[directSoundIndex] += directSoundIntensity;
-  output4000[directSoundIndex] += directSoundIntensity;
 
   const outputAudio = combineFilteredAudio(
     output125,
