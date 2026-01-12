@@ -166,7 +166,7 @@ function specularRayIntersectionShaderCode(bounceCount: number) {
       let index = rayIndex * ${bounceCount} + n;
 
       // TODO: infinity
-      var distance = 1e10;
+      var rayTriangleDistance = 1e10;
       var closestTriangleIndex = triangleCount;
       var receiverRayTriangleDistance = 1e10; // TODO: infinity.
 
@@ -174,6 +174,9 @@ function specularRayIntersectionShaderCode(bounceCount: number) {
       let directionToReceiver = normalize(vecToReceiver);
       let distanceToReceiver = length(vecToReceiver);
 
+      // Loop over each triangle, checking:
+      // - if the ray from the current location to the receiver intercepts with the triangle.
+      // - if the ray from the current location in the current direction intercepts with the triangle.
       for (var i = 0; i < triangleCount; i++) {
         let triangle = triangleBuffer[i];
 
@@ -200,15 +203,18 @@ function specularRayIntersectionShaderCode(bounceCount: number) {
 
           let t = inv_det * dot(edge2, offset_cross_e1);
 
-          // TODO: remove if?
-          if (abs(det) < eps) || (u < -eps) || (v < -eps) || (u + v > eps1) {
+          if (
+            // Ray intercepts the triangle.
+            (abs(det) >= eps) && (u >= -eps) && (v >= -eps) && (u + v <= eps1)
 
-          } else if (t > eps && dir >= 0) {
+            // Ray intercepts the triangle in the positive direction.
+            && t >= eps && dir >= 0
+          ) {
             receiverRayTriangleDistance = min(receiverRayTriangleDistance, t);
           }
         }
 
-        // Ray-trace normal ray.
+        // Ray-trace specular ray.
         let ray_cross_e2 = cross(raydirection, edge2);
 
         // NOTE: greater than 0 iff ray is incident on backface.
@@ -225,10 +231,17 @@ function specularRayIntersectionShaderCode(bounceCount: number) {
         // NOTE: this happens in a single if-statement at the end of each loop (rather than as each value is calculated)
         //       to reduce the number of times branching occurs. The amount of branching matters, since work-groups
         //       in the GPU run in lockstep, and branching messes around with that.
-        if ((abs(det) < eps) || (u < -eps) || (v < -eps) || (u + v > eps1)) {
-          // Ray missed the triangle.
-        } else if (t > eps && t < distance && dir >= 0) {
-          distance = t;
+        if (
+          // Ray intercepts the triangle.
+          (abs(det) >= eps) && (u >= -eps) && (v >= -eps) && (u + v <= eps1)
+
+          // Ray intercepts the triangle in the positive direction.
+          && t >= eps && dir >= 0
+
+          // Ray intercepts the triangle before the previously-closest triangle.
+          && t < rayTriangleDistance
+        ) {
+          rayTriangleDistance = t;
           closestTriangleIndex = i;
         }
       }
@@ -242,42 +255,42 @@ function specularRayIntersectionShaderCode(bounceCount: number) {
 
 
       // Scattering coefficient.
-      let s = 0.3;
-
-      // If the ray to the receiver did not hit a triangle before hitting the receiver,
-      // add the contribution to the output.
-      if (receiverRayTriangleDistance >= distanceToReceiver) {
-        let cosNormalAngleToReceiver = dot(directionToReceiver, -lastsurfacenormal);
-
-        let rayVecToClosestReceiverPoint = dot(vecToReceiver, raydirection);
-        let distanceFromRayToReceiver = length(vecToReceiver - rayVecToClosestReceiverPoint);
-        let additionDueToRay = f32(distanceFromRayToReceiver <= ${RECEIVER_RADIUS});
-
-        // Only count if the ray is not intersecting the last surface.
-        if (cosNormalAngleToReceiver > 0) {
-          let distance = raydistancetravelled + distanceToReceiver;
-
-          let totalIntensity = (1-s) * additionDueToRay + s * cosNormalAngleToReceiver;
-
-          // TODO: this is a waste of memory.
-          band_125[index].time = distance;
-          band_250[index].time = distance;
-          band_500[index].time = distance;
-          band_1000[index].time = distance;
-          band_2000[index].time = distance;
-          band_4000[index].time = distance;
-
-          band_125[index].intensity = intensity_125 * totalIntensity;
-          band_250[index].intensity = intensity_250 * totalIntensity;
-          band_500[index].intensity = intensity_500 * totalIntensity;
-          band_1000[index].intensity = intensity_1000 * totalIntensity;
-          band_2000[index].intensity = intensity_2000 * totalIntensity;
-          band_4000[index].intensity = intensity_4000 * totalIntensity;
-        }
-      }
+      let s = 0.1;
 
       // This should always be true - it should always intersect a triangle.
       if (closestTriangleIndex < triangleCount) {
+        // If the ray to the receiver did not hit a triangle before hitting the receiver,
+        // add the contribution to the output.
+        if (receiverRayTriangleDistance >= distanceToReceiver) {
+          let cosNormalAngleToReceiver = dot(directionToReceiver, -lastsurfacenormal);
+
+          let rayVecToClosestReceiverPoint = dot(vecToReceiver, raydirection);
+          let distanceFromRayToReceiver = length(vecToReceiver - rayVecToClosestReceiverPoint);
+          let additionDueToRay = f32(distanceFromRayToReceiver <= ${RECEIVER_RADIUS});
+
+          // Only count if the ray is not intersecting the last surface.
+          if (cosNormalAngleToReceiver > 0) {
+            let rayTriangleDistance = raydistancetravelled + distanceToReceiver;
+
+            let totalIntensity = (1-s) * additionDueToRay + s * cosNormalAngleToReceiver;
+
+            // TODO: this is a waste of memory.
+            band_125[index].time = rayTriangleDistance;
+            band_250[index].time = rayTriangleDistance;
+            band_500[index].time = rayTriangleDistance;
+            band_1000[index].time = rayTriangleDistance;
+            band_2000[index].time = rayTriangleDistance;
+            band_4000[index].time = rayTriangleDistance;
+
+            band_125[index].intensity = intensity_125 * totalIntensity;
+            band_250[index].intensity = intensity_250 * totalIntensity;
+            band_500[index].intensity = intensity_500 * totalIntensity;
+            band_1000[index].intensity = intensity_1000 * totalIntensity;
+            band_2000[index].intensity = intensity_2000 * totalIntensity;
+            band_4000[index].intensity = intensity_4000 * totalIntensity;
+          }
+        }
+
         let triangle = triangleBuffer[closestTriangleIndex];
         let edge1 = vec3f(triangle.u1, triangle.u2, triangle.u3);
         let edge2 = vec3f(triangle.v1, triangle.v2, triangle.v3);
@@ -288,7 +301,7 @@ function specularRayIntersectionShaderCode(bounceCount: number) {
 
         rayposition = newposition;
         raydirection = reflected;
-        raydistancetravelled += distance;
+        raydistancetravelled += rayTriangleDistance;
         lastsurfacenormal = triangleNormal;
 
         // Carpet, heavy
@@ -336,14 +349,6 @@ function specularRayIntersectionShaderCode(bounceCount: number) {
     rayBuffer[rayIndex].intensity1000 = intensity_1000;
     rayBuffer[rayIndex].intensity2000 = intensity_2000;
     rayBuffer[rayIndex].intensity4000 = intensity_4000;
-
-
-    intensity_125 = initialRay.intensity125;
-    intensity_250 = initialRay.intensity250;
-    intensity_500 = initialRay.intensity500;
-    intensity_1000 = initialRay.intensity1000;
-    intensity_2000 = initialRay.intensity2000;
-    intensity_4000 = initialRay.intensity4000;
   }
 `;
 }
@@ -600,8 +605,6 @@ export async function rayTrace(
 
     // Run the shader and get the result.
     const result = await rayTracer.runPass(settings.rayCount);
-
-    let t = 10;
 
     for (let j = 0; j < result[0].length; j += 2) {
       const index = Math.round(SAMPLE_RATE * (result[0][j] / SPEED_OF_SOUND));
