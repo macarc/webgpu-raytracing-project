@@ -1,20 +1,22 @@
 import { getGPUDevice } from "./webgpu";
 import {
   FLOAT32_SIZE,
+  materials,
   Ray,
   SAMPLE_RATE,
   SPEED_OF_SOUND,
   Triangle,
   WORKGROUP_SIZE,
 } from "./constants";
-import { trianglesToFloatArray } from "./floatarrays";
+import { materialsToFloatArray, trianglesToFloatArray } from "./floatarrays";
 import { orientTriangles } from "./orient_surfaces";
 import { combineFilteredAudio } from "./dsp";
 
 type Vec3 = [number, number, number];
 
 // From WebGPU specification
-const MAX_STORAGE_BUFFER_SIZE = 134217728;
+const STANDARD_MAX_STORAGE_BUFFER_SIZE = 134217728;
+const STANDARD_MAX_UNIFORM_BUFFER_SIZE = 65536;
 
 // NOTE: placing at the exact origin [0,0,0] causes artefacts.
 // TODO: once diffusion has been implemented, try [0,0,0] again.
@@ -85,6 +87,7 @@ function specularRayIntersectionShaderCode(bounceCount: number) {
   }
 
   struct Triangle {
+    material: u32,
     x: f32, y: f32, z: f32,
     u1: f32, u2: f32, u3: f32,
     v1: f32, v2: f32, v3: f32,
@@ -93,6 +96,19 @@ function specularRayIntersectionShaderCode(bounceCount: number) {
   struct Hit {
     time: f32,
     intensity: f32,
+  }
+
+  struct Material {
+    r125: f32,
+    r250: f32,
+    r500: f32,
+    r1000: f32,
+    r2000: f32,
+    r4000: f32,
+    scatter: f32,
+
+    // Padding - required since the uniform must be a multiple of 16 bytes long.
+    _1: f32,
   }
 
   @group(0) @binding(0)
@@ -253,12 +269,11 @@ function specularRayIntersectionShaderCode(bounceCount: number) {
       band_2000[index].intensity = 0;
       band_4000[index].intensity = 0;
 
-
-      // Scattering coefficient.
-      let s = 0.1;
-
       // This should always be true - it should always intersect a triangle.
       if (closestTriangleIndex < triangleCount) {
+        let triangle = triangleBuffer[closestTriangleIndex];
+        let material = materials[triangle.material];
+
         // If the ray to the receiver did not hit a triangle before hitting the receiver,
         // add the contribution to the output.
         if (receiverRayTriangleDistance >= distanceToReceiver) {
@@ -272,7 +287,7 @@ function specularRayIntersectionShaderCode(bounceCount: number) {
           if (cosNormalAngleToReceiver > 0) {
             let rayTriangleDistance = raydistancetravelled + distanceToReceiver;
 
-            let totalIntensity = (1-s) * additionDueToRay + s * cosNormalAngleToReceiver;
+            let totalIntensity = (1-material.scatter) * additionDueToRay + material.scatter * cosNormalAngleToReceiver;
 
             // TODO: this is a waste of memory.
             band_125[index].time = rayTriangleDistance;
@@ -291,7 +306,6 @@ function specularRayIntersectionShaderCode(bounceCount: number) {
           }
         }
 
-        let triangle = triangleBuffer[closestTriangleIndex];
         let edge1 = vec3f(triangle.u1, triangle.u2, triangle.u3);
         let edge2 = vec3f(triangle.v1, triangle.v2, triangle.v3);
 
@@ -304,30 +318,12 @@ function specularRayIntersectionShaderCode(bounceCount: number) {
         raydistancetravelled += rayTriangleDistance;
         lastsurfacenormal = triangleNormal;
 
-        // Carpet, heavy
-        // intensity_125 *= 0.63;
-        // intensity_250 *= 0.59;
-        // intensity_500 *= 0.37;
-        // intensity_1000 *= 0.15;
-        // intensity_2000 *= 0.04;
-        // intensity_4000 *= 0.08;
-
-
-        // Concrete
-        // intensity_125 *= 0.88;
-        // intensity_250 *= 0.91;
-        // intensity_500 *= 0.93;
-        // intensity_1000 *= 0.95;
-        // intensity_2000 *= 0.95;
-        // intensity_4000 *= 0.96;
-
-        // Plaster
-        intensity_125 *= 0.86;
-        intensity_250 *= 0.90;
-        intensity_500 *= 0.94;
-        intensity_1000 *= 0.95;
-        intensity_2000 *= 0.96;
-        intensity_4000 *= 0.96;
+        intensity_125 *= material.r125;
+        intensity_250 *= material.r250;
+        intensity_500 *= material.r500;
+        intensity_1000 *= material.r1000;
+        intensity_2000 *= material.r2000;
+        intensity_4000 *= material.r4000;
       }
     }
 
@@ -364,6 +360,7 @@ class SpecularRayTracer {
     gpuDevice: GPUDevice,
     rays: Float32Array<ArrayBuffer>,
     triangles: Float32Array<ArrayBuffer>,
+    materials: Float32Array<ArrayBuffer>,
     outputs: Float32Array<ArrayBuffer>[],
     code: string,
   ) {
@@ -379,6 +376,10 @@ class SpecularRayTracer {
     const triangleBuffer = this.device.createBuffer({
       size: triangles.length * FLOAT32_SIZE,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+    const materialsBuffer = this.device.createBuffer({
+      size: materials.length * FLOAT32_SIZE,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
     this.outputBuffers = outputs.map((output) =>
       this.device.createBuffer({
@@ -439,6 +440,11 @@ class SpecularRayTracer {
           visibility: GPUShaderStage.COMPUTE,
           buffer: { type: "storage" },
         },
+        {
+          binding: 8, // materials
+          visibility: GPUShaderStage.COMPUTE,
+          buffer: { type: "uniform" },
+        },
       ],
     });
 
@@ -451,6 +457,7 @@ class SpecularRayTracer {
           binding: 2 + i,
           resource: { buffer },
         })),
+        { binding: 8, resource: { buffer: materialsBuffer } },
       ],
     });
 
@@ -466,6 +473,7 @@ class SpecularRayTracer {
     // Schedule copying data into buffers.
     this.device.queue.writeBuffer(rayBuffer, 0, rays);
     this.device.queue.writeBuffer(triangleBuffer, 0, triangles);
+    this.device.queue.writeBuffer(materialsBuffer, 0, materials);
     for (let i = 0; i < outputs.length; i++) {
       this.device.queue.writeBuffer(this.outputBuffers[i], 0, outputs[i]);
     }
@@ -545,10 +553,14 @@ export async function rayTrace(
     throw new Error("Aborted due to null GPU device");
   }
 
+  const maxStorageBufferSize =
+    gpuDevice.limits.maxStorageBufferBindingSize ||
+    STANDARD_MAX_STORAGE_BUFFER_SIZE;
+
   // Number of bounces per pass is limited by how large the output buffer is allowed to be.
   // Each ray outputs 2 floats (distance and intensity) per bounce.
   const maximumBouncesPerPass = Math.floor(
-    MAX_STORAGE_BUFFER_SIZE / (2 * FLOAT32_SIZE * settings.rayCount),
+    maxStorageBufferSize / (2 * FLOAT32_SIZE * settings.rayCount),
   );
 
   const bouncesPerPass = Math.min(settings.minBounces, maximumBouncesPerPass);
@@ -558,7 +570,7 @@ export async function rayTrace(
 
   const outputSize = 2 * bouncesPerPass * settings.rayCount;
 
-  if (outputSize > MAX_STORAGE_BUFFER_SIZE) {
+  if (outputSize > maxStorageBufferSize) {
     console.log("Output buffer is too large, will not work");
   }
 
@@ -579,6 +591,7 @@ export async function rayTrace(
       ]),
     ),
     trianglesToFloatArray(triangles),
+    materialsToFloatArray(materials),
     [
       new Float32Array(outputSize),
       new Float32Array(outputSize),

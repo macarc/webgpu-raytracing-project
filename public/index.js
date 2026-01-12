@@ -30,7 +30,15 @@
   ));
 
   // src/constants.ts
-  var FLOAT32_SIZE, WORKGROUP_SIZE, SAMPLE_RATE, SPEED_OF_SOUND;
+  function materialNameToIndex(name2) {
+    for (let i = 0; i < materials.length; ++i) {
+      if (materials[i].name === name2) {
+        return i;
+      }
+    }
+    throw new Error(`Unknown material: '${name2}'`);
+  }
+  var FLOAT32_SIZE, WORKGROUP_SIZE, SAMPLE_RATE, SPEED_OF_SOUND, materials;
   var init_constants = __esm({
     "src/constants.ts"() {
       "use strict";
@@ -38,6 +46,38 @@
       WORKGROUP_SIZE = 64;
       SAMPLE_RATE = 48e3;
       SPEED_OF_SOUND = 340;
+      materials = [
+        {
+          name: "carpet",
+          a125: 0.15,
+          a250: 0.25,
+          a500: 0.5,
+          a1000: 0.6,
+          a2000: 0.7,
+          a4000: 0.7,
+          scatter: 0.2
+        },
+        {
+          name: "concrete",
+          a125: 0.12,
+          a250: 0.09,
+          a500: 0.07,
+          a1000: 0.05,
+          a2000: 0.05,
+          a4000: 0.04,
+          scatter: 0.1
+        },
+        {
+          name: "plaster",
+          a125: 0.14,
+          a250: 0.1,
+          a500: 0.06,
+          a1000: 0.05,
+          a2000: 0.04,
+          a4000: 0.04,
+          scatter: 0.1
+        }
+      ];
     }
   });
 
@@ -150,6 +190,7 @@
   function trianglesToFloatArray(triangles) {
     return new Float32Array(
       triangles.flatMap((triangle) => [
+        materialNameToIndex(triangle.material),
         ...triangle.p1,
         triangle.p2[0] - triangle.p1[0],
         triangle.p2[1] - triangle.p1[1],
@@ -160,9 +201,25 @@
       ])
     );
   }
+  function materialsToFloatArray(materials2) {
+    return new Float32Array(
+      materials2.flatMap((material) => [
+        1 - material.a125,
+        1 - material.a250,
+        1 - material.a500,
+        1 - material.a1000,
+        1 - material.a2000,
+        1 - material.a4000,
+        material.scatter,
+        0
+        // padding
+      ])
+    );
+  }
   var init_floatarrays = __esm({
     "src/floatarrays.ts"() {
       "use strict";
+      init_constants();
     }
   });
 
@@ -213,8 +270,10 @@
       init_webgpu();
       init_constants();
       init_floatarrays();
-      shaderCode = `
+      shaderCode = /* wgsl */
+      `
   struct Triangle {
+    material: f32,
     x: f32, y: f32, z: f32,
     u1: f32, u2: f32, u3: f32,
     v1: f32, v2: f32, v3: f32,
@@ -511,7 +570,7 @@
     }
     return [x / r, y / r, z / r];
   }
-  function specularRayIntersectionShaderCode(bounceCount) {
+  function specularRayIntersectionShaderCode(receiverPosition, bounceCount) {
     return (
       /* wgsl */
       `
@@ -541,6 +600,7 @@
   }
 
   struct Triangle {
+    material: u32,
     x: f32, y: f32, z: f32,
     u1: f32, u2: f32, u3: f32,
     v1: f32, v2: f32, v3: f32,
@@ -549,6 +609,19 @@
   struct Hit {
     time: f32,
     intensity: f32,
+  }
+
+  struct Material {
+    r125: f32,
+    r250: f32,
+    r500: f32,
+    r1000: f32,
+    r2000: f32,
+    r4000: f32,
+    scatter: f32,
+
+    // Padding - required since the uniform must be a multiple of 16 bytes long.
+    _1: f32,
   }
 
   @group(0) @binding(0)
@@ -574,6 +647,9 @@
 
   @group(0) @binding(7)
   var<storage, read_write> band_4000: array<Hit>;
+
+  @group(0) @binding(8)
+  var<uniform> materials: array<Material, ${materials.length}>;
 
   // BEGIN-SOURCE https://marktension.nl/blog/my_favorite_wgsl_random_func_so_far/
   fn hash_u32(x_in: u32) -> u32 {
@@ -647,7 +723,7 @@
 
     var lastsurfacenormal = vec3(initialRay.nx, initialRay.ny, initialRay.nz);
 
-    let receiverPosition = vec3(${RECEIVER_POSITION.join(",")});
+    let receiverPosition = vec3(${receiverPosition.join(",")});
 
     for (var n: u32 = 0; n < ${bounceCount}; n++) {
       let index = rayIndex * ${bounceCount} + n;
@@ -740,12 +816,11 @@
       band_2000[index].intensity = 0;
       band_4000[index].intensity = 0;
 
-
-      // Scattering coefficient.
-      let s = 0.1;
-
       // This should always be true - it should always intersect a triangle.
       if (closestTriangleIndex < triangleCount) {
+        let triangle = triangleBuffer[closestTriangleIndex];
+        let material = materials[triangle.material];
+
         // If the ray to the receiver did not hit a triangle before hitting the receiver,
         // add the contribution to the output.
         if (receiverRayTriangleDistance >= distanceToReceiver) {
@@ -759,7 +834,7 @@
           if (cosNormalAngleToReceiver > 0) {
             let rayTriangleDistance = raydistancetravelled + distanceToReceiver;
 
-            let totalIntensity = (1-s) * additionDueToRay + s * cosNormalAngleToReceiver;
+            let totalIntensity = (1-material.scatter) * additionDueToRay + material.scatter * cosNormalAngleToReceiver;
 
             // TODO: this is a waste of memory.
             band_125[index].time = rayTriangleDistance;
@@ -778,7 +853,6 @@
           }
         }
 
-        let triangle = triangleBuffer[closestTriangleIndex];
         let edge1 = vec3f(triangle.u1, triangle.u2, triangle.u3);
         let edge2 = vec3f(triangle.v1, triangle.v2, triangle.v3);
 
@@ -807,30 +881,12 @@
         raydistancetravelled += rayTriangleDistance;
         lastsurfacenormal = triangleNormal;
 
-        // Carpet, heavy
-        // intensity_125 *= 0.63;
-        // intensity_250 *= 0.59;
-        // intensity_500 *= 0.37;
-        // intensity_1000 *= 0.15;
-        // intensity_2000 *= 0.04;
-        // intensity_4000 *= 0.08;
-
-
-        // Concrete
-        // intensity_125 *= 0.88;
-        // intensity_250 *= 0.91;
-        // intensity_500 *= 0.93;
-        // intensity_1000 *= 0.95;
-        // intensity_2000 *= 0.95;
-        // intensity_4000 *= 0.96;
-
-        // Plaster
-        intensity_125 *= 0.86;
-        intensity_250 *= 0.90;
-        intensity_500 *= 0.94;
-        intensity_1000 *= 0.95;
-        intensity_2000 *= 0.96;
-        intensity_4000 *= 0.96;
+        intensity_125 *= material.r125;
+        intensity_250 *= material.r250;
+        intensity_500 *= material.r500;
+        intensity_1000 *= material.r1000;
+        intensity_2000 *= material.r2000;
+        intensity_4000 *= material.r4000;
       }
     }
 
@@ -863,7 +919,7 @@
     const triangles = await orientTriangles(settings.geometry);
     for (let i = 0; i < settings.rayCount; ++i) {
       rays.push({
-        position: SOURCE_POSITION,
+        position: settings.sourcePosition,
         direction: randomPointOnUnitSphere()
       });
     }
@@ -871,14 +927,15 @@
     if (!gpuDevice) {
       throw new Error("Aborted due to null GPU device");
     }
+    const maxStorageBufferSize = gpuDevice.limits.maxStorageBufferBindingSize || STANDARD_MAX_STORAGE_BUFFER_SIZE;
     const maximumBouncesPerPass = Math.floor(
-      MAX_STORAGE_BUFFER_SIZE / (2 * FLOAT32_SIZE * settings.rayCount)
+      maxStorageBufferSize / (2 * FLOAT32_SIZE * settings.rayCount)
     );
     const bouncesPerPass = Math.min(settings.minBounces, maximumBouncesPerPass);
     const numberOfPasses = Math.ceil(settings.minBounces / bouncesPerPass);
     const numberOfBounces = numberOfPasses * bouncesPerPass;
     const outputSize = 2 * bouncesPerPass * settings.rayCount;
-    if (outputSize > MAX_STORAGE_BUFFER_SIZE) {
+    if (outputSize > maxStorageBufferSize) {
       console.log("Output buffer is too large, will not work");
     }
     const rayTracer = new SpecularRayTracer(
@@ -898,6 +955,7 @@
         ])
       ),
       trianglesToFloatArray(triangles),
+      materialsToFloatArray(materials),
       [
         new Float32Array(outputSize),
         new Float32Array(outputSize),
@@ -906,7 +964,10 @@
         new Float32Array(outputSize),
         new Float32Array(outputSize)
       ],
-      specularRayIntersectionShaderCode(bouncesPerPass)
+      specularRayIntersectionShaderCode(
+        settings.receiverPosition,
+        bouncesPerPass
+      )
     );
     console.time("Total (excluding setup)");
     let output125 = new Float32Array(SAMPLE_RATE * settings.audioDuration);
@@ -943,7 +1004,7 @@
     console.log(outputAudio.join(","));
     return outputAudio;
   }
-  var MAX_STORAGE_BUFFER_SIZE, SOURCE_POSITION, RECEIVER_POSITION, RECEIVER_RADIUS, AIR_ABSORPTION_COEFF, SpecularRayTracer;
+  var STANDARD_MAX_STORAGE_BUFFER_SIZE, RECEIVER_RADIUS, AIR_ABSORPTION_COEFF, SpecularRayTracer;
   var init_ray_tracing = __esm({
     "src/ray_tracing.ts"() {
       "use strict";
@@ -952,9 +1013,7 @@
       init_floatarrays();
       init_orient_surfaces();
       init_dsp();
-      MAX_STORAGE_BUFFER_SIZE = 134217728;
-      SOURCE_POSITION = [0.1, -0.1, -0.1];
-      RECEIVER_POSITION = [8.5, 0, 0];
+      STANDARD_MAX_STORAGE_BUFFER_SIZE = 134217728;
       RECEIVER_RADIUS = 1;
       AIR_ABSORPTION_COEFF = 13e-4;
       SpecularRayTracer = class {
@@ -963,7 +1022,7 @@
         bindGroup;
         outputBuffers;
         stagingBuffers;
-        constructor(gpuDevice, rays, triangles, outputs, code) {
+        constructor(gpuDevice, rays, triangles, materials2, outputs, code) {
           this.device = gpuDevice;
           const rayBuffer = this.device.createBuffer({
             size: rays.length * FLOAT32_SIZE,
@@ -972,6 +1031,10 @@
           const triangleBuffer = this.device.createBuffer({
             size: triangles.length * FLOAT32_SIZE,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+          });
+          const materialsBuffer = this.device.createBuffer({
+            size: materials2.length * FLOAT32_SIZE,
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
           });
           this.outputBuffers = outputs.map(
             (output) => this.device.createBuffer({
@@ -1034,6 +1097,12 @@
                 // band 4000
                 visibility: GPUShaderStage.COMPUTE,
                 buffer: { type: "storage" }
+              },
+              {
+                binding: 8,
+                // materials
+                visibility: GPUShaderStage.COMPUTE,
+                buffer: { type: "uniform" }
               }
             ]
           });
@@ -1045,7 +1114,8 @@
               ...this.outputBuffers.map((buffer, i) => ({
                 binding: 2 + i,
                 resource: { buffer }
-              }))
+              })),
+              { binding: 8, resource: { buffer: materialsBuffer } }
             ]
           });
           const shaderModule = this.device.createShaderModule({ code });
@@ -1057,6 +1127,7 @@
           });
           this.device.queue.writeBuffer(rayBuffer, 0, rays);
           this.device.queue.writeBuffer(triangleBuffer, 0, triangles);
+          this.device.queue.writeBuffer(materialsBuffer, 0, materials2);
           for (let i = 0; i < outputs.length; i++) {
             this.device.queue.writeBuffer(this.outputBuffers[i], 0, outputs[i]);
           }
@@ -1103,66 +1174,78 @@
       CUBE_FACES = [
         // Bottom face.
         {
+          material: "carpet",
           p1: [-10, -10, -10],
           p2: [10, -10, -10],
           p3: [-10, 10, -10]
         },
         {
+          material: "carpet",
           p1: [10, -10, -10],
           p2: [10, 10, -10],
           p3: [-10, 10, -10]
         },
         // Top face.
         {
+          material: "plaster",
           p1: [-10, -10, 10],
           p2: [10, -10, 10],
           p3: [-10, 10, 10]
         },
         {
+          material: "plaster",
           p1: [10, -10, 10],
           p2: [10, 10, 10],
           p3: [-10, 10, 10]
         },
         // Left face.
         {
+          material: "plaster",
           p1: [-10, -10, -10],
           p2: [-10, 10, 10],
           p3: [-10, -10, 10]
         },
         {
+          material: "plaster",
           p1: [-10, -10, -10],
           p2: [-10, 10, -10],
           p3: [-10, 10, 10]
         },
         // Right face.
         {
+          material: "plaster",
           p1: [10, -10, -10],
           p2: [10, 10, 10],
           p3: [10, -10, 10]
         },
         {
+          material: "plaster",
           p1: [10, -10, -10],
           p2: [10, 10, -10],
           p3: [10, 10, 10]
         },
         // Front face.
         {
+          material: "plaster",
           p1: [-10, -10, -10],
           p2: [10, -10, 10],
           p3: [-10, -10, 10]
         },
         {
+          material: "plaster",
           p1: [-10, -10, -10],
           p2: [10, -10, -10],
           p3: [10, -10, 10]
         },
         // Back face.
         {
+          material: "plaster",
           p1: [-10, 10, -10],
           p2: [10, 10, 10],
           p3: [-10, 10, 10]
         },
         {
+          material: "plaster",
           p1: [-10, 10, -10],
           p2: [10, 10, -10],
           p3: [10, 10, 10]
@@ -267081,15 +267164,15 @@ uniform ${i3} ${a3} u_${s3};
     const intersection = checkIntersection$1(object, material, raycaster, ray, _vA$1, _vB$1, _vC$1, _intersectionPoint);
     if (intersection) {
       const barycoord = new Vector3();
-      Triangle2.getBarycoord(_intersectionPoint, _vA$1, _vB$1, _vC$1, barycoord);
+      Triangle3.getBarycoord(_intersectionPoint, _vA$1, _vB$1, _vC$1, barycoord);
       if (uv) {
-        intersection.uv = Triangle2.getInterpolatedAttribute(uv, a, b, c, barycoord, new Vector2());
+        intersection.uv = Triangle3.getInterpolatedAttribute(uv, a, b, c, barycoord, new Vector2());
       }
       if (uv1) {
-        intersection.uv1 = Triangle2.getInterpolatedAttribute(uv1, a, b, c, barycoord, new Vector2());
+        intersection.uv1 = Triangle3.getInterpolatedAttribute(uv1, a, b, c, barycoord, new Vector2());
       }
       if (normal) {
-        intersection.normal = Triangle2.getInterpolatedAttribute(normal, a, b, c, barycoord, new Vector3());
+        intersection.normal = Triangle3.getInterpolatedAttribute(normal, a, b, c, barycoord, new Vector3());
         if (intersection.normal.dot(ray.direction) > 0) {
           intersection.normal.multiplyScalar(-1);
         }
@@ -267101,7 +267184,7 @@ uniform ${i3} ${a3} u_${s3};
         normal: new Vector3(),
         materialIndex: 0
       };
-      Triangle2.getNormal(_vA$1, _vB$1, _vC$1, face.normal);
+      Triangle3.getNormal(_vA$1, _vB$1, _vC$1, face.normal);
       intersection.face = face;
       intersection.barycoord = barycoord;
     }
@@ -267275,7 +267358,7 @@ uniform ${i3} ${a3} u_${s3};
     }
     throw new Error(`Unknown texture type ${type}.`);
   }
-  var REVISION, MOUSE, TOUCH, CullFaceNone, CullFaceBack, CullFaceFront, PCFShadowMap, PCFSoftShadowMap, VSMShadowMap, FrontSide, BackSide, DoubleSide, NoBlending, NormalBlending, AdditiveBlending, SubtractiveBlending, MultiplyBlending, CustomBlending, AddEquation, SubtractEquation, ReverseSubtractEquation, MinEquation, MaxEquation, ZeroFactor, OneFactor, SrcColorFactor, OneMinusSrcColorFactor, SrcAlphaFactor, OneMinusSrcAlphaFactor, DstAlphaFactor, OneMinusDstAlphaFactor, DstColorFactor, OneMinusDstColorFactor, SrcAlphaSaturateFactor, ConstantColorFactor, OneMinusConstantColorFactor, ConstantAlphaFactor, OneMinusConstantAlphaFactor, NeverDepth, AlwaysDepth, LessDepth, LessEqualDepth, EqualDepth, GreaterEqualDepth, GreaterDepth, NotEqualDepth, MultiplyOperation, MixOperation, AddOperation, NoToneMapping, LinearToneMapping, ReinhardToneMapping, CineonToneMapping, ACESFilmicToneMapping, CustomToneMapping, AgXToneMapping, NeutralToneMapping, UVMapping, CubeReflectionMapping, CubeRefractionMapping, EquirectangularReflectionMapping, EquirectangularRefractionMapping, CubeUVReflectionMapping, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter, NearestMipmapNearestFilter, NearestMipmapLinearFilter, LinearFilter, LinearMipmapNearestFilter, LinearMipmapLinearFilter, UnsignedByteType, ByteType, ShortType, UnsignedShortType, IntType, UnsignedIntType, FloatType, HalfFloatType, UnsignedShort4444Type, UnsignedShort5551Type, UnsignedInt248Type, UnsignedInt5999Type, UnsignedInt101111Type, AlphaFormat, RGBFormat, RGBAFormat, DepthFormat, DepthStencilFormat, RedFormat, RedIntegerFormat, RGFormat, RGIntegerFormat, RGBAIntegerFormat, RGB_S3TC_DXT1_Format, RGBA_S3TC_DXT1_Format, RGBA_S3TC_DXT3_Format, RGBA_S3TC_DXT5_Format, RGB_PVRTC_4BPPV1_Format, RGB_PVRTC_2BPPV1_Format, RGBA_PVRTC_4BPPV1_Format, RGBA_PVRTC_2BPPV1_Format, RGB_ETC1_Format, RGB_ETC2_Format, RGBA_ETC2_EAC_Format, R11_EAC_Format, SIGNED_R11_EAC_Format, RG11_EAC_Format, SIGNED_RG11_EAC_Format, RGBA_ASTC_4x4_Format, RGBA_ASTC_5x4_Format, RGBA_ASTC_5x5_Format, RGBA_ASTC_6x5_Format, RGBA_ASTC_6x6_Format, RGBA_ASTC_8x5_Format, RGBA_ASTC_8x6_Format, RGBA_ASTC_8x8_Format, RGBA_ASTC_10x5_Format, RGBA_ASTC_10x6_Format, RGBA_ASTC_10x8_Format, RGBA_ASTC_10x10_Format, RGBA_ASTC_12x10_Format, RGBA_ASTC_12x12_Format, RGBA_BPTC_Format, RGB_BPTC_SIGNED_Format, RGB_BPTC_UNSIGNED_Format, RED_RGTC1_Format, SIGNED_RED_RGTC1_Format, RED_GREEN_RGTC2_Format, SIGNED_RED_GREEN_RGTC2_Format, InterpolateDiscrete, InterpolateLinear, InterpolateSmooth, ZeroCurvatureEnding, ZeroSlopeEnding, WrapAroundEnding, BasicDepthPacking, TangentSpaceNormalMap, ObjectSpaceNormalMap, NoColorSpace, SRGBColorSpace, LinearSRGBColorSpace, LinearTransfer, SRGBTransfer, KeepStencilOp, AlwaysStencilFunc, NeverCompare, LessCompare, EqualCompare, LessEqualCompare, GreaterCompare, NotEqualCompare, GreaterEqualCompare, AlwaysCompare, StaticDrawUsage, GLSL3, WebGLCoordinateSystem, WebGPUCoordinateSystem, _cache, _setConsoleFunction, EventDispatcher, _lut, _seed, DEG2RAD, RAD2DEG, MathUtils, Vector2, Quaternion, Vector3, _vector$c, _quaternion$4, Matrix3, _m3, LINEAR_REC709_TO_XYZ, XYZ_TO_LINEAR_REC709, ColorManagement, _canvas, ImageUtils, _sourceId, Source, _textureId, _tempVec3, Texture, Vector4, RenderTarget, WebGLRenderTarget, DataArrayTexture, Data3DTexture, Box3, _points, _vector$b, _box$4, _v0$2, _v1$7, _v2$4, _f0, _f1, _f2, _center, _extents, _triangleNormal, _testAxis, _box$3, _v1$6, _v2$3, Sphere, _vector$a, _segCenter, _segDir, _diff, _edge1, _edge2, _normal$1, Ray2, Matrix4, _v1$5, _m1$2, _zero, _one, _x, _y, _z, _matrix$2, _quaternion$3, Euler, Layers, _object3DId, _v1$4, _q1, _m1$1, _target, _position$3, _scale$2, _quaternion$2, _xAxis, _yAxis, _zAxis, _addedEvent, _removedEvent, _childaddedEvent, _childremovedEvent, Object3D, _v0$1, _v1$3, _v2$2, _v3$2, _vab, _vac, _vbc, _vap, _vbp, _vcp, _v40, _v41, _v42, Triangle2, _colorKeywords, _hslA, _hslB, Color, _color, _materialId, Material, MeshBasicMaterial, _vector$9, _vector2$1, _id$2, BufferAttribute, Uint16BufferAttribute, Uint32BufferAttribute, Float32BufferAttribute, _id$1, _m1, _obj, _offset, _box$2, _boxMorphTargets, _vector$8, BufferGeometry, _inverseMatrix$3, _ray$3, _sphere$6, _sphereHitAt, _vA$1, _vB$1, _vC$1, _tempA, _morphA, _intersectionPoint, _intersectionPointWorld, Mesh, BoxGeometry, UniformsUtils, default_vertex, default_fragment, ShaderMaterial, Camera, _v3$1, _minTarget, _maxTarget, PerspectiveCamera, fov, aspect, CubeCamera, CubeTexture, WebGLCubeRenderTarget, Group, _moveEvent, WebXRController, Scene, DataTexture, _vector1, _vector2, _normalMatrix, Plane, _sphere$3, _defaultSpriteCenter, _vector$6, Frustum, DepthTexture, CubeDepthTexture, ExternalTexture, PlaneGeometry, RawShaderMaterial, MeshDepthMaterial, MeshDistanceMaterial, Interpolant, CubicInterpolant, LinearInterpolant, DiscreteInterpolant, KeyframeTrack, BooleanKeyframeTrack, ColorKeyframeTrack, NumberKeyframeTrack, QuaternionLinearInterpolant, QuaternionKeyframeTrack, StringKeyframeTrack, VectorKeyframeTrack, LoadingManager, DefaultLoadingManager, Loader, OrthographicCamera, ArrayCamera, _RESERVED_CHARS_RE, _reservedRe, _wordChar, _wordCharOrDot, _directoryRe, _nodeRe, _objectRe, _propertyRe, _trackRe, _supportedObjectNames, Composite, PropertyBinding, _controlInterpolantsResultBuffer, Spherical, Controls;
+  var REVISION, MOUSE, TOUCH, CullFaceNone, CullFaceBack, CullFaceFront, PCFShadowMap, PCFSoftShadowMap, VSMShadowMap, FrontSide, BackSide, DoubleSide, NoBlending, NormalBlending, AdditiveBlending, SubtractiveBlending, MultiplyBlending, CustomBlending, AddEquation, SubtractEquation, ReverseSubtractEquation, MinEquation, MaxEquation, ZeroFactor, OneFactor, SrcColorFactor, OneMinusSrcColorFactor, SrcAlphaFactor, OneMinusSrcAlphaFactor, DstAlphaFactor, OneMinusDstAlphaFactor, DstColorFactor, OneMinusDstColorFactor, SrcAlphaSaturateFactor, ConstantColorFactor, OneMinusConstantColorFactor, ConstantAlphaFactor, OneMinusConstantAlphaFactor, NeverDepth, AlwaysDepth, LessDepth, LessEqualDepth, EqualDepth, GreaterEqualDepth, GreaterDepth, NotEqualDepth, MultiplyOperation, MixOperation, AddOperation, NoToneMapping, LinearToneMapping, ReinhardToneMapping, CineonToneMapping, ACESFilmicToneMapping, CustomToneMapping, AgXToneMapping, NeutralToneMapping, UVMapping, CubeReflectionMapping, CubeRefractionMapping, EquirectangularReflectionMapping, EquirectangularRefractionMapping, CubeUVReflectionMapping, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter, NearestMipmapNearestFilter, NearestMipmapLinearFilter, LinearFilter, LinearMipmapNearestFilter, LinearMipmapLinearFilter, UnsignedByteType, ByteType, ShortType, UnsignedShortType, IntType, UnsignedIntType, FloatType, HalfFloatType, UnsignedShort4444Type, UnsignedShort5551Type, UnsignedInt248Type, UnsignedInt5999Type, UnsignedInt101111Type, AlphaFormat, RGBFormat, RGBAFormat, DepthFormat, DepthStencilFormat, RedFormat, RedIntegerFormat, RGFormat, RGIntegerFormat, RGBAIntegerFormat, RGB_S3TC_DXT1_Format, RGBA_S3TC_DXT1_Format, RGBA_S3TC_DXT3_Format, RGBA_S3TC_DXT5_Format, RGB_PVRTC_4BPPV1_Format, RGB_PVRTC_2BPPV1_Format, RGBA_PVRTC_4BPPV1_Format, RGBA_PVRTC_2BPPV1_Format, RGB_ETC1_Format, RGB_ETC2_Format, RGBA_ETC2_EAC_Format, R11_EAC_Format, SIGNED_R11_EAC_Format, RG11_EAC_Format, SIGNED_RG11_EAC_Format, RGBA_ASTC_4x4_Format, RGBA_ASTC_5x4_Format, RGBA_ASTC_5x5_Format, RGBA_ASTC_6x5_Format, RGBA_ASTC_6x6_Format, RGBA_ASTC_8x5_Format, RGBA_ASTC_8x6_Format, RGBA_ASTC_8x8_Format, RGBA_ASTC_10x5_Format, RGBA_ASTC_10x6_Format, RGBA_ASTC_10x8_Format, RGBA_ASTC_10x10_Format, RGBA_ASTC_12x10_Format, RGBA_ASTC_12x12_Format, RGBA_BPTC_Format, RGB_BPTC_SIGNED_Format, RGB_BPTC_UNSIGNED_Format, RED_RGTC1_Format, SIGNED_RED_RGTC1_Format, RED_GREEN_RGTC2_Format, SIGNED_RED_GREEN_RGTC2_Format, InterpolateDiscrete, InterpolateLinear, InterpolateSmooth, ZeroCurvatureEnding, ZeroSlopeEnding, WrapAroundEnding, BasicDepthPacking, TangentSpaceNormalMap, ObjectSpaceNormalMap, NoColorSpace, SRGBColorSpace, LinearSRGBColorSpace, LinearTransfer, SRGBTransfer, KeepStencilOp, AlwaysStencilFunc, NeverCompare, LessCompare, EqualCompare, LessEqualCompare, GreaterCompare, NotEqualCompare, GreaterEqualCompare, AlwaysCompare, StaticDrawUsage, GLSL3, WebGLCoordinateSystem, WebGPUCoordinateSystem, _cache, _setConsoleFunction, EventDispatcher, _lut, _seed, DEG2RAD, RAD2DEG, MathUtils, Vector2, Quaternion, Vector3, _vector$c, _quaternion$4, Matrix3, _m3, LINEAR_REC709_TO_XYZ, XYZ_TO_LINEAR_REC709, ColorManagement, _canvas, ImageUtils, _sourceId, Source, _textureId, _tempVec3, Texture, Vector4, RenderTarget, WebGLRenderTarget, DataArrayTexture, Data3DTexture, Box3, _points, _vector$b, _box$4, _v0$2, _v1$7, _v2$4, _f0, _f1, _f2, _center, _extents, _triangleNormal, _testAxis, _box$3, _v1$6, _v2$3, Sphere, _vector$a, _segCenter, _segDir, _diff, _edge1, _edge2, _normal$1, Ray2, Matrix4, _v1$5, _m1$2, _zero, _one, _x, _y, _z, _matrix$2, _quaternion$3, Euler, Layers, _object3DId, _v1$4, _q1, _m1$1, _target, _position$3, _scale$2, _quaternion$2, _xAxis, _yAxis, _zAxis, _addedEvent, _removedEvent, _childaddedEvent, _childremovedEvent, Object3D, _v0$1, _v1$3, _v2$2, _v3$2, _vab, _vac, _vbc, _vap, _vbp, _vcp, _v40, _v41, _v42, Triangle3, _colorKeywords, _hslA, _hslB, Color, _color, _materialId, Material2, MeshBasicMaterial, _vector$9, _vector2$1, _id$2, BufferAttribute, Uint16BufferAttribute, Uint32BufferAttribute, Float32BufferAttribute, _id$1, _m1, _obj, _offset, _box$2, _boxMorphTargets, _vector$8, BufferGeometry, _inverseMatrix$3, _ray$3, _sphere$6, _sphereHitAt, _vA$1, _vB$1, _vC$1, _tempA, _morphA, _intersectionPoint, _intersectionPointWorld, Mesh, BoxGeometry, UniformsUtils, default_vertex, default_fragment, ShaderMaterial, Camera, _v3$1, _minTarget, _maxTarget, PerspectiveCamera, fov, aspect, CubeCamera, CubeTexture, WebGLCubeRenderTarget, Group, _moveEvent, WebXRController, Scene, DataTexture, _vector1, _vector2, _normalMatrix, Plane, _sphere$3, _defaultSpriteCenter, _vector$6, Frustum, DepthTexture, CubeDepthTexture, ExternalTexture, PlaneGeometry, RawShaderMaterial, MeshDepthMaterial, MeshDistanceMaterial, Interpolant, CubicInterpolant, LinearInterpolant, DiscreteInterpolant, KeyframeTrack, BooleanKeyframeTrack, ColorKeyframeTrack, NumberKeyframeTrack, QuaternionLinearInterpolant, QuaternionKeyframeTrack, StringKeyframeTrack, VectorKeyframeTrack, LoadingManager, DefaultLoadingManager, Loader, OrthographicCamera, ArrayCamera, _RESERVED_CHARS_RE, _reservedRe, _wordChar, _wordCharOrDot, _directoryRe, _nodeRe, _objectRe, _propertyRe, _trackRe, _supportedObjectNames, Composite, PropertyBinding, _controlInterpolantsResultBuffer, Spherical, Controls;
   var init_three_core = __esm({
     "node_modules/three/build/three.core.js"() {
       REVISION = "182";
@@ -275378,7 +275461,7 @@ uniform ${i3} ${a3} u_${s3};
           }
           if (isRootObject) {
             const geometries = extractFromCache(meta.geometries);
-            const materials = extractFromCache(meta.materials);
+            const materials2 = extractFromCache(meta.materials);
             const textures = extractFromCache(meta.textures);
             const images = extractFromCache(meta.images);
             const shapes = extractFromCache(meta.shapes);
@@ -275386,7 +275469,7 @@ uniform ${i3} ${a3} u_${s3};
             const animations = extractFromCache(meta.animations);
             const nodes = extractFromCache(meta.nodes);
             if (geometries.length > 0) output.geometries = geometries;
-            if (materials.length > 0) output.materials = materials;
+            if (materials2.length > 0) output.materials = materials2;
             if (textures.length > 0) output.textures = textures;
             if (images.length > 0) output.images = images;
             if (shapes.length > 0) output.shapes = shapes;
@@ -275467,7 +275550,7 @@ uniform ${i3} ${a3} u_${s3};
       _v40 = /* @__PURE__ */ new Vector4();
       _v41 = /* @__PURE__ */ new Vector4();
       _v42 = /* @__PURE__ */ new Vector4();
-      Triangle2 = class _Triangle {
+      Triangle3 = class _Triangle {
         /**
          * Constructs a new triangle.
          *
@@ -276573,7 +276656,7 @@ uniform ${i3} ${a3} u_${s3};
       _color = /* @__PURE__ */ new Color();
       Color.NAMES = _colorKeywords;
       _materialId = 0;
-      Material = class extends EventDispatcher {
+      Material2 = class extends EventDispatcher {
         /**
          * Constructs a new material.
          */
@@ -276993,7 +277076,7 @@ uniform ${i3} ${a3} u_${s3};
           if (value === true) this.version++;
         }
       };
-      MeshBasicMaterial = class extends Material {
+      MeshBasicMaterial = class extends Material2 {
         /**
          * Constructs a new mesh basic material.
          *
@@ -278571,7 +278654,7 @@ uniform ${i3} ${a3} u_${s3};
       UniformsUtils = { clone: cloneUniforms, merge: mergeUniforms };
       default_vertex = "void main() {\n	gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );\n}";
       default_fragment = "void main() {\n	gl_FragColor = vec4( 1.0, 0.0, 0.0, 1.0 );\n}";
-      ShaderMaterial = class extends Material {
+      ShaderMaterial = class extends Material2 {
         /**
          * Constructs a new shader material.
          *
@@ -280158,7 +280241,7 @@ uniform ${i3} ${a3} u_${s3};
           this.type = "RawShaderMaterial";
         }
       };
-      MeshDepthMaterial = class extends Material {
+      MeshDepthMaterial = class extends Material2 {
         /**
          * Constructs a new mesh depth material.
          *
@@ -280195,7 +280278,7 @@ uniform ${i3} ${a3} u_${s3};
           return this;
         }
       };
-      MeshDistanceMaterial = class extends Material {
+      MeshDistanceMaterial = class extends Material2 {
         /**
          * Constructs a new mesh distance material.
          *
@@ -291544,7 +291627,7 @@ void main() {
           }
           let extensions, capabilities, state, info;
           let properties, textures, cubemaps, cubeuvmaps, attributes, geometries, objects;
-          let programCache, materials, renderLists, renderStates, clipping, shadowMap;
+          let programCache, materials2, renderLists, renderStates, clipping, shadowMap;
           let background, morphtargets, bufferRenderer, indexedBufferRenderer;
           let utils, bindingStates, uniformsGroups;
           function initGLContext() {
@@ -291568,7 +291651,7 @@ void main() {
             morphtargets = new WebGLMorphtargets(_gl, capabilities, textures);
             clipping = new WebGLClipping(properties);
             programCache = new WebGLPrograms(_this, cubemaps, cubeuvmaps, extensions, capabilities, bindingStates, clipping);
-            materials = new WebGLMaterials(_this, properties);
+            materials2 = new WebGLMaterials(_this, properties);
             renderLists = new WebGLRenderLists();
             renderStates = new WebGLRenderStates(extensions);
             background = new WebGLBackground(_this, cubemaps, cubeuvmaps, state, objects, _alpha, premultipliedAlpha);
@@ -291948,7 +292031,7 @@ void main() {
               });
             }
             currentRenderState.setupLights();
-            const materials2 = /* @__PURE__ */ new Set();
+            const materials3 = /* @__PURE__ */ new Set();
             scene.traverse(function(object) {
               if (!(object.isMesh || object.isPoints || object.isLine || object.isSprite)) {
                 return;
@@ -291959,29 +292042,29 @@ void main() {
                   for (let i = 0; i < material.length; i++) {
                     const material2 = material[i];
                     prepareMaterial(material2, targetScene, object);
-                    materials2.add(material2);
+                    materials3.add(material2);
                   }
                 } else {
                   prepareMaterial(material, targetScene, object);
-                  materials2.add(material);
+                  materials3.add(material);
                 }
               }
             });
             currentRenderState = renderStateStack.pop();
-            return materials2;
+            return materials3;
           };
           this.compileAsync = function(scene, camera, targetScene = null) {
-            const materials2 = this.compile(scene, camera, targetScene);
+            const materials3 = this.compile(scene, camera, targetScene);
             return new Promise((resolve) => {
               function checkMaterialsReady() {
-                materials2.forEach(function(material) {
+                materials3.forEach(function(material) {
                   const materialProperties = properties.get(material);
                   const program = materialProperties.currentProgram;
                   if (program.isReady()) {
-                    materials2.delete(material);
+                    materials3.delete(material);
                   }
                 });
-                if (materials2.size === 0) {
+                if (materials3.size === 0) {
                   resolve(scene);
                   return;
                 }
@@ -292547,9 +292630,9 @@ void main() {
                 markUniformsLightsNeedsUpdate(m_uniforms, refreshLights);
               }
               if (fog && material.fog === true) {
-                materials.refreshFogUniforms(m_uniforms, fog);
+                materials2.refreshFogUniforms(m_uniforms, fog);
               }
-              materials.refreshMaterialUniforms(m_uniforms, material, _pixelRatio, _height, currentRenderState.state.transmissionRenderTarget[camera.id]);
+              materials2.refreshMaterialUniforms(m_uniforms, material, _pixelRatio, _height, currentRenderState.state.transmissionRenderTarget[camera.id]);
               WebGLUniforms.upload(_gl, getUniformList(materialProperties), m_uniforms, textures);
             }
             if (material.isShaderMaterial && material.uniformsNeedUpdate === true) {
@@ -293846,6 +293929,10 @@ void main() {
         rayCount: 2e4,
         minBounces: 1e4,
         audioDuration: 10,
+        // NOTE: placing at the exact origin [0,0,0] causes artefacts.
+        // TODO: once diffusion has been implemented, try [0,0,0] again.
+        sourcePosition: [0.1, -0.1, -0.1],
+        receiverPosition: [8.5, 0, 0],
         geometry: CUBE_FACES,
         audioToPlay: null,
         ctx: null,

@@ -3,8 +3,9 @@ import { WORKGROUP_SIZE } from "./constants";
 import { Triangle } from "./constants";
 import { trianglesToFloatArray } from "./floatarrays";
 
-const shaderCode = `
+const shaderCode = /* wgsl */ `
   struct Triangle {
+    material: f32,
     x: f32, y: f32, z: f32,
     u1: f32, u2: f32, u3: f32,
     v1: f32, v2: f32, v3: f32,
