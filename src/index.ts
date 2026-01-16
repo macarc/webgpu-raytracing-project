@@ -1,11 +1,13 @@
 import { rayTrace } from "./ray_tracing";
-import { SAMPLE_RATE, Vec3 } from "./constants";
-import { CUBE_FACES } from "./geometry_data";
+import { SAMPLE_RATE, Triangle, Vec3 } from "./constants";
 import m from "mithril";
 import Plotly, { Data } from "plotly.js-dist";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { orientTriangles } from "./orient_surfaces";
+import { boxRoom } from "./geometry_data";
+
+const INITIAL_GEOMETRY_DIMENSIONS = [10, 10, 5];
 
 let state = {
   rayCount: 20000,
@@ -13,15 +15,43 @@ let state = {
   audioDuration: 10,
   // NOTE: placing at the exact origin [0,0,0] causes artefacts.
   // TODO: once diffusion has been implemented, try [0,0,0] again.
-  sourcePosition: [0.1, -0.1, -0.1] as Vec3,
-  receiverPosition: [8.5, 0.0, 0.0] as Vec3,
-  geometry: CUBE_FACES,
+  sourcePosition: [0, 0, 0] as Vec3,
+  receiverPosition: [3.0, 0.0, 0.0] as Vec3,
+  geometryDimensions: [10, 10, 5] as Vec3,
+  geometry: boxRoom({
+    xDim: INITIAL_GEOMETRY_DIMENSIONS[0],
+    yDim: INITIAL_GEOMETRY_DIMENSIONS[1],
+    zDim: INITIAL_GEOMETRY_DIMENSIONS[2],
+    floorMaterial: "carpet",
+    wallMaterial: "plaster",
+    ceilingMaterial: "plaster",
+  }),
 
   audioToPlay: null as Float32Array | null,
   ctx: null as AudioContext | null,
   running: false,
   rayTracingProgress: [0, 0] as [number, number],
   source: null as AudioBufferSourceNode | null,
+
+  updateGeometry: function () {
+    // Don't update the geometry if there's a zero in it (this may occur if the user
+    // deletes the value before typing another).
+    if (
+      state.geometryDimensions.includes(0) ||
+      state.geometryDimensions.includes(NaN)
+    ) {
+      return;
+    }
+
+    state.geometry = boxRoom({
+      xDim: state.geometryDimensions[0],
+      yDim: state.geometryDimensions[1],
+      zDim: state.geometryDimensions[2],
+      floorMaterial: "carpet",
+      wallMaterial: "plaster",
+      ceilingMaterial: "plaster",
+    });
+  },
 
   runRaytracing: async function () {
     state.running = true;
@@ -160,43 +190,105 @@ let MagnitudePlot = ScatterPlot(
 );
 
 let ThreeView = {
+  scene: null as THREE.Scene | null,
+  mesh: null as THREE.Mesh | null,
+  wireframeMesh: null as THREE.Mesh | null,
+  source: null as THREE.Mesh | null,
+  receiver: null as THREE.Mesh | null,
+
+  // Since updating the mesh takes a little time (due to re-orienting the triangles),
+  // this flag is set when updating to avoid another update interfering (e.g. if the
+  // user holds down the up arrow next to the room's x dimension).
+  updatingMesh: false,
+
+  // Store the last-used geometry, so that the mesh is only
+  // redrawn if it changes (i.e. state.geometry doesn't match).
+  geometryData: [] as Triangle[],
+
+  updateMesh: async function () {
+    // TODO BUG: this will mean that some updates are skipped, which could include
+    //           the final one. There should be a timeout or something to ensure
+    //           that the final state is always correct.
+    if (ThreeView.updatingMesh) {
+      return;
+    }
+
+    ThreeView.updatingMesh = true;
+    if (!ThreeView.scene) {
+      return;
+    }
+
+    // If the geometry has changed, update it.
+    if (ThreeView.geometryData !== state.geometry) {
+      // Create geometry.
+      const geometry = new THREE.BufferGeometry();
+      const vertices = new Float32Array(
+        (await orientTriangles(state.geometry)).flatMap((triangle) => [
+          ...triangle.p1,
+          ...triangle.p2,
+          ...triangle.p3,
+        ]),
+      );
+      geometry.setAttribute("position", new THREE.BufferAttribute(vertices, 3));
+
+      // Create materials.
+      const material = new THREE.MeshBasicMaterial({ color: "red" });
+      material.transparent = true;
+      material.opacity = 0.1;
+      const wireframeMaterial = new THREE.MeshBasicMaterial({
+        color: "red",
+        wireframe: true,
+      });
+
+      // Remove old meshes.
+      if (ThreeView.mesh) {
+        ThreeView.scene.remove(ThreeView.mesh);
+      }
+      if (ThreeView.wireframeMesh) {
+        ThreeView.scene.remove(ThreeView.wireframeMesh);
+      }
+
+      // Create the new meshes.
+      ThreeView.mesh = new THREE.Mesh(geometry, material);
+      ThreeView.wireframeMesh = new THREE.Mesh(geometry, wireframeMaterial);
+      ThreeView.geometryData = state.geometry;
+
+      // Add the new meshes to the scene.
+      if (ThreeView.mesh) {
+        ThreeView.scene.add(ThreeView.mesh);
+      }
+      if (ThreeView.wireframeMesh) {
+        ThreeView.scene.add(ThreeView.wireframeMesh);
+      }
+    }
+
+    // Update the source and receiver positions.
+    if (ThreeView.source) {
+      ThreeView.source.position.set(...state.sourcePosition);
+    }
+    if (ThreeView.receiver) {
+      ThreeView.receiver.position.set(...state.receiverPosition);
+    }
+
+    ThreeView.updatingMesh = false;
+  },
+
   oncreate: async function (vnode: any) {
-    console.log(vnode);
     const scene = new THREE.Scene();
+    ThreeView.scene = scene;
+
     const camera = new THREE.PerspectiveCamera(
       75,
       vnode.dom.clientWidth / vnode.dom.clientHeight,
       0.1,
       1000,
     );
+    // Set z-direction to be up.
+    camera.up.set(0, 0, 1);
+
     const renderer = new THREE.WebGLRenderer({
       canvas: vnode.dom,
     });
-
-    const geometry = new THREE.BufferGeometry();
-    const vertices = new Float32Array(
-      (await orientTriangles(CUBE_FACES)).flatMap((triangle) => [
-        ...triangle.p1,
-        ...triangle.p2,
-        ...triangle.p3,
-      ]),
-    );
-    geometry.setAttribute("position", new THREE.BufferAttribute(vertices, 3));
-
-    const material = new THREE.MeshBasicMaterial({ color: "red" });
-    material.transparent = true;
-    material.opacity = 0.1;
-
-    const wireframeMaterial = new THREE.MeshBasicMaterial({
-      color: "red",
-      wireframe: true,
-    });
-
-    const mesh = new THREE.Mesh(geometry, material);
-    scene.add(mesh);
-
-    const wireframeMesh = new THREE.Mesh(geometry, wireframeMaterial);
-    scene.add(wireframeMesh);
 
     const sourceMaterial = new THREE.MeshBasicMaterial({
       color: "green",
@@ -205,10 +297,8 @@ let ThreeView = {
       new THREE.SphereGeometry(0.2),
       sourceMaterial,
     );
-    source.translateX(state.sourcePosition[0]);
-    source.translateY(state.sourcePosition[1]);
-    source.translateZ(state.sourcePosition[2]);
     scene.add(source);
+    ThreeView.source = source;
 
     const receiverMaterial = new THREE.MeshBasicMaterial({
       color: "blue",
@@ -217,12 +307,14 @@ let ThreeView = {
       new THREE.SphereGeometry(1.0),
       receiverMaterial,
     );
-    receiver.translateX(state.receiverPosition[0]);
-    receiver.translateY(state.receiverPosition[1]);
-    receiver.translateZ(state.receiverPosition[2]);
     scene.add(receiver);
+    ThreeView.receiver = receiver;
 
-    camera.position.z = 30;
+    await ThreeView.updateMesh();
+
+    camera.position.x = 20;
+    camera.position.y = -25;
+    camera.position.z = 25;
 
     const orbitControls = new OrbitControls(camera, renderer.domElement);
 
@@ -234,6 +326,9 @@ let ThreeView = {
       renderer.render(scene, camera);
     };
     renderer.setAnimationLoop(animate);
+  },
+  onupdate: async function () {
+    await ThreeView.updateMesh();
   },
   view: function () {
     return m("canvas.three", {
@@ -247,6 +342,101 @@ let AppView = {
     return m("div", [
       m(ThreeView),
       m("div.sidebar", [
+        m("section", { style: "border:1px solid black;" }, [
+          m("label.v", [
+            "Room dimensions:",
+            m("input.v", {
+              type: "number",
+              value: state.geometryDimensions[0],
+              oninput: function (e: InputEvent) {
+                state.geometryDimensions[0] = parseFloat(
+                  (e.target as HTMLInputElement).value,
+                );
+                state.updateGeometry();
+              },
+            }),
+            m("input.v", {
+              type: "number",
+              value: state.geometryDimensions[1],
+              oninput: function (e: InputEvent) {
+                state.geometryDimensions[1] = parseFloat(
+                  (e.target as HTMLInputElement).value,
+                );
+                state.updateGeometry();
+              },
+            }),
+            m("input.v", {
+              type: "number",
+              value: state.geometryDimensions[2],
+              oninput: function (e: InputEvent) {
+                state.geometryDimensions[2] = parseFloat(
+                  (e.target as HTMLInputElement).value,
+                );
+                state.updateGeometry();
+              },
+            }),
+          ]),
+          m("label.v", [
+            "Source position:",
+            m("input.v", {
+              type: "number",
+              value: state.sourcePosition[0],
+              oninput: function (e: InputEvent) {
+                state.sourcePosition[0] = parseFloat(
+                  (e.target as HTMLInputElement).value,
+                );
+              },
+            }),
+            m("input.v", {
+              type: "number",
+              value: state.sourcePosition[1],
+              oninput: function (e: InputEvent) {
+                state.sourcePosition[1] = parseFloat(
+                  (e.target as HTMLInputElement).value,
+                );
+              },
+            }),
+            m("input.v", {
+              type: "number",
+              value: state.sourcePosition[2],
+              oninput: function (e: InputEvent) {
+                state.sourcePosition[2] = parseFloat(
+                  (e.target as HTMLInputElement).value,
+                );
+              },
+            }),
+          ]),
+          m("label.v", [
+            "Receiver position:",
+            m("input.v", {
+              type: "number",
+              value: state.receiverPosition[0],
+              oninput: function (e: InputEvent) {
+                state.receiverPosition[0] = parseFloat(
+                  (e.target as HTMLInputElement).value,
+                );
+              },
+            }),
+            m("input.v", {
+              type: "number",
+              value: state.receiverPosition[1],
+              oninput: function (e: InputEvent) {
+                state.receiverPosition[1] = parseFloat(
+                  (e.target as HTMLInputElement).value,
+                );
+              },
+            }),
+            m("input.v", {
+              type: "number",
+              value: state.receiverPosition[2],
+              oninput: function (e: InputEvent) {
+                state.receiverPosition[2] = parseFloat(
+                  (e.target as HTMLInputElement).value,
+                );
+              },
+            }),
+          ]),
+        ]),
         m("section", { style: "border:1px solid black;" }, [
           m("label.block", [
             "Ray count:",

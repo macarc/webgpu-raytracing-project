@@ -177,7 +177,7 @@ function specularRayIntersectionShaderCode(
 
     var lastsurfacenormal = vec3(initialRay.nx, initialRay.ny, initialRay.nz);
 
-    let receiverPosition = vec3(${receiverPosition.join(",")});
+    let receiverPosition = vec3f(${receiverPosition.join(",")});
 
     for (var n: u32 = 0; n < ${bounceCount}; n++) {
       let index = rayIndex * ${bounceCount} + n;

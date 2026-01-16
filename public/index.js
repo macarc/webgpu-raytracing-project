@@ -554,21 +554,9 @@
   });
 
   // src/ray_tracing.ts
-  function rand() {
-    return Math.random() * 2 - 1;
-  }
-  function randomPointOnUnitSphere() {
-    let x = 0;
-    let y = 0;
-    let z = 0;
-    let r = Infinity;
-    while (r > 1) {
-      x = rand();
-      y = rand();
-      z = rand();
-      r = Math.sqrt(x ** 2 + y ** 2 + z ** 2);
-    }
-    return [x / r, y / r, z / r];
+  function normalize(v) {
+    const magnitude = Math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2);
+    return [v[0] / magnitude, v[1] / magnitude, v[2] / magnitude];
   }
   function specularRayIntersectionShaderCode(receiverPosition, bounceCount) {
     return (
@@ -724,7 +712,7 @@
 
     var lastsurfacenormal = vec3(initialRay.nx, initialRay.ny, initialRay.nz);
 
-    let receiverPosition = vec3(${receiverPosition.join(",")});
+    let receiverPosition = vec3f(${receiverPosition.join(",")});
 
     for (var n: u32 = 0; n < ${bounceCount}; n++) {
       let index = rayIndex * ${bounceCount} + n;
@@ -918,10 +906,18 @@
     console.log("Creating geometry");
     const rays = [];
     const triangles = await orientTriangles(settings.geometry);
+    const goldenRatio = (1 + Math.sqrt(5)) / 2;
     for (let i = 0; i < settings.rayCount; ++i) {
+      const theta = 2 * Math.PI * i / goldenRatio;
+      const phi = Math.acos(1 - 2 * i / settings.rayCount);
+      const ray = [
+        Math.cos(theta) * Math.sin(phi),
+        Math.sin(theta) * Math.sin(phi),
+        Math.cos(phi)
+      ];
       rays.push({
         position: settings.sourcePosition,
-        direction: randomPointOnUnitSphere()
+        direction: normalize(ray)
       });
     }
     const gpuDevice = await getGPUDevice();
@@ -1164,94 +1160,6 @@
           return arrayDataOutput.map((buffer) => new Float32Array(buffer));
         }
       };
-    }
-  });
-
-  // src/geometry_data.ts
-  var CUBE_FACES;
-  var init_geometry_data = __esm({
-    "src/geometry_data.ts"() {
-      "use strict";
-      CUBE_FACES = [
-        // Bottom face.
-        {
-          material: "carpet",
-          p1: [-10, -10, -10],
-          p2: [10, -10, -10],
-          p3: [-10, 10, -10]
-        },
-        {
-          material: "carpet",
-          p1: [10, -10, -10],
-          p2: [10, 10, -10],
-          p3: [-10, 10, -10]
-        },
-        // Top face.
-        {
-          material: "plaster",
-          p1: [-10, -10, 10],
-          p2: [10, -10, 10],
-          p3: [-10, 10, 10]
-        },
-        {
-          material: "plaster",
-          p1: [10, -10, 10],
-          p2: [10, 10, 10],
-          p3: [-10, 10, 10]
-        },
-        // Left face.
-        {
-          material: "plaster",
-          p1: [-10, -10, -10],
-          p2: [-10, 10, 10],
-          p3: [-10, -10, 10]
-        },
-        {
-          material: "plaster",
-          p1: [-10, -10, -10],
-          p2: [-10, 10, -10],
-          p3: [-10, 10, 10]
-        },
-        // Right face.
-        {
-          material: "plaster",
-          p1: [10, -10, -10],
-          p2: [10, 10, 10],
-          p3: [10, -10, 10]
-        },
-        {
-          material: "plaster",
-          p1: [10, -10, -10],
-          p2: [10, 10, -10],
-          p3: [10, 10, 10]
-        },
-        // Front face.
-        {
-          material: "plaster",
-          p1: [-10, -10, -10],
-          p2: [10, -10, 10],
-          p3: [-10, -10, 10]
-        },
-        {
-          material: "plaster",
-          p1: [-10, -10, -10],
-          p2: [10, -10, -10],
-          p3: [10, -10, 10]
-        },
-        // Back face.
-        {
-          material: "plaster",
-          p1: [-10, 10, -10],
-          p2: [10, 10, 10],
-          p3: [-10, 10, 10]
-        },
-        {
-          material: "plaster",
-          p1: [-10, 10, -10],
-          p2: [10, 10, -10],
-          p3: [10, 10, 10]
-        }
-      ];
     }
   });
 
@@ -32178,10 +32086,10 @@
                   }
                 }
               }
-              function incrementShift(ax, shiftVal, axShifts, normalize2) {
+              function incrementShift(ax, shiftVal, axShifts, normalize3) {
                 var overlay = ax.anchor !== "free" && (ax.overlaying === void 0 || ax.overlaying === false) ? ax._id : ax.overlaying;
                 var shiftValAdj;
-                if (normalize2) {
+                if (normalize3) {
                   shiftValAdj = ax.side === "right" ? shiftVal : -shiftVal;
                 } else {
                   shiftValAdj = shiftVal;
@@ -112942,13 +112850,13 @@
                     (function(module22, __unused_webpack_exports, __webpack_require__2) {
                       module22.exports = angle;
                       var fromValues = __webpack_require__2(2825);
-                      var normalize2 = __webpack_require__2(3536);
+                      var normalize3 = __webpack_require__2(3536);
                       var dot = __webpack_require__2(244);
                       function angle(a, b) {
                         var tempA = fromValues(a[0], a[1], a[2]);
                         var tempB = fromValues(b[0], b[1], b[2]);
-                        normalize2(tempA, tempA);
-                        normalize2(tempB, tempB);
+                        normalize3(tempA, tempA);
+                        normalize3(tempB, tempB);
                         var cosine = dot(tempA, tempB);
                         if (cosine > 1) {
                           return 0;
@@ -113328,8 +113236,8 @@
                   3536: (
                     /***/
                     (function(module22) {
-                      module22.exports = normalize2;
-                      function normalize2(out, a) {
+                      module22.exports = normalize3;
+                      function normalize3(out, a) {
                         var x = a[0], y = a[1], z = a[2];
                         var len = x * x + y * y + z * z;
                         if (len > 0) {
@@ -113808,8 +113716,8 @@
                   5177: (
                     /***/
                     (function(module22) {
-                      module22.exports = normalize2;
-                      function normalize2(out, a) {
+                      module22.exports = normalize3;
+                      function normalize3(out, a) {
                         var x = a[0], y = a[1], z = a[2], w = a[3];
                         var len = x * x + y * y + z * z + w * w;
                         if (len > 0) {
@@ -115656,7 +115564,7 @@
                   2652: (
                     /***/
                     (function(module22, __unused_webpack_exports, __webpack_require__2) {
-                      var normalize2 = __webpack_require__2(4335);
+                      var normalize3 = __webpack_require__2(4335);
                       var create = __webpack_require__2(6864);
                       var clone = __webpack_require__2(1903);
                       var determinant = __webpack_require__2(9921);
@@ -115679,7 +115587,7 @@
                         if (!skew) skew = [0, 0, 0];
                         if (!perspective) perspective = [0, 0, 0, 1];
                         if (!quaternion) quaternion = [0, 0, 0, 1];
-                        if (!normalize2(tmp, matrix))
+                        if (!normalize3(tmp, matrix))
                           return false;
                         clone(perspectiveMatrix, tmp);
                         perspectiveMatrix[3] = 0;
@@ -115772,7 +115680,7 @@
                   4335: (
                     /***/
                     (function(module22) {
-                      module22.exports = function normalize2(out, mat) {
+                      module22.exports = function normalize3(out, mat) {
                         var m44 = mat[15];
                         if (m44 === 0)
                           return false;
@@ -115883,7 +115791,7 @@
                       var lookAt = __webpack_require__2(6582);
                       var translate = __webpack_require__2(7656);
                       var scale = __webpack_require__2(2504);
-                      var normalize2 = __webpack_require__2(3536);
+                      var normalize3 = __webpack_require__2(3536);
                       var DEFAULT_CENTER = [0, 0, 0];
                       module22.exports = createMatrixCameraController;
                       function MatrixCameraController(initialMatrix) {
@@ -115938,7 +115846,7 @@
                         up[0] = mat[1];
                         up[1] = mat[5];
                         up[2] = mat[9];
-                        normalize2(up, up);
+                        normalize3(up, up);
                         var imat = this.computedInverse;
                         invert44(imat, mat);
                         var eye = this.computedEye;
@@ -121929,7 +121837,7 @@
                       function compareZipped(a, b) {
                         return compareCells(a[0], b[0]);
                       }
-                      function normalize2(cells, attr) {
+                      function normalize3(cells, attr) {
                         if (attr) {
                           var len = cells.length;
                           var zipped = new Array(len);
@@ -121947,7 +121855,7 @@
                           return cells;
                         }
                       }
-                      __webpack_unused_export__ = normalize2;
+                      __webpack_unused_export__ = normalize3;
                       function unique(cells) {
                         if (cells.length === 0) {
                           return [];
@@ -122046,7 +121954,7 @@
                             result.push(b);
                           }
                         }
-                        return normalize2(result);
+                        return normalize3(result);
                       }
                       __webpack_unused_export__ = explode;
                       function skeleton(cells, n) {
@@ -122066,7 +121974,7 @@
                             result.push(b);
                           }
                         }
-                        return normalize2(result);
+                        return normalize3(result);
                       }
                       __webpack_unused_export__ = skeleton;
                       function boundary(cells) {
@@ -122083,7 +121991,7 @@
                             res.push(b);
                           }
                         }
-                        return normalize2(res);
+                        return normalize3(res);
                       }
                       __webpack_unused_export__ = boundary;
                       function connectedComponents_dense(cells, vertex_count) {
@@ -122112,7 +122020,7 @@
                         return components;
                       }
                       function connectedComponents_sparse(cells) {
-                        var vertices = unique(normalize2(skeleton(cells, 0))), labels = new UnionFind(vertices.length);
+                        var vertices = unique(normalize3(skeleton(cells, 0))), labels = new UnionFind(vertices.length);
                         for (var i = 0; i < cells.length; ++i) {
                           var c = cells[i];
                           for (var j = 0; j < c.length; ++j) {
@@ -122381,7 +122289,7 @@
                       function compareZipped(a, b) {
                         return compareCells(a[0], b[0]);
                       }
-                      function normalize2(cells, attr) {
+                      function normalize3(cells, attr) {
                         if (attr) {
                           var len = cells.length;
                           var zipped = new Array(len);
@@ -122399,7 +122307,7 @@
                           return cells;
                         }
                       }
-                      exports22.normalize = normalize2;
+                      exports22.normalize = normalize3;
                       function unique(cells) {
                         if (cells.length === 0) {
                           return [];
@@ -122498,7 +122406,7 @@
                             result.push(b);
                           }
                         }
-                        return normalize2(result);
+                        return normalize3(result);
                       }
                       exports22.explode = explode;
                       function skeleton(cells, n) {
@@ -122518,7 +122426,7 @@
                             result.push(b);
                           }
                         }
-                        return normalize2(result);
+                        return normalize3(result);
                       }
                       exports22.skeleton = skeleton;
                       function boundary(cells) {
@@ -122535,7 +122443,7 @@
                             res.push(b);
                           }
                         }
-                        return normalize2(res);
+                        return normalize3(res);
                       }
                       exports22.boundary = boundary;
                       function connectedComponents_dense(cells, vertex_count) {
@@ -122564,7 +122472,7 @@
                         return components;
                       }
                       function connectedComponents_sparse(cells) {
-                        var vertices = unique(normalize2(skeleton(cells, 0))), labels = new UnionFind(vertices.length);
+                        var vertices = unique(normalize3(skeleton(cells, 0))), labels = new UnionFind(vertices.length);
                         for (var i = 0; i < cells.length; ++i) {
                           var c = cells[i];
                           for (var j = 0; j < c.length; ++j) {
@@ -125793,7 +125701,7 @@
               var rgba3 = require_color_rgba();
               var clamp2 = require_clamp();
               var dtype = require_dtype();
-              module2.exports = function normalize2(color2, type) {
+              module2.exports = function normalize3(color2, type) {
                 if (type === "float" || !type) type = "array";
                 if (type === "uint") type = "uint8";
                 if (type === "uint_clamped") type = "uint8_clamped";
@@ -143950,8 +143858,8 @@
           var require_array_bounds = __commonJS2({
             "node_modules/array-bounds/index.js"(exports2, module2) {
               "use strict";
-              module2.exports = normalize2;
-              function normalize2(arr, dim) {
+              module2.exports = normalize3;
+              function normalize3(arr, dim) {
                 if (!arr || arr.length == null) throw Error("Argument should be an array");
                 if (dim == null) dim = 1;
                 else dim = Math.floor(dim);
@@ -144071,7 +143979,7 @@
                 let bounds = defined(options.bounds, getBounds(srcPoints, 2));
                 if (bounds[0] === bounds[2]) bounds[2]++;
                 if (bounds[1] === bounds[3]) bounds[3]++;
-                let points = normalize2(srcPoints, bounds);
+                let points = normalize3(srcPoints, bounds);
                 let n = srcPoints.length >>> 1;
                 let ids;
                 if (!options.dtype) options.dtype = "array";
@@ -144165,7 +144073,7 @@
                     Math.max(box.x, box.x + box.width),
                     Math.max(box.y, box.y + box.height)
                   ];
-                  let [nminX, nminY, nmaxX, nmaxY] = normalize2([minX, minY, maxX, maxY], bounds);
+                  let [nminX, nminY, nmaxX, nmaxY] = normalize3([minX, minY, maxX, maxY], bounds);
                   let maxLevel = defined(options2.level, levels.length);
                   if (options2.d != null) {
                     let d;
@@ -144253,7 +144161,7 @@
                   return group2;
                 }
               };
-              function normalize2(pts, bounds) {
+              function normalize3(pts, bounds) {
                 let [lox, loy, hix, hiy] = bounds;
                 let scaleX = 1 / (hix - lox);
                 let scaleY = 1 / (hiy - loy);
@@ -144481,9 +144389,9 @@
           var require_normalize_svg_path = __commonJS2({
             "node_modules/svg-path-bounds/node_modules/normalize-svg-path/index.js"(exports2, module2) {
               "use strict";
-              module2.exports = normalize2;
+              module2.exports = normalize3;
               var arcToCurve = require_cjs6();
-              function normalize2(path) {
+              function normalize3(path) {
                 var prev;
                 var result = [];
                 var bezierX = 0;
@@ -144604,7 +144512,7 @@
               "use strict";
               var parse2 = require_parse_svg_path();
               var abs = require_abs_svg_path();
-              var normalize2 = require_normalize_svg_path();
+              var normalize3 = require_normalize_svg_path();
               var isSvgPath = require_is_svg_path();
               var assert = require_assert();
               module2.exports = pathBounds;
@@ -144616,7 +144524,7 @@
                 }
                 assert(Array.isArray(path), "Argument should be a string or an array of path segments.");
                 path = abs(path);
-                path = normalize2(path);
+                path = normalize3(path);
                 if (!path.length) return [0, 0, 0, 0];
                 var bounds = [Infinity, Infinity, -Infinity, -Infinity];
                 for (var i = 0, l = path.length; i < l; i++) {
@@ -144636,8 +144544,8 @@
             "node_modules/normalize-svg-path/index.js"(exports2, module2) {
               var \u03C0 = Math.PI;
               var _120 = radians2(120);
-              module2.exports = normalize2;
-              function normalize2(path) {
+              module2.exports = normalize3;
+              function normalize3(path) {
                 var prev;
                 var result = [];
                 var bezierX = 0;
@@ -144808,14 +144716,14 @@
           var require_draw_svg_path = __commonJS2({
             "node_modules/draw-svg-path/index.js"(exports2, module2) {
               var abs = require_abs_svg_path();
-              var normalize2 = require_normalize_svg_path2();
+              var normalize3 = require_normalize_svg_path2();
               var methods = {
                 "M": "moveTo",
                 "C": "bezierCurveTo"
               };
               module2.exports = function(context, segments) {
                 context.beginPath();
-                normalize2(abs(segments)).forEach(
+                normalize3(abs(segments)).forEach(
                   function(segment) {
                     var command = segment[0];
                     var args = segment.slice(1);
@@ -147381,8 +147289,8 @@
             "node_modules/array-normalize/index.js"(exports2, module2) {
               "use strict";
               var getBounds = require_array_bounds();
-              module2.exports = normalize2;
-              function normalize2(arr, dim, bounds) {
+              module2.exports = normalize3;
+              function normalize3(arr, dim, bounds) {
                 if (!arr || arr.length == null) throw Error("Argument should be an array");
                 if (dim == null) dim = 1;
                 if (bounds == null) bounds = getBounds(arr, dim);
@@ -148939,7 +148847,7 @@
               var pick = require_pick_by_alias();
               var flatten2 = require_flatten_vertex_data();
               var triangulate = require_earcut();
-              var normalize2 = require_array_normalize();
+              var normalize3 = require_array_normalize();
               var { float32, fract32 } = require_to_float32();
               var WeakMap2 = require_es6_weak_map();
               var parseRect = require_parse_rect();
@@ -149766,7 +149674,7 @@ void main() {
                       }
                     }
                     let npos = new Float64Array(positions);
-                    normalize2(npos, 2, bounds);
+                    normalize3(npos, 2, bounds);
                     let positionData = new Float64Array(count * 2 + 6);
                     if (state.close) {
                       if (positions[0] === positions[count * 2 - 2] && positions[1] === positions[count * 2 - 1]) {
@@ -190917,7 +190825,7 @@ void main() {
                     out[2] = a[2] * b;
                     return out;
                   }
-                  function normalize2(out, a) {
+                  function normalize3(out, a) {
                     var x = a[0];
                     var y = a[1];
                     var z = a[2];
@@ -199128,7 +199036,7 @@ void main() {
                   exports22.multiply = multiply;
                   exports22.mvt = vectorTile;
                   exports22.nextPowerOfTwo = nextPowerOfTwo;
-                  exports22.normalize = normalize2;
+                  exports22.normalize = normalize3;
                   exports22.number = number;
                   exports22.offscreenCanvasSupported = offscreenCanvasSupported;
                   exports22.ortho = ortho;
@@ -266965,7 +266873,7 @@ uniform ${i3} ${a3} u_${s3};
         throw new Error("Invalid component type.");
     }
   }
-  function normalize(value, array) {
+  function normalize2(value, array) {
     switch (array.constructor) {
       case Float32Array:
         return value;
@@ -267824,7 +267732,7 @@ uniform ${i3} ${a3} u_${s3};
          * @param {TypedArray} array - The typed array that defines the data type of the value.
          * @return {number} The normalize value.
          */
-        normalize,
+        normalize: normalize2,
         /**
          * Denormalizes the given value according to the given typed array.
          *
@@ -277347,7 +277255,7 @@ uniform ${i3} ${a3} u_${s3};
          * @return {BufferAttribute} A reference to this instance.
          */
         setComponent(index, component, value) {
-          if (this.normalized) value = normalize(value, this.array);
+          if (this.normalized) value = normalize2(value, this.array);
           this.array[index * this.itemSize + component] = value;
           return this;
         }
@@ -277370,7 +277278,7 @@ uniform ${i3} ${a3} u_${s3};
          * @return {BufferAttribute} A reference to this instance.
          */
         setX(index, x) {
-          if (this.normalized) x = normalize(x, this.array);
+          if (this.normalized) x = normalize2(x, this.array);
           this.array[index * this.itemSize] = x;
           return this;
         }
@@ -277393,7 +277301,7 @@ uniform ${i3} ${a3} u_${s3};
          * @return {BufferAttribute} A reference to this instance.
          */
         setY(index, y) {
-          if (this.normalized) y = normalize(y, this.array);
+          if (this.normalized) y = normalize2(y, this.array);
           this.array[index * this.itemSize + 1] = y;
           return this;
         }
@@ -277416,7 +277324,7 @@ uniform ${i3} ${a3} u_${s3};
          * @return {BufferAttribute} A reference to this instance.
          */
         setZ(index, z) {
-          if (this.normalized) z = normalize(z, this.array);
+          if (this.normalized) z = normalize2(z, this.array);
           this.array[index * this.itemSize + 2] = z;
           return this;
         }
@@ -277439,7 +277347,7 @@ uniform ${i3} ${a3} u_${s3};
          * @return {BufferAttribute} A reference to this instance.
          */
         setW(index, w) {
-          if (this.normalized) w = normalize(w, this.array);
+          if (this.normalized) w = normalize2(w, this.array);
           this.array[index * this.itemSize + 3] = w;
           return this;
         }
@@ -277454,8 +277362,8 @@ uniform ${i3} ${a3} u_${s3};
         setXY(index, x, y) {
           index *= this.itemSize;
           if (this.normalized) {
-            x = normalize(x, this.array);
-            y = normalize(y, this.array);
+            x = normalize2(x, this.array);
+            y = normalize2(y, this.array);
           }
           this.array[index + 0] = x;
           this.array[index + 1] = y;
@@ -277473,9 +277381,9 @@ uniform ${i3} ${a3} u_${s3};
         setXYZ(index, x, y, z) {
           index *= this.itemSize;
           if (this.normalized) {
-            x = normalize(x, this.array);
-            y = normalize(y, this.array);
-            z = normalize(z, this.array);
+            x = normalize2(x, this.array);
+            y = normalize2(y, this.array);
+            z = normalize2(z, this.array);
           }
           this.array[index + 0] = x;
           this.array[index + 1] = y;
@@ -277495,10 +277403,10 @@ uniform ${i3} ${a3} u_${s3};
         setXYZW(index, x, y, z, w) {
           index *= this.itemSize;
           if (this.normalized) {
-            x = normalize(x, this.array);
-            y = normalize(y, this.array);
-            z = normalize(z, this.array);
-            w = normalize(w, this.array);
+            x = normalize2(x, this.array);
+            y = normalize2(y, this.array);
+            z = normalize2(z, this.array);
+            w = normalize2(w, this.array);
           }
           this.array[index + 0] = x;
           this.array[index + 1] = y;
@@ -294003,31 +293911,145 @@ void main() {
     }
   });
 
+  // src/geometry_data.ts
+  function boxRoom(config) {
+    const xp = config.xDim / 2;
+    const yp = config.yDim / 2;
+    const zp = config.zDim / 2;
+    return [
+      // Bottom face.
+      {
+        material: config.floorMaterial,
+        p1: [-xp, -yp, -zp],
+        p2: [xp, -yp, -zp],
+        p3: [-xp, yp, -zp]
+      },
+      {
+        material: config.floorMaterial,
+        p1: [xp, -yp, -zp],
+        p2: [xp, yp, -zp],
+        p3: [-xp, yp, -zp]
+      },
+      // Top face.
+      {
+        material: config.ceilingMaterial,
+        p1: [-xp, -yp, zp],
+        p2: [xp, -yp, zp],
+        p3: [-xp, yp, zp]
+      },
+      {
+        material: config.ceilingMaterial,
+        p1: [xp, -yp, zp],
+        p2: [xp, yp, zp],
+        p3: [-xp, yp, zp]
+      },
+      // Left face.
+      {
+        material: config.wallMaterial,
+        p1: [-xp, -yp, -zp],
+        p2: [-xp, yp, zp],
+        p3: [-xp, -yp, zp]
+      },
+      {
+        material: config.wallMaterial,
+        p1: [-xp, -yp, -zp],
+        p2: [-xp, yp, -zp],
+        p3: [-xp, yp, zp]
+      },
+      // Right face.
+      {
+        material: config.wallMaterial,
+        p1: [xp, -yp, -zp],
+        p2: [xp, yp, zp],
+        p3: [xp, -yp, zp]
+      },
+      {
+        material: config.wallMaterial,
+        p1: [xp, -yp, -zp],
+        p2: [xp, yp, -zp],
+        p3: [xp, yp, zp]
+      },
+      // Front face.
+      {
+        material: config.wallMaterial,
+        p1: [-xp, -yp, -zp],
+        p2: [xp, -yp, zp],
+        p3: [-xp, -yp, zp]
+      },
+      {
+        material: config.wallMaterial,
+        p1: [-xp, -yp, -zp],
+        p2: [xp, -yp, -zp],
+        p3: [xp, -yp, zp]
+      },
+      // Back face.
+      {
+        material: config.wallMaterial,
+        p1: [-xp, yp, -zp],
+        p2: [xp, yp, zp],
+        p3: [-xp, yp, zp]
+      },
+      {
+        material: config.wallMaterial,
+        p1: [-xp, yp, -zp],
+        p2: [xp, yp, -zp],
+        p3: [xp, yp, zp]
+      }
+    ];
+  }
+  var init_geometry_data = __esm({
+    "src/geometry_data.ts"() {
+      "use strict";
+    }
+  });
+
   // src/index.ts
   var require_index = __commonJS({
     "src/index.ts"() {
       init_ray_tracing();
       init_constants();
-      init_geometry_data();
       var import_mithril = __toESM(require_mithril());
       var import_plotly = __toESM(require_plotly());
       init_three_module();
       init_OrbitControls();
       init_orient_surfaces();
+      init_geometry_data();
+      var INITIAL_GEOMETRY_DIMENSIONS = [10, 10, 5];
       var state = {
         rayCount: 2e4,
         minBounces: 1e4,
         audioDuration: 10,
         // NOTE: placing at the exact origin [0,0,0] causes artefacts.
         // TODO: once diffusion has been implemented, try [0,0,0] again.
-        sourcePosition: [0.1, -0.1, -0.1],
-        receiverPosition: [8.5, 0, 0],
-        geometry: CUBE_FACES,
+        sourcePosition: [0, 0, 0],
+        receiverPosition: [3, 0, 0],
+        geometryDimensions: [10, 10, 5],
+        geometry: boxRoom({
+          xDim: INITIAL_GEOMETRY_DIMENSIONS[0],
+          yDim: INITIAL_GEOMETRY_DIMENSIONS[1],
+          zDim: INITIAL_GEOMETRY_DIMENSIONS[2],
+          floorMaterial: "carpet",
+          wallMaterial: "plaster",
+          ceilingMaterial: "plaster"
+        }),
         audioToPlay: null,
         ctx: null,
         running: false,
         rayTracingProgress: [0, 0],
         source: null,
+        updateGeometry: function() {
+          if (state.geometryDimensions.includes(0) || state.geometryDimensions.includes(NaN)) {
+            return;
+          }
+          state.geometry = boxRoom({
+            xDim: state.geometryDimensions[0],
+            yDim: state.geometryDimensions[1],
+            zDim: state.geometryDimensions[2],
+            floorMaterial: "carpet",
+            wallMaterial: "plaster",
+            ceilingMaterial: "plaster"
+          });
+        },
         runRaytracing: async function() {
           state.running = true;
           state.audioToPlay = await rayTrace(state, state.rayTraceUpdate);
@@ -294132,38 +294154,80 @@ void main() {
         }
       );
       var ThreeView = {
+        scene: null,
+        mesh: null,
+        wireframeMesh: null,
+        source: null,
+        receiver: null,
+        // Since updating the mesh takes a little time (due to re-orienting the triangles),
+        // this flag is set when updating to avoid another update interfering (e.g. if the
+        // user holds down the up arrow next to the room's x dimension).
+        updatingMesh: false,
+        // Store the last-used geometry, so that the mesh is only
+        // redrawn if it changes (i.e. state.geometry doesn't match).
+        geometryData: [],
+        updateMesh: async function() {
+          if (ThreeView.updatingMesh) {
+            return;
+          }
+          ThreeView.updatingMesh = true;
+          if (!ThreeView.scene) {
+            return;
+          }
+          if (ThreeView.geometryData !== state.geometry) {
+            const geometry = new BufferGeometry();
+            const vertices = new Float32Array(
+              (await orientTriangles(state.geometry)).flatMap((triangle) => [
+                ...triangle.p1,
+                ...triangle.p2,
+                ...triangle.p3
+              ])
+            );
+            geometry.setAttribute("position", new BufferAttribute(vertices, 3));
+            const material = new MeshBasicMaterial({ color: "red" });
+            material.transparent = true;
+            material.opacity = 0.1;
+            const wireframeMaterial = new MeshBasicMaterial({
+              color: "red",
+              wireframe: true
+            });
+            if (ThreeView.mesh) {
+              ThreeView.scene.remove(ThreeView.mesh);
+            }
+            if (ThreeView.wireframeMesh) {
+              ThreeView.scene.remove(ThreeView.wireframeMesh);
+            }
+            ThreeView.mesh = new Mesh(geometry, material);
+            ThreeView.wireframeMesh = new Mesh(geometry, wireframeMaterial);
+            ThreeView.geometryData = state.geometry;
+            if (ThreeView.mesh) {
+              ThreeView.scene.add(ThreeView.mesh);
+            }
+            if (ThreeView.wireframeMesh) {
+              ThreeView.scene.add(ThreeView.wireframeMesh);
+            }
+          }
+          if (ThreeView.source) {
+            ThreeView.source.position.set(...state.sourcePosition);
+          }
+          if (ThreeView.receiver) {
+            ThreeView.receiver.position.set(...state.receiverPosition);
+          }
+          ThreeView.updatingMesh = false;
+        },
         oncreate: async function(vnode) {
-          console.log(vnode);
           const scene = new Scene();
+          ThreeView.scene = scene;
           const camera = new PerspectiveCamera(
             75,
             vnode.dom.clientWidth / vnode.dom.clientHeight,
             0.1,
             1e3
           );
+          camera.up.set(0, 0, 1);
           const renderer = new WebGLRenderer({
             canvas: vnode.dom
           });
-          const geometry = new BufferGeometry();
-          const vertices = new Float32Array(
-            (await orientTriangles(CUBE_FACES)).flatMap((triangle) => [
-              ...triangle.p1,
-              ...triangle.p2,
-              ...triangle.p3
-            ])
-          );
-          geometry.setAttribute("position", new BufferAttribute(vertices, 3));
-          const material = new MeshBasicMaterial({ color: "red" });
-          material.transparent = true;
-          material.opacity = 0.1;
-          const wireframeMaterial = new MeshBasicMaterial({
-            color: "red",
-            wireframe: true
-          });
-          const mesh = new Mesh(geometry, material);
-          scene.add(mesh);
-          const wireframeMesh = new Mesh(geometry, wireframeMaterial);
-          scene.add(wireframeMesh);
           const sourceMaterial = new MeshBasicMaterial({
             color: "green"
           });
@@ -294171,10 +294235,8 @@ void main() {
             new SphereGeometry(0.2),
             sourceMaterial
           );
-          source.translateX(state.sourcePosition[0]);
-          source.translateY(state.sourcePosition[1]);
-          source.translateZ(state.sourcePosition[2]);
           scene.add(source);
+          ThreeView.source = source;
           const receiverMaterial = new MeshBasicMaterial({
             color: "blue"
           });
@@ -294182,11 +294244,12 @@ void main() {
             new SphereGeometry(1),
             receiverMaterial
           );
-          receiver.translateX(state.receiverPosition[0]);
-          receiver.translateY(state.receiverPosition[1]);
-          receiver.translateZ(state.receiverPosition[2]);
           scene.add(receiver);
-          camera.position.z = 30;
+          ThreeView.receiver = receiver;
+          await ThreeView.updateMesh();
+          camera.position.x = 20;
+          camera.position.y = -25;
+          camera.position.z = 25;
           const orbitControls = new OrbitControls(camera, renderer.domElement);
           renderer.setSize(vnode.dom.clientWidth, vnode.dom.clientHeight);
           renderer.setClearColor("white");
@@ -294195,6 +294258,9 @@ void main() {
             renderer.render(scene, camera);
           };
           renderer.setAnimationLoop(animate);
+        },
+        onupdate: async function() {
+          await ThreeView.updateMesh();
         },
         view: function() {
           return (0, import_mithril.default)("canvas.three", {
@@ -294207,6 +294273,101 @@ void main() {
           return (0, import_mithril.default)("div", [
             (0, import_mithril.default)(ThreeView),
             (0, import_mithril.default)("div.sidebar", [
+              (0, import_mithril.default)("section", { style: "border:1px solid black;" }, [
+                (0, import_mithril.default)("label.v", [
+                  "Room dimensions:",
+                  (0, import_mithril.default)("input.v", {
+                    type: "number",
+                    value: state.geometryDimensions[0],
+                    oninput: function(e) {
+                      state.geometryDimensions[0] = parseFloat(
+                        e.target.value
+                      );
+                      state.updateGeometry();
+                    }
+                  }),
+                  (0, import_mithril.default)("input.v", {
+                    type: "number",
+                    value: state.geometryDimensions[1],
+                    oninput: function(e) {
+                      state.geometryDimensions[1] = parseFloat(
+                        e.target.value
+                      );
+                      state.updateGeometry();
+                    }
+                  }),
+                  (0, import_mithril.default)("input.v", {
+                    type: "number",
+                    value: state.geometryDimensions[2],
+                    oninput: function(e) {
+                      state.geometryDimensions[2] = parseFloat(
+                        e.target.value
+                      );
+                      state.updateGeometry();
+                    }
+                  })
+                ]),
+                (0, import_mithril.default)("label.v", [
+                  "Source position:",
+                  (0, import_mithril.default)("input.v", {
+                    type: "number",
+                    value: state.sourcePosition[0],
+                    oninput: function(e) {
+                      state.sourcePosition[0] = parseFloat(
+                        e.target.value
+                      );
+                    }
+                  }),
+                  (0, import_mithril.default)("input.v", {
+                    type: "number",
+                    value: state.sourcePosition[1],
+                    oninput: function(e) {
+                      state.sourcePosition[1] = parseFloat(
+                        e.target.value
+                      );
+                    }
+                  }),
+                  (0, import_mithril.default)("input.v", {
+                    type: "number",
+                    value: state.sourcePosition[2],
+                    oninput: function(e) {
+                      state.sourcePosition[2] = parseFloat(
+                        e.target.value
+                      );
+                    }
+                  })
+                ]),
+                (0, import_mithril.default)("label.v", [
+                  "Receiver position:",
+                  (0, import_mithril.default)("input.v", {
+                    type: "number",
+                    value: state.receiverPosition[0],
+                    oninput: function(e) {
+                      state.receiverPosition[0] = parseFloat(
+                        e.target.value
+                      );
+                    }
+                  }),
+                  (0, import_mithril.default)("input.v", {
+                    type: "number",
+                    value: state.receiverPosition[1],
+                    oninput: function(e) {
+                      state.receiverPosition[1] = parseFloat(
+                        e.target.value
+                      );
+                    }
+                  }),
+                  (0, import_mithril.default)("input.v", {
+                    type: "number",
+                    value: state.receiverPosition[2],
+                    oninput: function(e) {
+                      state.receiverPosition[2] = parseFloat(
+                        e.target.value
+                      );
+                    }
+                  })
+                ])
+              ]),
               (0, import_mithril.default)("section", { style: "border:1px solid black;" }, [
                 (0, import_mithril.default)("label.block", [
                   "Ray count:",
