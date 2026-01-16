@@ -56,6 +56,11 @@ function randomPointOnUnitSphere(): Vec3 {
   return [x / r, y / r, z / r];
 }
 
+function normalize(v: Vec3): Vec3 {
+  const magnitude = Math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2);
+  return [v[0] / magnitude, v[1] / magnitude, v[2] / magnitude];
+}
+
 function specularRayIntersectionShaderCode(
   receiverPosition: Vec3,
   bounceCount: number,
@@ -541,10 +546,19 @@ export async function rayTrace(
   const triangles = await orientTriangles(settings.geometry);
 
   // Create the rays.
+  const goldenRatio = (1 + Math.sqrt(5)) / 2;
   for (let i = 0; i < settings.rayCount; ++i) {
+    const theta = (2 * Math.PI * i) / goldenRatio;
+    const phi = Math.acos(1 - (2 * i) / settings.rayCount);
+    const ray: Vec3 = [
+      Math.cos(theta) * Math.sin(phi),
+      Math.sin(theta) * Math.sin(phi),
+      Math.cos(phi),
+    ];
+
     rays.push({
       position: settings.sourcePosition,
-      direction: randomPointOnUnitSphere(),
+      direction: normalize(ray),
     });
   }
 
