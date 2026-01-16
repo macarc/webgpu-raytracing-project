@@ -7,6 +7,8 @@ export const WORKGROUP_SIZE = 64;
 export const SAMPLE_RATE = 48000;
 export const SPEED_OF_SOUND = 340;
 
+export type Vec3 = [number, number, number];
+
 export type Ray = {
   position: [number, number, number];
   direction: [number, number, number];

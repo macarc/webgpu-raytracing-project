@@ -2,38 +2,56 @@
 <div id="root"></div>
 
 <style>
-    section {
-        border: 1px solid black;
-        padding: 1rem;
-        margin: 0.2rem;
-    }
+  section {
+    border: 1px solid black;
+    padding: 1rem;
+  }
 
-    .block {
-        display: block;
-    }
+  .sidebar {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 50vw;
+    height: 100vh;
+    background: #eee;
+    padding: 0.2rem;
+    overflow-y: scroll;
+  }
 
-    label.block {
-        padding: 0.2rem;
-    }
+  .sidebar > * {
+    margin: 0.5rem;
+  }
 
-    .block input {
-        margin-left: 1rem;
-    }
+  .block {
+    display: block;
+  }
 
-    .progress-bar-holder {
-        border: 1px solid black;
-        width: 10rem;
-        height: 3rem;
-    }
+  label.block {
+    padding: 0.2rem;
+  }
 
-    .progress-bar {
-        width: 0;
-        height: 100%;
-        background: green;
-    }
+  .block input {
+    margin-left: 1rem;
+  }
 
-    .plot {
-        display: inline-block;
-        width: 40%;
-    }
+  .progress-bar-holder {
+    display: inline-block;
+    border: 1px solid black;
+    width: 10rem;
+    height: 1rem;
+    margin-left: 1rem;
+    vertical-align: text-bottom;
+  }
+
+  .progress-bar {
+    width: 0;
+    height: 100%;
+    background: green;
+  }
+
+  .plot {
+    display: inline-block;
+    width: 50%;
+    margin: 0;
+  }
 </style>

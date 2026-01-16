@@ -611,6 +611,7 @@
     intensity: f32,
   }
 
+  // TODO: could this just be part of the Triangle.
   struct Material {
     r125: f32,
     r250: f32,
@@ -267358,7 +267359,7 @@ uniform ${i3} ${a3} u_${s3};
     }
     throw new Error(`Unknown texture type ${type}.`);
   }
-  var REVISION, MOUSE, TOUCH, CullFaceNone, CullFaceBack, CullFaceFront, PCFShadowMap, PCFSoftShadowMap, VSMShadowMap, FrontSide, BackSide, DoubleSide, NoBlending, NormalBlending, AdditiveBlending, SubtractiveBlending, MultiplyBlending, CustomBlending, AddEquation, SubtractEquation, ReverseSubtractEquation, MinEquation, MaxEquation, ZeroFactor, OneFactor, SrcColorFactor, OneMinusSrcColorFactor, SrcAlphaFactor, OneMinusSrcAlphaFactor, DstAlphaFactor, OneMinusDstAlphaFactor, DstColorFactor, OneMinusDstColorFactor, SrcAlphaSaturateFactor, ConstantColorFactor, OneMinusConstantColorFactor, ConstantAlphaFactor, OneMinusConstantAlphaFactor, NeverDepth, AlwaysDepth, LessDepth, LessEqualDepth, EqualDepth, GreaterEqualDepth, GreaterDepth, NotEqualDepth, MultiplyOperation, MixOperation, AddOperation, NoToneMapping, LinearToneMapping, ReinhardToneMapping, CineonToneMapping, ACESFilmicToneMapping, CustomToneMapping, AgXToneMapping, NeutralToneMapping, UVMapping, CubeReflectionMapping, CubeRefractionMapping, EquirectangularReflectionMapping, EquirectangularRefractionMapping, CubeUVReflectionMapping, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter, NearestMipmapNearestFilter, NearestMipmapLinearFilter, LinearFilter, LinearMipmapNearestFilter, LinearMipmapLinearFilter, UnsignedByteType, ByteType, ShortType, UnsignedShortType, IntType, UnsignedIntType, FloatType, HalfFloatType, UnsignedShort4444Type, UnsignedShort5551Type, UnsignedInt248Type, UnsignedInt5999Type, UnsignedInt101111Type, AlphaFormat, RGBFormat, RGBAFormat, DepthFormat, DepthStencilFormat, RedFormat, RedIntegerFormat, RGFormat, RGIntegerFormat, RGBAIntegerFormat, RGB_S3TC_DXT1_Format, RGBA_S3TC_DXT1_Format, RGBA_S3TC_DXT3_Format, RGBA_S3TC_DXT5_Format, RGB_PVRTC_4BPPV1_Format, RGB_PVRTC_2BPPV1_Format, RGBA_PVRTC_4BPPV1_Format, RGBA_PVRTC_2BPPV1_Format, RGB_ETC1_Format, RGB_ETC2_Format, RGBA_ETC2_EAC_Format, R11_EAC_Format, SIGNED_R11_EAC_Format, RG11_EAC_Format, SIGNED_RG11_EAC_Format, RGBA_ASTC_4x4_Format, RGBA_ASTC_5x4_Format, RGBA_ASTC_5x5_Format, RGBA_ASTC_6x5_Format, RGBA_ASTC_6x6_Format, RGBA_ASTC_8x5_Format, RGBA_ASTC_8x6_Format, RGBA_ASTC_8x8_Format, RGBA_ASTC_10x5_Format, RGBA_ASTC_10x6_Format, RGBA_ASTC_10x8_Format, RGBA_ASTC_10x10_Format, RGBA_ASTC_12x10_Format, RGBA_ASTC_12x12_Format, RGBA_BPTC_Format, RGB_BPTC_SIGNED_Format, RGB_BPTC_UNSIGNED_Format, RED_RGTC1_Format, SIGNED_RED_RGTC1_Format, RED_GREEN_RGTC2_Format, SIGNED_RED_GREEN_RGTC2_Format, InterpolateDiscrete, InterpolateLinear, InterpolateSmooth, ZeroCurvatureEnding, ZeroSlopeEnding, WrapAroundEnding, BasicDepthPacking, TangentSpaceNormalMap, ObjectSpaceNormalMap, NoColorSpace, SRGBColorSpace, LinearSRGBColorSpace, LinearTransfer, SRGBTransfer, KeepStencilOp, AlwaysStencilFunc, NeverCompare, LessCompare, EqualCompare, LessEqualCompare, GreaterCompare, NotEqualCompare, GreaterEqualCompare, AlwaysCompare, StaticDrawUsage, GLSL3, WebGLCoordinateSystem, WebGPUCoordinateSystem, _cache, _setConsoleFunction, EventDispatcher, _lut, _seed, DEG2RAD, RAD2DEG, MathUtils, Vector2, Quaternion, Vector3, _vector$c, _quaternion$4, Matrix3, _m3, LINEAR_REC709_TO_XYZ, XYZ_TO_LINEAR_REC709, ColorManagement, _canvas, ImageUtils, _sourceId, Source, _textureId, _tempVec3, Texture, Vector4, RenderTarget, WebGLRenderTarget, DataArrayTexture, Data3DTexture, Box3, _points, _vector$b, _box$4, _v0$2, _v1$7, _v2$4, _f0, _f1, _f2, _center, _extents, _triangleNormal, _testAxis, _box$3, _v1$6, _v2$3, Sphere, _vector$a, _segCenter, _segDir, _diff, _edge1, _edge2, _normal$1, Ray2, Matrix4, _v1$5, _m1$2, _zero, _one, _x, _y, _z, _matrix$2, _quaternion$3, Euler, Layers, _object3DId, _v1$4, _q1, _m1$1, _target, _position$3, _scale$2, _quaternion$2, _xAxis, _yAxis, _zAxis, _addedEvent, _removedEvent, _childaddedEvent, _childremovedEvent, Object3D, _v0$1, _v1$3, _v2$2, _v3$2, _vab, _vac, _vbc, _vap, _vbp, _vcp, _v40, _v41, _v42, Triangle3, _colorKeywords, _hslA, _hslB, Color, _color, _materialId, Material2, MeshBasicMaterial, _vector$9, _vector2$1, _id$2, BufferAttribute, Uint16BufferAttribute, Uint32BufferAttribute, Float32BufferAttribute, _id$1, _m1, _obj, _offset, _box$2, _boxMorphTargets, _vector$8, BufferGeometry, _inverseMatrix$3, _ray$3, _sphere$6, _sphereHitAt, _vA$1, _vB$1, _vC$1, _tempA, _morphA, _intersectionPoint, _intersectionPointWorld, Mesh, BoxGeometry, UniformsUtils, default_vertex, default_fragment, ShaderMaterial, Camera, _v3$1, _minTarget, _maxTarget, PerspectiveCamera, fov, aspect, CubeCamera, CubeTexture, WebGLCubeRenderTarget, Group, _moveEvent, WebXRController, Scene, DataTexture, _vector1, _vector2, _normalMatrix, Plane, _sphere$3, _defaultSpriteCenter, _vector$6, Frustum, DepthTexture, CubeDepthTexture, ExternalTexture, PlaneGeometry, RawShaderMaterial, MeshDepthMaterial, MeshDistanceMaterial, Interpolant, CubicInterpolant, LinearInterpolant, DiscreteInterpolant, KeyframeTrack, BooleanKeyframeTrack, ColorKeyframeTrack, NumberKeyframeTrack, QuaternionLinearInterpolant, QuaternionKeyframeTrack, StringKeyframeTrack, VectorKeyframeTrack, LoadingManager, DefaultLoadingManager, Loader, OrthographicCamera, ArrayCamera, _RESERVED_CHARS_RE, _reservedRe, _wordChar, _wordCharOrDot, _directoryRe, _nodeRe, _objectRe, _propertyRe, _trackRe, _supportedObjectNames, Composite, PropertyBinding, _controlInterpolantsResultBuffer, Spherical, Controls;
+  var REVISION, MOUSE, TOUCH, CullFaceNone, CullFaceBack, CullFaceFront, PCFShadowMap, PCFSoftShadowMap, VSMShadowMap, FrontSide, BackSide, DoubleSide, NoBlending, NormalBlending, AdditiveBlending, SubtractiveBlending, MultiplyBlending, CustomBlending, AddEquation, SubtractEquation, ReverseSubtractEquation, MinEquation, MaxEquation, ZeroFactor, OneFactor, SrcColorFactor, OneMinusSrcColorFactor, SrcAlphaFactor, OneMinusSrcAlphaFactor, DstAlphaFactor, OneMinusDstAlphaFactor, DstColorFactor, OneMinusDstColorFactor, SrcAlphaSaturateFactor, ConstantColorFactor, OneMinusConstantColorFactor, ConstantAlphaFactor, OneMinusConstantAlphaFactor, NeverDepth, AlwaysDepth, LessDepth, LessEqualDepth, EqualDepth, GreaterEqualDepth, GreaterDepth, NotEqualDepth, MultiplyOperation, MixOperation, AddOperation, NoToneMapping, LinearToneMapping, ReinhardToneMapping, CineonToneMapping, ACESFilmicToneMapping, CustomToneMapping, AgXToneMapping, NeutralToneMapping, UVMapping, CubeReflectionMapping, CubeRefractionMapping, EquirectangularReflectionMapping, EquirectangularRefractionMapping, CubeUVReflectionMapping, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter, NearestMipmapNearestFilter, NearestMipmapLinearFilter, LinearFilter, LinearMipmapNearestFilter, LinearMipmapLinearFilter, UnsignedByteType, ByteType, ShortType, UnsignedShortType, IntType, UnsignedIntType, FloatType, HalfFloatType, UnsignedShort4444Type, UnsignedShort5551Type, UnsignedInt248Type, UnsignedInt5999Type, UnsignedInt101111Type, AlphaFormat, RGBFormat, RGBAFormat, DepthFormat, DepthStencilFormat, RedFormat, RedIntegerFormat, RGFormat, RGIntegerFormat, RGBAIntegerFormat, RGB_S3TC_DXT1_Format, RGBA_S3TC_DXT1_Format, RGBA_S3TC_DXT3_Format, RGBA_S3TC_DXT5_Format, RGB_PVRTC_4BPPV1_Format, RGB_PVRTC_2BPPV1_Format, RGBA_PVRTC_4BPPV1_Format, RGBA_PVRTC_2BPPV1_Format, RGB_ETC1_Format, RGB_ETC2_Format, RGBA_ETC2_EAC_Format, R11_EAC_Format, SIGNED_R11_EAC_Format, RG11_EAC_Format, SIGNED_RG11_EAC_Format, RGBA_ASTC_4x4_Format, RGBA_ASTC_5x4_Format, RGBA_ASTC_5x5_Format, RGBA_ASTC_6x5_Format, RGBA_ASTC_6x6_Format, RGBA_ASTC_8x5_Format, RGBA_ASTC_8x6_Format, RGBA_ASTC_8x8_Format, RGBA_ASTC_10x5_Format, RGBA_ASTC_10x6_Format, RGBA_ASTC_10x8_Format, RGBA_ASTC_10x10_Format, RGBA_ASTC_12x10_Format, RGBA_ASTC_12x12_Format, RGBA_BPTC_Format, RGB_BPTC_SIGNED_Format, RGB_BPTC_UNSIGNED_Format, RED_RGTC1_Format, SIGNED_RED_RGTC1_Format, RED_GREEN_RGTC2_Format, SIGNED_RED_GREEN_RGTC2_Format, InterpolateDiscrete, InterpolateLinear, InterpolateSmooth, ZeroCurvatureEnding, ZeroSlopeEnding, WrapAroundEnding, BasicDepthPacking, TangentSpaceNormalMap, ObjectSpaceNormalMap, NoColorSpace, SRGBColorSpace, LinearSRGBColorSpace, LinearTransfer, SRGBTransfer, KeepStencilOp, AlwaysStencilFunc, NeverCompare, LessCompare, EqualCompare, LessEqualCompare, GreaterCompare, NotEqualCompare, GreaterEqualCompare, AlwaysCompare, StaticDrawUsage, GLSL3, WebGLCoordinateSystem, WebGPUCoordinateSystem, _cache, _setConsoleFunction, EventDispatcher, _lut, _seed, DEG2RAD, RAD2DEG, MathUtils, Vector2, Quaternion, Vector3, _vector$c, _quaternion$4, Matrix3, _m3, LINEAR_REC709_TO_XYZ, XYZ_TO_LINEAR_REC709, ColorManagement, _canvas, ImageUtils, _sourceId, Source, _textureId, _tempVec3, Texture, Vector4, RenderTarget, WebGLRenderTarget, DataArrayTexture, Data3DTexture, Box3, _points, _vector$b, _box$4, _v0$2, _v1$7, _v2$4, _f0, _f1, _f2, _center, _extents, _triangleNormal, _testAxis, _box$3, _v1$6, _v2$3, Sphere, _vector$a, _segCenter, _segDir, _diff, _edge1, _edge2, _normal$1, Ray2, Matrix4, _v1$5, _m1$2, _zero, _one, _x, _y, _z, _matrix$2, _quaternion$3, Euler, Layers, _object3DId, _v1$4, _q1, _m1$1, _target, _position$3, _scale$2, _quaternion$2, _xAxis, _yAxis, _zAxis, _addedEvent, _removedEvent, _childaddedEvent, _childremovedEvent, Object3D, _v0$1, _v1$3, _v2$2, _v3$2, _vab, _vac, _vbc, _vap, _vbp, _vcp, _v40, _v41, _v42, Triangle3, _colorKeywords, _hslA, _hslB, Color, _color, _materialId, Material2, MeshBasicMaterial, _vector$9, _vector2$1, _id$2, BufferAttribute, Uint16BufferAttribute, Uint32BufferAttribute, Float32BufferAttribute, _id$1, _m1, _obj, _offset, _box$2, _boxMorphTargets, _vector$8, BufferGeometry, _inverseMatrix$3, _ray$3, _sphere$6, _sphereHitAt, _vA$1, _vB$1, _vC$1, _tempA, _morphA, _intersectionPoint, _intersectionPointWorld, Mesh, BoxGeometry, UniformsUtils, default_vertex, default_fragment, ShaderMaterial, Camera, _v3$1, _minTarget, _maxTarget, PerspectiveCamera, fov, aspect, CubeCamera, CubeTexture, WebGLCubeRenderTarget, Group, _moveEvent, WebXRController, Scene, DataTexture, _vector1, _vector2, _normalMatrix, Plane, _sphere$3, _defaultSpriteCenter, _vector$6, Frustum, DepthTexture, CubeDepthTexture, ExternalTexture, PlaneGeometry, SphereGeometry, RawShaderMaterial, MeshDepthMaterial, MeshDistanceMaterial, Interpolant, CubicInterpolant, LinearInterpolant, DiscreteInterpolant, KeyframeTrack, BooleanKeyframeTrack, ColorKeyframeTrack, NumberKeyframeTrack, QuaternionLinearInterpolant, QuaternionKeyframeTrack, StringKeyframeTrack, VectorKeyframeTrack, LoadingManager, DefaultLoadingManager, Loader, OrthographicCamera, ArrayCamera, _RESERVED_CHARS_RE, _reservedRe, _wordChar, _wordCharOrDot, _directoryRe, _nodeRe, _objectRe, _propertyRe, _trackRe, _supportedObjectNames, Composite, PropertyBinding, _controlInterpolantsResultBuffer, Spherical, Controls;
   var init_three_core = __esm({
     "node_modules/three/build/three.core.js"() {
       REVISION = "182";
@@ -280223,6 +280224,94 @@ uniform ${i3} ${a3} u_${s3};
          */
         static fromJSON(data) {
           return new _PlaneGeometry(data.width, data.height, data.widthSegments, data.heightSegments);
+        }
+      };
+      SphereGeometry = class _SphereGeometry extends BufferGeometry {
+        /**
+         * Constructs a new sphere geometry.
+         *
+         * @param {number} [radius=1] - The sphere radius.
+         * @param {number} [widthSegments=32] - The number of horizontal segments. Minimum value is `3`.
+         * @param {number} [heightSegments=16] - The number of vertical segments. Minimum value is `2`.
+         * @param {number} [phiStart=0] - The horizontal starting angle in radians.
+         * @param {number} [phiLength=Math.PI*2] - The horizontal sweep angle size.
+         * @param {number} [thetaStart=0] - The vertical starting angle in radians.
+         * @param {number} [thetaLength=Math.PI] - The vertical sweep angle size.
+         */
+        constructor(radius = 1, widthSegments = 32, heightSegments = 16, phiStart = 0, phiLength = Math.PI * 2, thetaStart = 0, thetaLength = Math.PI) {
+          super();
+          this.type = "SphereGeometry";
+          this.parameters = {
+            radius,
+            widthSegments,
+            heightSegments,
+            phiStart,
+            phiLength,
+            thetaStart,
+            thetaLength
+          };
+          widthSegments = Math.max(3, Math.floor(widthSegments));
+          heightSegments = Math.max(2, Math.floor(heightSegments));
+          const thetaEnd = Math.min(thetaStart + thetaLength, Math.PI);
+          let index = 0;
+          const grid = [];
+          const vertex2 = new Vector3();
+          const normal = new Vector3();
+          const indices = [];
+          const vertices = [];
+          const normals = [];
+          const uvs = [];
+          for (let iy = 0; iy <= heightSegments; iy++) {
+            const verticesRow = [];
+            const v = iy / heightSegments;
+            let uOffset = 0;
+            if (iy === 0 && thetaStart === 0) {
+              uOffset = 0.5 / widthSegments;
+            } else if (iy === heightSegments && thetaEnd === Math.PI) {
+              uOffset = -0.5 / widthSegments;
+            }
+            for (let ix = 0; ix <= widthSegments; ix++) {
+              const u = ix / widthSegments;
+              vertex2.x = -radius * Math.cos(phiStart + u * phiLength) * Math.sin(thetaStart + v * thetaLength);
+              vertex2.y = radius * Math.cos(thetaStart + v * thetaLength);
+              vertex2.z = radius * Math.sin(phiStart + u * phiLength) * Math.sin(thetaStart + v * thetaLength);
+              vertices.push(vertex2.x, vertex2.y, vertex2.z);
+              normal.copy(vertex2).normalize();
+              normals.push(normal.x, normal.y, normal.z);
+              uvs.push(u + uOffset, 1 - v);
+              verticesRow.push(index++);
+            }
+            grid.push(verticesRow);
+          }
+          for (let iy = 0; iy < heightSegments; iy++) {
+            for (let ix = 0; ix < widthSegments; ix++) {
+              const a = grid[iy][ix + 1];
+              const b = grid[iy][ix];
+              const c = grid[iy + 1][ix];
+              const d = grid[iy + 1][ix + 1];
+              if (iy !== 0 || thetaStart > 0) indices.push(a, b, d);
+              if (iy !== heightSegments - 1 || thetaEnd < Math.PI) indices.push(b, c, d);
+            }
+          }
+          this.setIndex(indices);
+          this.setAttribute("position", new Float32BufferAttribute(vertices, 3));
+          this.setAttribute("normal", new Float32BufferAttribute(normals, 3));
+          this.setAttribute("uv", new Float32BufferAttribute(uvs, 2));
+        }
+        copy(source) {
+          super.copy(source);
+          this.parameters = Object.assign({}, source.parameters);
+          return this;
+        }
+        /**
+         * Factory method for creating an instance of this class from the given
+         * JSON object.
+         *
+         * @param {Object} data - A JSON object representing the serialized geometry.
+         * @return {SphereGeometry} A new instance.
+         */
+        static fromJSON(data) {
+          return new _SphereGeometry(data.radius, data.widthSegments, data.heightSegments, data.phiStart, data.phiLength, data.thetaStart, data.thetaLength);
         }
       };
       RawShaderMaterial = class extends ShaderMaterial {
@@ -293953,7 +294042,9 @@ void main() {
             return;
           }
           if (!state.ctx) {
-            state.ctx = new AudioContext();
+            state.ctx = new AudioContext({
+              sampleRate: SAMPLE_RATE
+            });
           }
           state.source?.stop();
           const sourceBuffer = state.ctx.createBuffer(
@@ -293972,6 +294063,12 @@ void main() {
         }
       };
       function ScatterPlot(id, layout, getData) {
+        layout.margin = {
+          t: 20,
+          b: 20,
+          l: 30,
+          r: 20
+        };
         const PlotComponent = {
           lastAudio: null,
           lastData: [
@@ -294067,6 +294164,28 @@ void main() {
           scene.add(mesh);
           const wireframeMesh = new Mesh(geometry, wireframeMaterial);
           scene.add(wireframeMesh);
+          const sourceMaterial = new MeshBasicMaterial({
+            color: "green"
+          });
+          const source = new Mesh(
+            new SphereGeometry(0.2),
+            sourceMaterial
+          );
+          source.translateX(state.sourcePosition[0]);
+          source.translateY(state.sourcePosition[1]);
+          source.translateZ(state.sourcePosition[2]);
+          scene.add(source);
+          const receiverMaterial = new MeshBasicMaterial({
+            color: "blue"
+          });
+          const receiver = new Mesh(
+            new SphereGeometry(1),
+            receiverMaterial
+          );
+          receiver.translateX(state.receiverPosition[0]);
+          receiver.translateY(state.receiverPosition[1]);
+          receiver.translateZ(state.receiverPosition[2]);
+          scene.add(receiver);
           camera.position.z = 30;
           const orbitControls = new OrbitControls(camera, renderer.domElement);
           renderer.setSize(vnode.dom.clientWidth, vnode.dom.clientHeight);
@@ -294078,72 +294197,78 @@ void main() {
           renderer.setAnimationLoop(animate);
         },
         view: function() {
-          return (0, import_mithril.default)("canvas.three", { style: "width: 100%; height: 40rem;" });
+          return (0, import_mithril.default)("canvas.three", {
+            style: "position: fixed; top: 0; left: 0; width: 50vw; height: 100vh;"
+          });
         }
       };
       var AppView = {
         view: function() {
           return (0, import_mithril.default)("div", [
-            (0, import_mithril.default)("section", { style: "border:1px solid black;" }, [
-              (0, import_mithril.default)("label.block", [
-                "Ray count:",
-                (0, import_mithril.default)("input", {
-                  type: "number",
-                  min: 1,
-                  value: state.rayCount,
-                  oninput: function(e) {
-                    state.rayCount = parseInt(e.target.value);
-                  }
-                })
-              ]),
-              (0, import_mithril.default)("label.block", [
-                "Number of bounces:",
-                (0, import_mithril.default)("input", {
-                  type: "number",
-                  min: 0,
-                  value: state.minBounces,
-                  oninput: function(e) {
-                    state.minBounces = parseInt(e.target.value);
-                  }
-                })
-              ]),
-              (0, import_mithril.default)("label.block", [
-                "Output duration (s):",
-                (0, import_mithril.default)("input", {
-                  type: "number",
-                  min: 0,
-                  step: 0.1,
-                  value: state.audioDuration,
-                  oninput: function(e) {
-                    state.audioDuration = parseFloat(
-                      e.target.value
-                    );
-                  }
-                })
+            (0, import_mithril.default)(ThreeView),
+            (0, import_mithril.default)("div.sidebar", [
+              (0, import_mithril.default)("section", { style: "border:1px solid black;" }, [
+                (0, import_mithril.default)("label.block", [
+                  "Ray count:",
+                  (0, import_mithril.default)("input", {
+                    type: "number",
+                    min: 1,
+                    value: state.rayCount,
+                    oninput: function(e) {
+                      state.rayCount = parseInt(e.target.value);
+                    }
+                  })
+                ]),
+                (0, import_mithril.default)("label.block", [
+                  "Number of bounces:",
+                  (0, import_mithril.default)("input", {
+                    type: "number",
+                    min: 0,
+                    value: state.minBounces,
+                    oninput: function(e) {
+                      state.minBounces = parseInt(
+                        e.target.value
+                      );
+                    }
+                  })
+                ]),
+                (0, import_mithril.default)("label.block", [
+                  "Output duration (s):",
+                  (0, import_mithril.default)("input", {
+                    type: "number",
+                    min: 0,
+                    step: 0.1,
+                    value: state.audioDuration,
+                    oninput: function(e) {
+                      state.audioDuration = parseFloat(
+                        e.target.value
+                      );
+                    }
+                  })
+                ]),
+                (0, import_mithril.default)(
+                  "button",
+                  { disabled: state.running, onclick: state.runRaytracing },
+                  "Run raytracing"
+                ),
+                (0, import_mithril.default)(
+                  "div.progress-bar-holder",
+                  (0, import_mithril.default)("div.progress-bar", {
+                    style: `width: ${100 * state.rayTracingProgress[0] / state.rayTracingProgress[1]}%;`
+                  })
+                )
               ]),
               (0, import_mithril.default)(
-                "button",
-                { disabled: state.running, onclick: state.runRaytracing },
-                "Run raytracing"
-              )
-            ]),
-            (0, import_mithril.default)(
-              "div.progress-bar-holder",
-              (0, import_mithril.default)("div.progress-bar", {
-                style: `width: ${100 * state.rayTracingProgress[0] / state.rayTracingProgress[1]}%;`
-              })
-            ),
-            (0, import_mithril.default)(
-              "button.block",
-              {
-                disabled: state.audioToPlay === null,
-                onclick: state.playAudio
-              },
-              "Play audio"
-            ),
-            (0, import_mithril.default)(ThreeView),
-            (0, import_mithril.default)(WaveformPlot),
-            (0, import_mithril.default)(MagnitudePlot)
+                "button.block",
+                {
+                  disabled: state.audioToPlay === null,
+                  onclick: state.playAudio
+                },
+                "Play audio"
+              ),
+              (0, import_mithril.default)(WaveformPlot),
+              (0, import_mithril.default)(MagnitudePlot)
+            ])
           ]);
         }
       };

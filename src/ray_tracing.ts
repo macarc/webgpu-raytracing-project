@@ -6,28 +6,25 @@ import {
   SAMPLE_RATE,
   SPEED_OF_SOUND,
   Triangle,
+  Vec3,
   WORKGROUP_SIZE,
 } from "./constants";
 import { materialsToFloatArray, trianglesToFloatArray } from "./floatarrays";
 import { orientTriangles } from "./orient_surfaces";
 import { combineFilteredAudio } from "./dsp";
 
-type Vec3 = [number, number, number];
-
 // From WebGPU specification
 const STANDARD_MAX_STORAGE_BUFFER_SIZE = 134217728;
 const STANDARD_MAX_UNIFORM_BUFFER_SIZE = 65536;
 
-// NOTE: placing at the exact origin [0,0,0] causes artefacts.
-// TODO: once diffusion has been implemented, try [0,0,0] again.
-const SOURCE_POSITION: Vec3 = [0.1, -0.1, -0.1];
-const RECEIVER_POSITION: Vec3 = [8.5, 0.0, 0.0];
 const RECEIVER_RADIUS = 1.0;
 
 // TODO: frequency dependent.
 const AIR_ABSORPTION_COEFF = 0.0013;
 
 export interface Settings {
+  sourcePosition: Vec3;
+  receiverPosition: Vec3;
   rayCount: number;
   minBounces: number;
   audioDuration: number;
@@ -59,7 +56,10 @@ function randomPointOnUnitSphere(): Vec3 {
   return [x / r, y / r, z / r];
 }
 
-function specularRayIntersectionShaderCode(bounceCount: number) {
+function specularRayIntersectionShaderCode(
+  receiverPosition: Vec3,
+  bounceCount: number,
+) {
   return /* wgsl */ `
   struct Ray {
     x: f32,
@@ -98,6 +98,7 @@ function specularRayIntersectionShaderCode(bounceCount: number) {
     intensity: f32,
   }
 
+  // TODO: could this just be part of the Triangle.
   struct Material {
     r125: f32,
     r250: f32,
@@ -176,7 +177,7 @@ function specularRayIntersectionShaderCode(bounceCount: number) {
 
     var lastsurfacenormal = vec3(initialRay.nx, initialRay.ny, initialRay.nz);
 
-    let receiverPosition = vec3(${RECEIVER_POSITION.join(",")});
+    let receiverPosition = vec3(${receiverPosition.join(",")});
 
     for (var n: u32 = 0; n < ${bounceCount}; n++) {
       let index = rayIndex * ${bounceCount} + n;
@@ -542,7 +543,7 @@ export async function rayTrace(
   // Create the rays.
   for (let i = 0; i < settings.rayCount; ++i) {
     rays.push({
-      position: SOURCE_POSITION,
+      position: settings.sourcePosition,
       direction: randomPointOnUnitSphere(),
     });
   }
@@ -600,7 +601,10 @@ export async function rayTrace(
       new Float32Array(outputSize),
       new Float32Array(outputSize),
     ],
-    specularRayIntersectionShaderCode(bouncesPerPass),
+    specularRayIntersectionShaderCode(
+      settings.receiverPosition,
+      bouncesPerPass,
+    ),
   );
 
   console.time("Total (excluding setup)");
