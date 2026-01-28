@@ -438,6 +438,13 @@
     }
     return output;
   }
+  function pad(data, length) {
+    const output = new Float32Array(length);
+    for (let i = 0; i < data.length; ++i) {
+      output[i] = data[i];
+    }
+    return output;
+  }
   var A0, A1, A2, A3, A4, A5, B0, B1, B2, B3, B4, B5;
   var init_dsp = __esm({
     "src/dsp.ts"() {
@@ -823,7 +830,7 @@
           if (cosNormalAngleToReceiver > 0) {
             let rayTriangleDistance = raydistancetravelled + distanceToReceiver;
 
-            let totalIntensity = (1-material.scatter) * additionDueToRay + material.scatter * cosNormalAngleToReceiver;
+            let totalIntensity = cosNormalAngleToReceiver;//  (1-material.scatter) * additionDueToRay + material.scatter * cosNormalAngleToReceiver;
 
             // TODO: this is a waste of memory.
             band_125[index].time = rayTriangleDistance;
@@ -925,12 +932,10 @@
       throw new Error("Aborted due to null GPU device");
     }
     const maxStorageBufferSize = gpuDevice.limits.maxStorageBufferBindingSize || STANDARD_MAX_STORAGE_BUFFER_SIZE;
-    const maximumBouncesPerPass = Math.floor(
+    const bouncesPerPass = Math.floor(
       maxStorageBufferSize / (2 * FLOAT32_SIZE * settings.rayCount)
     );
-    const bouncesPerPass = Math.min(settings.minBounces, maximumBouncesPerPass);
-    const numberOfPasses = Math.ceil(settings.minBounces / bouncesPerPass);
-    const numberOfBounces = numberOfPasses * bouncesPerPass;
+    const maxPasses = 100;
     const outputSize = 2 * bouncesPerPass * settings.rayCount;
     if (outputSize > maxStorageBufferSize) {
       console.log("Output buffer is too large, will not work");
@@ -973,9 +978,13 @@
     let output1000 = new Float32Array(SAMPLE_RATE * settings.audioDuration);
     let output2000 = new Float32Array(SAMPLE_RATE * settings.audioDuration);
     let output4000 = new Float32Array(SAMPLE_RATE * settings.audioDuration);
-    for (let i = 0; i < numberOfPasses; i++) {
-      update(i * bouncesPerPass, numberOfBounces);
+    const THRESHOLD = 1e-12;
+    let averageValue = 0;
+    for (let i = 0; i < maxPasses; i++) {
+      update(i * bouncesPerPass, 10 * bouncesPerPass);
       const result = await rayTracer.runPass(settings.rayCount);
+      let thisPassAverageValue = 0;
+      let thisPassMaxValue = 0;
       for (let j = 0; j < result[0].length; j += 2) {
         const index = Math.round(SAMPLE_RATE * (result[0][j] / SPEED_OF_SOUND));
         const air_absorption = Math.exp(-result[0][j] * AIR_ABSORPTION_COEFF);
@@ -985,9 +994,24 @@
         output1000[index] += result[3][j + 1] * air_absorption;
         output2000[index] += result[4][j + 1] * air_absorption;
         output4000[index] += result[5][j + 1] * air_absorption;
+        const avg = (result[0][j + 1] + result[1][j + 1] + result[2][j + 1] + result[3][j + 1] + result[4][j + 1] + result[5][j + 1]) * air_absorption;
+        thisPassAverageValue += avg;
+        thisPassMaxValue = Math.max(Math.abs(avg), thisPassMaxValue);
+      }
+      if (i === 0) {
+        averageValue = thisPassAverageValue;
+        console.log("average", thisPassAverageValue, averageValue);
+      } else {
+        if (thisPassAverageValue > averageValue) {
+          averageValue = thisPassAverageValue;
+        } else if (thisPassMaxValue < THRESHOLD * averageValue) {
+          console.log("below threshold on pass", i);
+          break;
+        }
       }
     }
-    update(numberOfBounces, numberOfBounces);
+    console.log(bouncesPerPass);
+    update(maxPasses, maxPasses);
     const outputAudio = combineFilteredAudio(
       output125,
       output250,
@@ -7860,7 +7884,7 @@
                   return children && (n = children.length) ? d3_layout_clusterRight(children[n - 1]) : node;
                 }
                 d3.layout.treemap = function() {
-                  var hierarchy = d3.layout.hierarchy(), round = Math.round, size = [1, 1], padding = null, pad = d3_layout_treemapPadNull, sticky = false, stickies, mode = "squarify", ratio = 0.5 * (1 + Math.sqrt(5));
+                  var hierarchy = d3.layout.hierarchy(), round = Math.round, size = [1, 1], padding = null, pad2 = d3_layout_treemapPadNull, sticky = false, stickies, mode = "squarify", ratio = 0.5 * (1 + Math.sqrt(5));
                   function scale(children, k) {
                     var i = -1, n = children.length, child, area;
                     while (++i < n) {
@@ -7871,7 +7895,7 @@
                   function squarify(node) {
                     var children = node.children;
                     if (children && children.length) {
-                      var rect = pad(node), row = [], remaining = children.slice(), child, best = Infinity, score, u = mode === "slice" ? rect.dx : mode === "dice" ? rect.dy : mode === "slice-dice" ? node.depth & 1 ? rect.dy : rect.dx : Math.min(rect.dx, rect.dy), n;
+                      var rect = pad2(node), row = [], remaining = children.slice(), child, best = Infinity, score, u = mode === "slice" ? rect.dx : mode === "dice" ? rect.dy : mode === "slice-dice" ? node.depth & 1 ? rect.dy : rect.dx : Math.min(rect.dx, rect.dy), n;
                       scale(remaining, rect.dx * rect.dy / node.value);
                       row.area = 0;
                       while ((n = remaining.length) > 0) {
@@ -7898,7 +7922,7 @@
                   function stickify(node) {
                     var children = node.children;
                     if (children && children.length) {
-                      var rect = pad(node), remaining = children.slice(), child, row = [];
+                      var rect = pad2(node), remaining = children.slice(), child, row = [];
                       scale(remaining, rect.dx * rect.dy / node.value);
                       row.area = 0;
                       while (child = remaining.pop()) {
@@ -7979,7 +8003,7 @@
                       return d3_layout_treemapPad(node, x);
                     }
                     var type;
-                    pad = (padding = x) == null ? d3_layout_treemapPadNull : (type = typeof x) === "function" ? padFunction : type === "number" ? (x = [x, x, x, x], padConstant) : padConstant;
+                    pad2 = (padding = x) == null ? d3_layout_treemapPadNull : (type = typeof x) === "function" ? padFunction : type === "number" ? (x = [x, x, x, x], padConstant) : padConstant;
                     return treemap;
                   };
                   treemap.round = function(x) {
@@ -10465,14 +10489,14 @@
                   utcFormats.c = newFormat(locale_dateTime, utcFormats);
                   function newFormat(specifier, formats2) {
                     return function(date) {
-                      var string = [], i = -1, j = 0, n = specifier.length, c, pad2, format;
+                      var string = [], i = -1, j = 0, n = specifier.length, c, pad22, format;
                       if (!(date instanceof Date)) date = /* @__PURE__ */ new Date(+date);
                       while (++i < n) {
                         if (specifier.charCodeAt(i) === 37) {
                           string.push(specifier.slice(j, i));
-                          if ((pad2 = pads[c = specifier.charAt(++i)]) != null) c = specifier.charAt(++i);
-                          else pad2 = c === "e" ? " " : "0";
-                          if (format = formats2[c]) c = format(date, pad2);
+                          if ((pad22 = pads[c = specifier.charAt(++i)]) != null) c = specifier.charAt(++i);
+                          else pad22 = c === "e" ? " " : "0";
+                          if (format = formats2[c]) c = format(date, pad22);
                           string.push(c);
                           j = i + 1;
                         }
@@ -10634,7 +10658,7 @@
                   };
                 }
                 var pads = { "-": "", "_": " ", "0": "0" }, numberRe = /^\s*\d+/, percentRe = /^%/, requoteRe = /[\\^$*+?|[\]().{}]/g;
-                function pad(value, fill, width) {
+                function pad2(value, fill, width) {
                   var sign = value < 0 ? "-" : "", string = (sign ? -value : value) + "", length = string.length;
                   return sign + (length < width ? new Array(width - length + 1).join(fill) + string : string);
                 }
@@ -10730,110 +10754,110 @@
                   return n ? (d.s = +n[0], i + n[0].length) : -1;
                 }
                 function formatDayOfMonth(d, p) {
-                  return pad(d.getDate(), p, 2);
+                  return pad2(d.getDate(), p, 2);
                 }
                 function formatHour24(d, p) {
-                  return pad(d.getHours(), p, 2);
+                  return pad2(d.getHours(), p, 2);
                 }
                 function formatHour12(d, p) {
-                  return pad(d.getHours() % 12 || 12, p, 2);
+                  return pad2(d.getHours() % 12 || 12, p, 2);
                 }
                 function formatDayOfYear(d, p) {
-                  return pad(1 + d3Time.timeDay.count(d3Time.timeYear(d), d), p, 3);
+                  return pad2(1 + d3Time.timeDay.count(d3Time.timeYear(d), d), p, 3);
                 }
                 function formatMilliseconds(d, p) {
-                  return pad(d.getMilliseconds(), p, 3);
+                  return pad2(d.getMilliseconds(), p, 3);
                 }
                 function formatMicroseconds(d, p) {
                   return formatMilliseconds(d, p) + "000";
                 }
                 function formatMonthNumber(d, p) {
-                  return pad(d.getMonth() + 1, p, 2);
+                  return pad2(d.getMonth() + 1, p, 2);
                 }
                 function formatMinutes(d, p) {
-                  return pad(d.getMinutes(), p, 2);
+                  return pad2(d.getMinutes(), p, 2);
                 }
                 function formatSeconds(d, p) {
-                  return pad(d.getSeconds(), p, 2);
+                  return pad2(d.getSeconds(), p, 2);
                 }
                 function formatWeekdayNumberMonday(d) {
                   var day = d.getDay();
                   return day === 0 ? 7 : day;
                 }
                 function formatWeekNumberSunday(d, p) {
-                  return pad(d3Time.timeSunday.count(d3Time.timeYear(d) - 1, d), p, 2);
+                  return pad2(d3Time.timeSunday.count(d3Time.timeYear(d) - 1, d), p, 2);
                 }
                 function formatWeekNumberISO(d, p) {
                   var day = d.getDay();
                   d = day >= 4 || day === 0 ? d3Time.timeThursday(d) : d3Time.timeThursday.ceil(d);
-                  return pad(d3Time.timeThursday.count(d3Time.timeYear(d), d) + (d3Time.timeYear(d).getDay() === 4), p, 2);
+                  return pad2(d3Time.timeThursday.count(d3Time.timeYear(d), d) + (d3Time.timeYear(d).getDay() === 4), p, 2);
                 }
                 function formatWeekdayNumberSunday(d) {
                   return d.getDay();
                 }
                 function formatWeekNumberMonday(d, p) {
-                  return pad(d3Time.timeMonday.count(d3Time.timeYear(d) - 1, d), p, 2);
+                  return pad2(d3Time.timeMonday.count(d3Time.timeYear(d) - 1, d), p, 2);
                 }
                 function formatYear(d, p) {
-                  return pad(d.getFullYear() % 100, p, 2);
+                  return pad2(d.getFullYear() % 100, p, 2);
                 }
                 function formatFullYear(d, p) {
-                  return pad(d.getFullYear() % 1e4, p, 4);
+                  return pad2(d.getFullYear() % 1e4, p, 4);
                 }
                 function formatZone(d) {
                   var z = d.getTimezoneOffset();
-                  return (z > 0 ? "-" : (z *= -1, "+")) + pad(z / 60 | 0, "0", 2) + pad(z % 60, "0", 2);
+                  return (z > 0 ? "-" : (z *= -1, "+")) + pad2(z / 60 | 0, "0", 2) + pad2(z % 60, "0", 2);
                 }
                 function formatUTCDayOfMonth(d, p) {
-                  return pad(d.getUTCDate(), p, 2);
+                  return pad2(d.getUTCDate(), p, 2);
                 }
                 function formatUTCHour24(d, p) {
-                  return pad(d.getUTCHours(), p, 2);
+                  return pad2(d.getUTCHours(), p, 2);
                 }
                 function formatUTCHour12(d, p) {
-                  return pad(d.getUTCHours() % 12 || 12, p, 2);
+                  return pad2(d.getUTCHours() % 12 || 12, p, 2);
                 }
                 function formatUTCDayOfYear(d, p) {
-                  return pad(1 + d3Time.utcDay.count(d3Time.utcYear(d), d), p, 3);
+                  return pad2(1 + d3Time.utcDay.count(d3Time.utcYear(d), d), p, 3);
                 }
                 function formatUTCMilliseconds(d, p) {
-                  return pad(d.getUTCMilliseconds(), p, 3);
+                  return pad2(d.getUTCMilliseconds(), p, 3);
                 }
                 function formatUTCMicroseconds(d, p) {
                   return formatUTCMilliseconds(d, p) + "000";
                 }
                 function formatUTCMonthNumber(d, p) {
-                  return pad(d.getUTCMonth() + 1, p, 2);
+                  return pad2(d.getUTCMonth() + 1, p, 2);
                 }
                 function formatUTCMinutes(d, p) {
-                  return pad(d.getUTCMinutes(), p, 2);
+                  return pad2(d.getUTCMinutes(), p, 2);
                 }
                 function formatUTCSeconds(d, p) {
-                  return pad(d.getUTCSeconds(), p, 2);
+                  return pad2(d.getUTCSeconds(), p, 2);
                 }
                 function formatUTCWeekdayNumberMonday(d) {
                   var dow = d.getUTCDay();
                   return dow === 0 ? 7 : dow;
                 }
                 function formatUTCWeekNumberSunday(d, p) {
-                  return pad(d3Time.utcSunday.count(d3Time.utcYear(d) - 1, d), p, 2);
+                  return pad2(d3Time.utcSunday.count(d3Time.utcYear(d) - 1, d), p, 2);
                 }
                 function formatUTCWeekNumberISO(d, p) {
                   var day = d.getUTCDay();
                   d = day >= 4 || day === 0 ? d3Time.utcThursday(d) : d3Time.utcThursday.ceil(d);
-                  return pad(d3Time.utcThursday.count(d3Time.utcYear(d), d) + (d3Time.utcYear(d).getUTCDay() === 4), p, 2);
+                  return pad2(d3Time.utcThursday.count(d3Time.utcYear(d), d) + (d3Time.utcYear(d).getUTCDay() === 4), p, 2);
                 }
                 function formatUTCWeekdayNumberSunday(d) {
                   return d.getUTCDay();
                 }
                 function formatUTCWeekNumberMonday(d, p) {
-                  return pad(d3Time.utcMonday.count(d3Time.utcYear(d) - 1, d), p, 2);
+                  return pad2(d3Time.utcMonday.count(d3Time.utcYear(d) - 1, d), p, 2);
                 }
                 function formatUTCYear(d, p) {
-                  return pad(d.getUTCFullYear() % 100, p, 2);
+                  return pad2(d.getUTCFullYear() % 100, p, 2);
                 }
                 function formatUTCFullYear(d, p) {
-                  return pad(d.getUTCFullYear() % 1e4, p, 4);
+                  return pad2(d.getUTCFullYear() % 1e4, p, 4);
                 }
                 function formatUTCZone() {
                   return "+0000";
@@ -17915,9 +17939,9 @@
                 if (v0 > v1) return Math.max(v1, Math.min(v0, v));
                 return Math.max(v0, Math.min(v1, v));
               };
-              lib.bBoxIntersect = function(a, b, pad) {
-                pad = pad || 0;
-                return a.left <= b.right + pad && b.left <= a.right + pad && a.top <= b.bottom + pad && b.top <= a.bottom + pad;
+              lib.bBoxIntersect = function(a, b, pad2) {
+                pad2 = pad2 || 0;
+                return a.left <= b.right + pad2 && b.left <= a.right + pad2 && a.top <= b.bottom + pad2 && b.top <= a.bottom + pad2;
               };
               lib.simpleMap = function(array, func, x1, x2, opts) {
                 var len = array.length;
@@ -21450,9 +21474,9 @@
                     delete pushMargin[id];
                     delete pushMarginIds[id];
                   } else {
-                    var pad = o.pad;
-                    if (pad === void 0) {
-                      pad = Math.min(12, margin.l, margin.r, margin.t, margin.b);
+                    var pad2 = o.pad;
+                    if (pad2 === void 0) {
+                      pad2 = Math.min(12, margin.l, margin.r, margin.t, margin.b);
                     }
                     if (maxSpaceW) {
                       var rW = (o.l + o.r) / maxSpaceW;
@@ -21473,10 +21497,10 @@
                     var yt = o.yt !== void 0 ? o.yt : o.y;
                     var yb = o.yb !== void 0 ? o.yb : o.y;
                     pushMargin[id] = {
-                      l: { val: xl, size: o.l + pad },
-                      r: { val: xr, size: o.r + pad },
-                      b: { val: yb, size: o.b + pad },
-                      t: { val: yt, size: o.t + pad }
+                      l: { val: xl, size: o.l + pad2 },
+                      r: { val: xr, size: o.r + pad2 },
+                      b: { val: yb, size: o.b + pad2 },
+                      t: { val: yt, size: o.t + pad2 }
                     };
                     pushMarginIds[id] = 1;
                   }
@@ -27646,7 +27670,7 @@
                     titleGroup.attr("transform", null);
                     var backside = OPPOSITE_SIDE[avoid.side];
                     var shiftSign = avoid.side === "left" || avoid.side === "top" ? -1 : 1;
-                    var pad = isNumeric(avoid.pad) ? avoid.pad : 2;
+                    var pad2 = isNumeric(avoid.pad) ? avoid.pad : 2;
                     var titlebb = Drawing.bBox(titleGroup.node());
                     var reservedMargins = { t: 0, b: 0, l: 0, r: 0 };
                     var margins = gd._fullLayout._reservedMargin;
@@ -27675,8 +27699,8 @@
                       titlebb.bottom -= offsetTop;
                       avoid.selection.each(function() {
                         var avoidbb = Drawing.bBox(this);
-                        if (Lib.bBoxIntersect(titlebb, avoidbb, pad)) {
-                          shift = Math.max(shift, shiftSign * (avoidbb[avoid.side] - titlebb[backside]) + pad);
+                        if (Lib.bBoxIntersect(titlebb, avoidbb, pad2)) {
+                          shift = Math.max(shift, shiftSign * (avoidbb[avoid.side] - titlebb[backside]) + pad2);
                         }
                       });
                       shift = Math.min(maxshift, shift);
@@ -28728,7 +28752,7 @@
               }
               var TEXTPAD = 3;
               function padInsideLabelsOnAnchorAxis(fullLayout, ax, max) {
-                var pad = 0;
+                var pad2 = 0;
                 var isX = ax._id.charAt(0) === "x";
                 for (var subplot in fullLayout._plots) {
                   var plotinfo = fullLayout._plots[subplot];
@@ -28757,20 +28781,20 @@
                           if (bb) {
                             var w = 2 * TEXTPAD + bb.width;
                             var h = 2 * TEXTPAD + bb.height;
-                            pad = Math.max(
-                              pad,
+                            pad2 = Math.max(
+                              pad2,
                               isX ? Math.max(w * cosA, h * sinA) : Math.max(h * cosA, w * sinA)
                             );
                           }
                         }
                       }
                       if (anchorAxis.ticks === "inside" && anchorAxis.ticklabelposition === "inside") {
-                        pad += anchorAxis.ticklen || 0;
+                        pad2 += anchorAxis.ticklen || 0;
                       }
                     }
                   }
                 }
-                return pad;
+                return pad2;
               }
               function concatExtremes(gd, ax, noMatch) {
                 var axId = ax._id;
@@ -30807,10 +30831,10 @@
                   });
                 });
                 if (ax.type === "multicategory") {
-                  var pad = { x: 2, y: 10 }[axLetter];
+                  var pad2 = { x: 2, y: 10 }[axLetter];
                   seq.push(function() {
                     var bboxKey = { x: "height", y: "width" }[axLetter];
-                    var standoff = getLabelLevelBbox()[bboxKey] + pad + (ax._tickAngles[axId + "tick"] ? ax.tickfont.size * LINE_SPACING : 0);
+                    var standoff = getLabelLevelBbox()[bboxKey] + pad2 + (ax._tickAngles[axId + "tick"] ? ax.tickfont.size * LINE_SPACING : 0);
                     return axes.drawLabels(gd, ax, {
                       vals: getSecondaryLabelVals(ax, vals),
                       layer: mainAxLayer,
@@ -31149,8 +31173,8 @@
                 if (minor && !ax.minor) return "";
                 var len = opts.len !== void 0 ? opts.len : minor ? ax.minor.ticklen : ax.ticklen;
                 var axLetter = ax._id.charAt(0);
-                var pad = (ax.linewidth || 1) / 2;
-                return axLetter === "x" ? "M0," + (shift + pad * sgn) + "v" + len * sgn : "M" + (shift + pad * sgn) + ",0h" + len * sgn;
+                var pad2 = (ax.linewidth || 1) / 2;
+                return axLetter === "x" ? "M0," + (shift + pad2 * sgn) + "v" + len * sgn : "M" + (shift + pad2 * sgn) + ",0h" + len * sgn;
               };
               axes.makeLabelFns = function(ax, shift, angle) {
                 var ticklabelposition = ax.ticklabelposition || "";
@@ -31630,9 +31654,9 @@
                       var isRight = has("right");
                       var isBottom = has("bottom");
                       var isAligned = tickson !== "boundaries" && (isBottom || isLeft || isTop || isRight);
-                      var pad = !isAligned ? 0 : (ax.tickwidth || 0) + 2 * TEXTPAD;
+                      var pad2 = !isAligned ? 0 : (ax.tickwidth || 0) + 2 * TEXTPAD;
                       for (i = 0; i < lbbArray.length - 1; i++) {
-                        if (Lib.bBoxIntersect(lbbArray[i], lbbArray[i + 1], pad)) {
+                        if (Lib.bBoxIntersect(lbbArray[i], lbbArray[i + 1], pad2)) {
                           autoangle = newAngle;
                           break;
                         }
@@ -40665,7 +40689,7 @@
               function lsInner(gd) {
                 var fullLayout = gd._fullLayout;
                 var gs = fullLayout._size;
-                var pad = gs.p;
+                var pad2 = gs.p;
                 var axList = Axes.list(gd, "", true);
                 var i, subplot, plotinfo, ax, xa, ya;
                 fullLayout._paperdiv.style({
@@ -40682,12 +40706,12 @@
                   var lwHalf = ax2._lw / 2;
                   if (ax2._id.charAt(0) === "x") {
                     if (!counterAx2) return gs.t + gs.h * (1 - (ax2.position || 0)) + lwHalf % 1;
-                    else if (side === "top") return counterAx2._offset - pad - lwHalf;
-                    return counterAx2._offset + counterAx2._length + pad + lwHalf;
+                    else if (side === "top") return counterAx2._offset - pad2 - lwHalf;
+                    return counterAx2._offset + counterAx2._length + pad2 + lwHalf;
                   }
                   if (!counterAx2) return gs.l + gs.w * (ax2.position || 0) + lwHalf % 1;
-                  else if (side === "right") return counterAx2._offset + counterAx2._length + pad + lwHalf;
-                  return counterAx2._offset - pad - lwHalf;
+                  else if (side === "right") return counterAx2._offset + counterAx2._length + pad2 + lwHalf;
+                  return counterAx2._offset - pad2 - lwHalf;
                 }
                 for (i = 0; i < axList.length; i++) {
                   ax = axList[i];
@@ -40744,10 +40768,10 @@
                   if (plotinfo.bg && xa._offset !== void 0 && ya._offset !== void 0) {
                     plotinfo.bg.call(
                       Drawing.setRect,
-                      xa._offset - pad,
-                      ya._offset - pad,
-                      xa._length + 2 * pad,
-                      ya._length + 2 * pad
+                      xa._offset - pad2,
+                      ya._offset - pad2,
+                      xa._length + 2 * pad2,
+                      ya._length + 2 * pad2
                     ).call(Color22.fill, fullLayout.plot_bgcolor).style("stroke-width", 0);
                   }
                 }
@@ -40810,9 +40834,9 @@
                   var xPath = "M0,0";
                   if (shouldShowLinesOrTicks(xa, subplot)) {
                     leftYLineWidth = findCounterAxisLineWidth(xa, "left", ya, axList);
-                    xLinesXLeft = xa._offset - (leftYLineWidth ? pad + leftYLineWidth : 0);
+                    xLinesXLeft = xa._offset - (leftYLineWidth ? pad2 + leftYLineWidth : 0);
                     rightYLineWidth = findCounterAxisLineWidth(xa, "right", ya, axList);
-                    xLinesXRight = xa._offset + xa._length + (rightYLineWidth ? pad + rightYLineWidth : 0);
+                    xLinesXRight = xa._offset + xa._length + (rightYLineWidth ? pad2 + rightYLineWidth : 0);
                     xLinesYBottom = getLinePosition(xa, ya, "bottom");
                     xLinesYTop = getLinePosition(xa, ya, "top");
                     extraSubplot = !xa._anchorAxis || subplot !== xa._mainSubplot;
@@ -40829,9 +40853,9 @@
                   var yPath = "M0,0";
                   if (shouldShowLinesOrTicks(ya, subplot)) {
                     connectYBottom = findCounterAxisLineWidth(ya, "bottom", xa, axList);
-                    yLinesYBottom = ya._offset + ya._length + (connectYBottom ? pad : 0);
+                    yLinesYBottom = ya._offset + ya._length + (connectYBottom ? pad2 : 0);
                     connectYTop = findCounterAxisLineWidth(ya, "top", xa, axList);
-                    yLinesYTop = ya._offset - (connectYTop ? pad : 0);
+                    yLinesYTop = ya._offset - (connectYTop ? pad2 : 0);
                     yLinesXLeft = getLinePosition(ya, xa, "left");
                     yLinesXRight = getLinePosition(ya, xa, "right");
                     extraSubplot = !ya._anchorAxis || subplot !== ya._mainSubplot;
@@ -62567,7 +62591,7 @@
                 var rX = hasB ? R * 2 : isHorizontal ? R - overhead : 2 * clippedR;
                 var rY = hasB ? R * 2 : isHorizontal ? 2 * clippedR : R - overhead;
                 var a, b, c;
-                var scale, pad;
+                var scale, pad2;
                 if (t.y / t.x >= barHeight / (barWidth - rX)) {
                   scale = barHeight / t.y;
                 } else if (t.y / t.x <= (barHeight - rY) / barWidth) {
@@ -62590,11 +62614,11 @@
                 }
                 scale = Math.min(1, scale);
                 if (isHorizontal) {
-                  pad = Math.max(0, R - Math.sqrt(Math.max(0, R * R - (R - (barHeight - t.y * scale) / 2) * (R - (barHeight - t.y * scale) / 2))) - overhead);
+                  pad2 = Math.max(0, R - Math.sqrt(Math.max(0, R * R - (R - (barHeight - t.y * scale) / 2) * (R - (barHeight - t.y * scale) / 2))) - overhead);
                 } else {
-                  pad = Math.max(0, R - Math.sqrt(Math.max(0, R * R - (R - (barWidth - t.x * scale) / 2) * (R - (barWidth - t.x * scale) / 2))) - overhead);
+                  pad2 = Math.max(0, R - Math.sqrt(Math.max(0, R * R - (R - (barWidth - t.x * scale) / 2) * (R - (barWidth - t.x * scale) / 2))) - overhead);
                 }
-                return { scale, pad };
+                return { scale, pad: pad2 };
               }
               function toMoveOutsideBar(x0, x1, y0, y1, textBB, opts) {
                 var isHorizontal = !!opts.isHorizontal;
@@ -70315,11 +70339,11 @@
                 var transFn = Axes.makeTransTickFn(ax);
                 var tickSign = Axes.getTickSigns(ax)[2];
                 var caRad = Lib.deg2rad(counterAngle);
-                var pad = tickSign * (ax.linewidth || 1) / 2;
+                var pad2 = tickSign * (ax.linewidth || 1) / 2;
                 var len = tickSign * ax.ticklen;
                 var w = _this.w;
                 var h = _this.h;
-                var tickPath = axLetter === "b" ? "M0," + pad + "l" + Math.sin(caRad) * len + "," + Math.cos(caRad) * len : "M" + pad + ",0l" + Math.cos(caRad) * len + "," + -Math.sin(caRad) * len;
+                var tickPath = axLetter === "b" ? "M0," + pad2 + "l" + Math.sin(caRad) * len + "," + Math.cos(caRad) * len : "M" + pad2 + ",0l" + Math.cos(caRad) * len + "," + -Math.sin(caRad) * len;
                 var gridPath = {
                   a: "M0,0l" + h + ",-" + w / 2,
                   b: "M0,0l-" + w / 2 + ",-" + h,
@@ -76899,7 +76923,7 @@
               function objectToString(o) {
                 return Object.prototype.toString.call(o);
               }
-              function pad(n) {
+              function pad2(n) {
                 return n < 10 ? "0" + n.toString(10) : n.toString(10);
               }
               var months = [
@@ -76919,9 +76943,9 @@
               function timestamp() {
                 var d = /* @__PURE__ */ new Date();
                 var time = [
-                  pad(d.getHours()),
-                  pad(d.getMinutes()),
-                  pad(d.getSeconds())
+                  pad2(d.getHours()),
+                  pad2(d.getMinutes()),
+                  pad2(d.getSeconds())
                 ].join(":");
                 return [d.getDate(), months[d.getMonth()], time].join(" ");
               }
@@ -80062,7 +80086,7 @@
               function objectToString(o) {
                 return Object.prototype.toString.call(o);
               }
-              function pad(n) {
+              function pad2(n) {
                 return n < 10 ? "0" + n.toString(10) : n.toString(10);
               }
               var months = [
@@ -80082,9 +80106,9 @@
               function timestamp() {
                 var d = /* @__PURE__ */ new Date();
                 var time = [
-                  pad(d.getHours()),
-                  pad(d.getMinutes()),
-                  pad(d.getSeconds())
+                  pad2(d.getHours()),
+                  pad2(d.getMinutes()),
+                  pad2(d.getSeconds())
                 ].join(":");
                 return [d.getDate(), months[d.getMonth()], time].join(" ");
               }
@@ -89998,7 +90022,7 @@
                   limitX0(pR);
                   return "M" + pos(pA.x, pA.y) + "L" + pos(pB.x, pB.y) + "L" + pos(pR.x, pR.y) + "L" + pos(pC.x, pC.y) + "L" + pos(pD.x, pD.y) + "L" + pos(pL.x, pL.y) + "Z";
                 };
-                var pad = trace[isIcicle ? "tiling" : "marker"].pad;
+                var pad2 = trace[isIcicle ? "tiling" : "marker"].pad;
                 var hasFlag = function(f) {
                   return trace.textposition.indexOf(f) !== -1;
                 };
@@ -90017,10 +90041,10 @@
                   var cornerradius = trace.marker.cornerradius || 0;
                   var r = Math.min(cornerradius, dx / 2, dy / 2);
                   if (r && d.data && d.data.data && d.data.data.label) {
-                    if (hasTop) r = Math.min(r, pad.t);
-                    if (hasLeft) r = Math.min(r, pad.l);
-                    if (hasRight) r = Math.min(r, pad.r);
-                    if (hasBottom) r = Math.min(r, pad.b);
+                    if (hasTop) r = Math.min(r, pad2.t);
+                    if (hasLeft) r = Math.min(r, pad2.l);
+                    if (hasRight) r = Math.min(r, pad2.r);
+                    if (hasBottom) r = Math.min(r, pad2.b);
                   }
                   var arc = function(rx, ry) {
                     return r ? "a" + pos(r, r) + " 0 0 1 " + pos(rx, ry) : "";
@@ -90039,8 +90063,8 @@
                   var _hasLeft = hasFlag("left") || opts.onPathbar;
                   var leftToRight = _hasLeft ? -1 : _hasRight ? 1 : 0;
                   if (opts.isHeader) {
-                    x0 += (isIcicle ? pad : pad.l) - TEXTPAD;
-                    x1 -= (isIcicle ? pad : pad.r) - TEXTPAD;
+                    x0 += (isIcicle ? pad2 : pad2.l) - TEXTPAD;
+                    x1 -= (isIcicle ? pad2 : pad2.r) - TEXTPAD;
                     if (x0 >= x1) {
                       var mid = (x0 + x1) / 2;
                       x0 = mid;
@@ -90048,10 +90072,10 @@
                     }
                     var limY;
                     if (hasBottom) {
-                      limY = y1 - (isIcicle ? pad : pad.b);
+                      limY = y1 - (isIcicle ? pad2 : pad2.b);
                       if (y0 < limY && limY < y1) y0 = limY;
                     } else {
-                      limY = y0 + (isIcicle ? pad : pad.t);
+                      limY = y0 + (isIcicle ? pad2 : pad2.t);
                       if (y0 < limY && limY < y1) y1 = limY;
                     }
                   }
@@ -123229,7 +123253,7 @@
                           return sprintf.apply(null, [fmt].concat(argv || []));
                         }
                         function sprintf_format(parse_tree, argv) {
-                          var cursor = 1, tree_length = parse_tree.length, arg, output = "", i, k, ph, pad, pad_character, pad_length, is_positive, sign;
+                          var cursor = 1, tree_length = parse_tree.length, arg, output = "", i, k, ph, pad2, pad_character, pad_length, is_positive, sign;
                           for (i = 0; i < tree_length; i++) {
                             if (typeof parse_tree[i] === "string") {
                               output += parse_tree[i];
@@ -123320,8 +123344,8 @@
                                 }
                                 pad_character = ph.pad_char ? ph.pad_char === "0" ? "0" : ph.pad_char.charAt(1) : " ";
                                 pad_length = ph.width - (sign + arg).length;
-                                pad = ph.width ? pad_length > 0 ? pad_character.repeat(pad_length) : "" : "";
-                                output += ph.align ? sign + arg + pad : pad_character === "0" ? sign + pad + arg : pad + sign + arg;
+                                pad2 = ph.width ? pad_length > 0 ? pad_character.repeat(pad_length) : "" : "";
+                                output += ph.align ? sign + arg + pad2 : pad_character === "0" ? sign + pad2 + arg : pad2 + sign + arg;
                               }
                             }
                           }
@@ -127448,13 +127472,13 @@
                     for (j = 0; j < objects.length; j++) {
                       var obj = objects[j];
                       var objBounds = obj.bounds;
-                      var pad = obj._trace.data._pad || 0;
+                      var pad2 = obj._trace.data._pad || 0;
                       if (obj.constructor.name === "ErrorBars" && axis._lowerLogErrorBound) {
                         sceneBounds[0][i] = Math.min(sceneBounds[0][i], axis._lowerLogErrorBound);
                       } else {
-                        sceneBounds[0][i] = Math.min(sceneBounds[0][i], objBounds[0][i] / dataScale[i] - pad);
+                        sceneBounds[0][i] = Math.min(sceneBounds[0][i], objBounds[0][i] / dataScale[i] - pad2);
                       }
-                      sceneBounds[1][i] = Math.max(sceneBounds[1][i], objBounds[1][i] / dataScale[i] + pad);
+                      sceneBounds[1][i] = Math.max(sceneBounds[1][i], objBounds[1][i] / dataScale[i] + pad2);
                     }
                     for (j = 0; j < annotations.length; j++) {
                       var ann = annotations[j];
@@ -169904,21 +169928,21 @@ void main() {
                       pass.bounds = getBox(trace.bounds, i2, j);
                     }
                     if (o.domain || o.viewport || o.data) {
-                      let pad = multipadding ? getBox(trace.padding, i2, j) : trace.padding;
+                      let pad2 = multipadding ? getBox(trace.padding, i2, j) : trace.padding;
                       if (trace.domain) {
                         let [lox, loy, hix, hiy] = getBox(trace.domain, i2, j);
                         pass.viewport = [
-                          left + lox * w + pad[0],
-                          top + loy * h + pad[1],
-                          left + hix * w - pad[2],
-                          top + hiy * h - pad[3]
+                          left + lox * w + pad2[0],
+                          top + loy * h + pad2[1],
+                          left + hix * w - pad2[2],
+                          top + hiy * h - pad2[3]
                         ];
                       } else {
                         pass.viewport = [
-                          left + j * iw + iw * pad[0],
-                          top + i2 * ih + ih * pad[1],
-                          left + (j + 1) * iw - iw * pad[2],
-                          top + (i2 + 1) * ih - ih * pad[3]
+                          left + j * iw + iw * pad2[0],
+                          top + i2 * ih + ih * pad2[1],
+                          left + (j + 1) * iw - iw * pad2[2],
+                          top + (i2 + 1) * ih - ih * pad2[3]
                         ];
                       }
                     }
@@ -170810,8 +170834,8 @@ void main() {
                 });
               }
               function getRegion(fPix, y) {
-                var pad = c.bar.handleHeight;
-                if (y > fPix[1] + pad || y < fPix[0] - pad) return;
+                var pad2 = c.bar.handleHeight;
+                if (y > fPix[1] + pad2 || y < fPix[0] - pad2) return;
                 if (y >= 0.9 * fPix[1] + 0.1 * fPix[0]) return "n";
                 if (y <= 0.9 * fPix[0] + 0.1 * fPix[1]) return "s";
                 return "ns";
@@ -172224,7 +172248,7 @@ void main() {
                 });
                 var groupWidth = Math.floor(width * (domain.x[1] - domain.x[0]));
                 var groupHeight = Math.floor(layout.height * (domain.y[1] - domain.y[0]));
-                var pad = layout.margin || { l: 80, r: 80, t: 100, b: 80 };
+                var pad2 = layout.margin || { l: 80, r: 80, t: 100, b: 80 };
                 var rowContentWidth = groupWidth;
                 var rowHeight = groupHeight;
                 return {
@@ -172245,7 +172269,7 @@ void main() {
                   domain,
                   translateX: domain.x[0] * width,
                   translateY: layout.height - domain.y[1] * layout.height,
-                  pad,
+                  pad: pad2,
                   canvasWidth: rowContentWidth * c.canvasPixelRatio + 2 * lines.canvasOverdrag,
                   canvasHeight: rowHeight * c.canvasPixelRatio,
                   width: rowContentWidth,
@@ -249576,11 +249600,11 @@ uniform ${i3} ${a3} u_${s3};
                 tickSign = Axes.getTickSigns(ax)[2];
                 if (ax.visible) {
                   tickSign = ax.ticks === "inside" ? -1 : 1;
-                  var pad = (ax.linewidth || 1) / 2;
+                  var pad2 = (ax.linewidth || 1) / 2;
                   Axes.drawTicks(gd, ax, {
                     vals,
                     layer: axisLayer,
-                    path: "M" + tickSign * pad + ",0h" + tickSign * ax.ticklen,
+                    path: "M" + tickSign * pad2 + ",0h" + tickSign * ax.ticklen,
                     transFn: transFn2
                   });
                   Axes.drawLabels(gd, ax, {
@@ -255727,19 +255751,19 @@ uniform ${i3} ${a3} u_${s3};
                 var cy = _this.cy;
                 var radialLayout = _this.getRadial(polarLayout);
                 var titleClass = _this.id + "title";
-                var pad = 0;
+                var pad2 = 0;
                 if (radialLayout.title) {
                   var h = Drawing.bBox(_this.layers["radial-axis"].node()).height;
                   var ts = radialLayout.title.font.size;
                   var side = radialLayout.side;
-                  pad = side === "top" ? ts : side === "counterclockwise" ? -(h + ts * 0.4) : h + ts * 0.8;
+                  pad2 = side === "top" ? ts : side === "counterclockwise" ? -(h + ts * 0.4) : h + ts * 0.8;
                 }
                 var angle = _angle !== void 0 ? _angle : _this.radialAxisAngle;
                 var angleRad = deg2rad(angle);
                 var cosa = Math.cos(angleRad);
                 var sina = Math.sin(angleRad);
-                var x = cx + radius / 2 * cosa + pad * sina;
-                var y = cy - radius / 2 * sina + pad * cosa;
+                var x = cx + radius / 2 * cosa + pad2 * sina;
+                var y = cy - radius / 2 * sina + pad2 * cosa;
                 _this.layers["radial-axis-title"] = Titles.draw(gd, titleClass, {
                   propContainer: radialLayout,
                   propName: _this.id + ".radialaxis.title",
@@ -255853,11 +255877,11 @@ uniform ${i3} ${a3} u_${s3};
                 }
                 if (ax.visible) {
                   var tickSign = ax.ticks === "inside" ? -1 : 1;
-                  var pad = (ax.linewidth || 1) / 2;
+                  var pad2 = (ax.linewidth || 1) / 2;
                   Axes.drawTicks(gd, ax, {
                     vals,
                     layer: layers["angular-axis"],
-                    path: "M" + tickSign * pad + ",0h" + tickSign * ax.ticklen,
+                    path: "M" + tickSign * pad2 + ",0h" + tickSign * ax.ticklen,
                     transFn: transFn2,
                     crisp: false
                   });
@@ -258713,7 +258737,7 @@ uniform ${i3} ${a3} u_${s3};
                   throw (_exports.local.invalidDate || _exports.regionalOptions[""].invalidDate).replace(/\{0\}/, this._calendar.local.name);
                 }
               }
-              function pad(value, length) {
+              function pad2(value, length) {
                 value = "" + value;
                 return "000000".substring(0, length - value.length) + value;
               }
@@ -258901,7 +258925,7 @@ uniform ${i3} ${a3} u_${s3};
                     @memberof CDate
                     @return {string} This date as a string. */
                 toString: function() {
-                  return (this.year() < 0 ? "-" : "") + pad(Math.abs(this.year()), 4) + "-" + pad(this.month(), 2) + "-" + pad(this.day(), 2);
+                  return (this.year() < 0 ? "-" : "") + pad2(Math.abs(this.year()), 4) + "-" + pad2(this.month(), 2) + "-" + pad2(this.day(), 2);
                 }
               });
               function BaseCalendar() {
@@ -258966,7 +258990,7 @@ uniform ${i3} ${a3} u_${s3};
                     this.minDay,
                     _exports.local.invalidYear || _exports.regionalOptions[""].invalidYear
                   );
-                  return (date.year() < 0 ? "-" : "") + pad(Math.abs(date.year()), 4);
+                  return (date.year() < 0 ? "-" : "") + pad2(Math.abs(date.year()), 4);
                 },
                 /** Retrieve the number of months in a year.
                     @memberof BaseCalendar
@@ -294003,6 +294027,382 @@ void main() {
     }
   });
 
+  // node_modules/fft.js/lib/fft.js
+  var require_fft = __commonJS({
+    "node_modules/fft.js/lib/fft.js"(exports, module) {
+      "use strict";
+      function FFT(size) {
+        this.size = size | 0;
+        if (this.size <= 1 || (this.size & this.size - 1) !== 0)
+          throw new Error("FFT size must be a power of two and bigger than 1");
+        this._csize = size << 1;
+        var table = new Array(this.size * 2);
+        for (var i = 0; i < table.length; i += 2) {
+          const angle = Math.PI * i / this.size;
+          table[i] = Math.cos(angle);
+          table[i + 1] = -Math.sin(angle);
+        }
+        this.table = table;
+        var power = 0;
+        for (var t = 1; this.size > t; t <<= 1)
+          power++;
+        this._width = power % 2 === 0 ? power - 1 : power;
+        this._bitrev = new Array(1 << this._width);
+        for (var j = 0; j < this._bitrev.length; j++) {
+          this._bitrev[j] = 0;
+          for (var shift = 0; shift < this._width; shift += 2) {
+            var revShift = this._width - shift - 2;
+            this._bitrev[j] |= (j >>> shift & 3) << revShift;
+          }
+        }
+        this._out = null;
+        this._data = null;
+        this._inv = 0;
+      }
+      module.exports = FFT;
+      FFT.prototype.fromComplexArray = function fromComplexArray(complex, storage) {
+        var res = storage || new Array(complex.length >>> 1);
+        for (var i = 0; i < complex.length; i += 2)
+          res[i >>> 1] = complex[i];
+        return res;
+      };
+      FFT.prototype.createComplexArray = function createComplexArray() {
+        const res = new Array(this._csize);
+        for (var i = 0; i < res.length; i++)
+          res[i] = 0;
+        return res;
+      };
+      FFT.prototype.toComplexArray = function toComplexArray(input, storage) {
+        var res = storage || this.createComplexArray();
+        for (var i = 0; i < res.length; i += 2) {
+          res[i] = input[i >>> 1];
+          res[i + 1] = 0;
+        }
+        return res;
+      };
+      FFT.prototype.completeSpectrum = function completeSpectrum(spectrum) {
+        var size = this._csize;
+        var half = size >>> 1;
+        for (var i = 2; i < half; i += 2) {
+          spectrum[size - i] = spectrum[i];
+          spectrum[size - i + 1] = -spectrum[i + 1];
+        }
+      };
+      FFT.prototype.transform = function transform(out, data) {
+        if (out === data)
+          throw new Error("Input and output buffers must be different");
+        this._out = out;
+        this._data = data;
+        this._inv = 0;
+        this._transform4();
+        this._out = null;
+        this._data = null;
+      };
+      FFT.prototype.realTransform = function realTransform(out, data) {
+        if (out === data)
+          throw new Error("Input and output buffers must be different");
+        this._out = out;
+        this._data = data;
+        this._inv = 0;
+        this._realTransform4();
+        this._out = null;
+        this._data = null;
+      };
+      FFT.prototype.inverseTransform = function inverseTransform(out, data) {
+        if (out === data)
+          throw new Error("Input and output buffers must be different");
+        this._out = out;
+        this._data = data;
+        this._inv = 1;
+        this._transform4();
+        for (var i = 0; i < out.length; i++)
+          out[i] /= this.size;
+        this._out = null;
+        this._data = null;
+      };
+      FFT.prototype._transform4 = function _transform4() {
+        var out = this._out;
+        var size = this._csize;
+        var width = this._width;
+        var step = 1 << width;
+        var len = size / step << 1;
+        var outOff;
+        var t;
+        var bitrev = this._bitrev;
+        if (len === 4) {
+          for (outOff = 0, t = 0; outOff < size; outOff += len, t++) {
+            const off = bitrev[t];
+            this._singleTransform2(outOff, off, step);
+          }
+        } else {
+          for (outOff = 0, t = 0; outOff < size; outOff += len, t++) {
+            const off = bitrev[t];
+            this._singleTransform4(outOff, off, step);
+          }
+        }
+        var inv = this._inv ? -1 : 1;
+        var table = this.table;
+        for (step >>= 2; step >= 2; step >>= 2) {
+          len = size / step << 1;
+          var quarterLen = len >>> 2;
+          for (outOff = 0; outOff < size; outOff += len) {
+            var limit = outOff + quarterLen;
+            for (var i = outOff, k = 0; i < limit; i += 2, k += step) {
+              const A = i;
+              const B = A + quarterLen;
+              const C = B + quarterLen;
+              const D = C + quarterLen;
+              const Ar = out[A];
+              const Ai = out[A + 1];
+              const Br = out[B];
+              const Bi = out[B + 1];
+              const Cr = out[C];
+              const Ci = out[C + 1];
+              const Dr = out[D];
+              const Di = out[D + 1];
+              const MAr = Ar;
+              const MAi = Ai;
+              const tableBr = table[k];
+              const tableBi = inv * table[k + 1];
+              const MBr = Br * tableBr - Bi * tableBi;
+              const MBi = Br * tableBi + Bi * tableBr;
+              const tableCr = table[2 * k];
+              const tableCi = inv * table[2 * k + 1];
+              const MCr = Cr * tableCr - Ci * tableCi;
+              const MCi = Cr * tableCi + Ci * tableCr;
+              const tableDr = table[3 * k];
+              const tableDi = inv * table[3 * k + 1];
+              const MDr = Dr * tableDr - Di * tableDi;
+              const MDi = Dr * tableDi + Di * tableDr;
+              const T0r = MAr + MCr;
+              const T0i = MAi + MCi;
+              const T1r = MAr - MCr;
+              const T1i = MAi - MCi;
+              const T2r = MBr + MDr;
+              const T2i = MBi + MDi;
+              const T3r = inv * (MBr - MDr);
+              const T3i = inv * (MBi - MDi);
+              const FAr = T0r + T2r;
+              const FAi = T0i + T2i;
+              const FCr = T0r - T2r;
+              const FCi = T0i - T2i;
+              const FBr = T1r + T3i;
+              const FBi = T1i - T3r;
+              const FDr = T1r - T3i;
+              const FDi = T1i + T3r;
+              out[A] = FAr;
+              out[A + 1] = FAi;
+              out[B] = FBr;
+              out[B + 1] = FBi;
+              out[C] = FCr;
+              out[C + 1] = FCi;
+              out[D] = FDr;
+              out[D + 1] = FDi;
+            }
+          }
+        }
+      };
+      FFT.prototype._singleTransform2 = function _singleTransform2(outOff, off, step) {
+        const out = this._out;
+        const data = this._data;
+        const evenR = data[off];
+        const evenI = data[off + 1];
+        const oddR = data[off + step];
+        const oddI = data[off + step + 1];
+        const leftR = evenR + oddR;
+        const leftI = evenI + oddI;
+        const rightR = evenR - oddR;
+        const rightI = evenI - oddI;
+        out[outOff] = leftR;
+        out[outOff + 1] = leftI;
+        out[outOff + 2] = rightR;
+        out[outOff + 3] = rightI;
+      };
+      FFT.prototype._singleTransform4 = function _singleTransform4(outOff, off, step) {
+        const out = this._out;
+        const data = this._data;
+        const inv = this._inv ? -1 : 1;
+        const step2 = step * 2;
+        const step3 = step * 3;
+        const Ar = data[off];
+        const Ai = data[off + 1];
+        const Br = data[off + step];
+        const Bi = data[off + step + 1];
+        const Cr = data[off + step2];
+        const Ci = data[off + step2 + 1];
+        const Dr = data[off + step3];
+        const Di = data[off + step3 + 1];
+        const T0r = Ar + Cr;
+        const T0i = Ai + Ci;
+        const T1r = Ar - Cr;
+        const T1i = Ai - Ci;
+        const T2r = Br + Dr;
+        const T2i = Bi + Di;
+        const T3r = inv * (Br - Dr);
+        const T3i = inv * (Bi - Di);
+        const FAr = T0r + T2r;
+        const FAi = T0i + T2i;
+        const FBr = T1r + T3i;
+        const FBi = T1i - T3r;
+        const FCr = T0r - T2r;
+        const FCi = T0i - T2i;
+        const FDr = T1r - T3i;
+        const FDi = T1i + T3r;
+        out[outOff] = FAr;
+        out[outOff + 1] = FAi;
+        out[outOff + 2] = FBr;
+        out[outOff + 3] = FBi;
+        out[outOff + 4] = FCr;
+        out[outOff + 5] = FCi;
+        out[outOff + 6] = FDr;
+        out[outOff + 7] = FDi;
+      };
+      FFT.prototype._realTransform4 = function _realTransform4() {
+        var out = this._out;
+        var size = this._csize;
+        var width = this._width;
+        var step = 1 << width;
+        var len = size / step << 1;
+        var outOff;
+        var t;
+        var bitrev = this._bitrev;
+        if (len === 4) {
+          for (outOff = 0, t = 0; outOff < size; outOff += len, t++) {
+            const off = bitrev[t];
+            this._singleRealTransform2(outOff, off >>> 1, step >>> 1);
+          }
+        } else {
+          for (outOff = 0, t = 0; outOff < size; outOff += len, t++) {
+            const off = bitrev[t];
+            this._singleRealTransform4(outOff, off >>> 1, step >>> 1);
+          }
+        }
+        var inv = this._inv ? -1 : 1;
+        var table = this.table;
+        for (step >>= 2; step >= 2; step >>= 2) {
+          len = size / step << 1;
+          var halfLen = len >>> 1;
+          var quarterLen = halfLen >>> 1;
+          var hquarterLen = quarterLen >>> 1;
+          for (outOff = 0; outOff < size; outOff += len) {
+            for (var i = 0, k = 0; i <= hquarterLen; i += 2, k += step) {
+              var A = outOff + i;
+              var B = A + quarterLen;
+              var C = B + quarterLen;
+              var D = C + quarterLen;
+              var Ar = out[A];
+              var Ai = out[A + 1];
+              var Br = out[B];
+              var Bi = out[B + 1];
+              var Cr = out[C];
+              var Ci = out[C + 1];
+              var Dr = out[D];
+              var Di = out[D + 1];
+              var MAr = Ar;
+              var MAi = Ai;
+              var tableBr = table[k];
+              var tableBi = inv * table[k + 1];
+              var MBr = Br * tableBr - Bi * tableBi;
+              var MBi = Br * tableBi + Bi * tableBr;
+              var tableCr = table[2 * k];
+              var tableCi = inv * table[2 * k + 1];
+              var MCr = Cr * tableCr - Ci * tableCi;
+              var MCi = Cr * tableCi + Ci * tableCr;
+              var tableDr = table[3 * k];
+              var tableDi = inv * table[3 * k + 1];
+              var MDr = Dr * tableDr - Di * tableDi;
+              var MDi = Dr * tableDi + Di * tableDr;
+              var T0r = MAr + MCr;
+              var T0i = MAi + MCi;
+              var T1r = MAr - MCr;
+              var T1i = MAi - MCi;
+              var T2r = MBr + MDr;
+              var T2i = MBi + MDi;
+              var T3r = inv * (MBr - MDr);
+              var T3i = inv * (MBi - MDi);
+              var FAr = T0r + T2r;
+              var FAi = T0i + T2i;
+              var FBr = T1r + T3i;
+              var FBi = T1i - T3r;
+              out[A] = FAr;
+              out[A + 1] = FAi;
+              out[B] = FBr;
+              out[B + 1] = FBi;
+              if (i === 0) {
+                var FCr = T0r - T2r;
+                var FCi = T0i - T2i;
+                out[C] = FCr;
+                out[C + 1] = FCi;
+                continue;
+              }
+              if (i === hquarterLen)
+                continue;
+              var ST0r = T1r;
+              var ST0i = -T1i;
+              var ST1r = T0r;
+              var ST1i = -T0i;
+              var ST2r = -inv * T3i;
+              var ST2i = -inv * T3r;
+              var ST3r = -inv * T2i;
+              var ST3i = -inv * T2r;
+              var SFAr = ST0r + ST2r;
+              var SFAi = ST0i + ST2i;
+              var SFBr = ST1r + ST3i;
+              var SFBi = ST1i - ST3r;
+              var SA = outOff + quarterLen - i;
+              var SB = outOff + halfLen - i;
+              out[SA] = SFAr;
+              out[SA + 1] = SFAi;
+              out[SB] = SFBr;
+              out[SB + 1] = SFBi;
+            }
+          }
+        }
+      };
+      FFT.prototype._singleRealTransform2 = function _singleRealTransform2(outOff, off, step) {
+        const out = this._out;
+        const data = this._data;
+        const evenR = data[off];
+        const oddR = data[off + step];
+        const leftR = evenR + oddR;
+        const rightR = evenR - oddR;
+        out[outOff] = leftR;
+        out[outOff + 1] = 0;
+        out[outOff + 2] = rightR;
+        out[outOff + 3] = 0;
+      };
+      FFT.prototype._singleRealTransform4 = function _singleRealTransform4(outOff, off, step) {
+        const out = this._out;
+        const data = this._data;
+        const inv = this._inv ? -1 : 1;
+        const step2 = step * 2;
+        const step3 = step * 3;
+        const Ar = data[off];
+        const Br = data[off + step];
+        const Cr = data[off + step2];
+        const Dr = data[off + step3];
+        const T0r = Ar + Cr;
+        const T1r = Ar - Cr;
+        const T2r = Br + Dr;
+        const T3r = inv * (Br - Dr);
+        const FAr = T0r + T2r;
+        const FBr = T1r;
+        const FBi = -T3r;
+        const FCr = T0r - T2r;
+        const FDr = T1r;
+        const FDi = T3r;
+        out[outOff] = FAr;
+        out[outOff + 1] = 0;
+        out[outOff + 2] = FBr;
+        out[outOff + 3] = FBi;
+        out[outOff + 4] = FCr;
+        out[outOff + 5] = 0;
+        out[outOff + 6] = FDr;
+        out[outOff + 7] = FDi;
+      };
+    }
+  });
+
   // src/index.ts
   var require_index = __commonJS({
     "src/index.ts"() {
@@ -294014,10 +294414,11 @@ void main() {
       init_OrbitControls();
       init_orient_surfaces();
       init_geometry_data();
+      var import_fft = __toESM(require_fft());
+      init_dsp();
       var INITIAL_GEOMETRY_DIMENSIONS = [10, 10, 5];
       var state = {
         rayCount: 2e4,
-        minBounces: 1e4,
         audioDuration: 10,
         // NOTE: placing at the exact origin [0,0,0] causes artefacts.
         // TODO: once diffusion has been implemented, try [0,0,0] again.
@@ -294081,6 +294482,56 @@ void main() {
           state.source = state.ctx.createBufferSource();
           state.source.buffer = sourceBuffer;
           state.source.connect(state.ctx.destination);
+          state.source.start(0);
+        },
+        playConvolved: async function() {
+          if (!state.audioToPlay) {
+            return;
+          }
+          if (!state.ctx) {
+            state.ctx = new AudioContext({
+              sampleRate: SAMPLE_RATE
+            });
+          }
+          state.source?.stop();
+          const inputAudio = await fetch("speechdirectsound_48.wav");
+          const inputAudioArrayBuffer = await inputAudio.arrayBuffer();
+          const inputBuffer = await state.ctx.decodeAudioData(inputAudioArrayBuffer);
+          const fftMinSize = Math.max(inputBuffer.length, state.audioToPlay.length);
+          const fftSize = Math.pow(2, Math.ceil(Math.log(fftMinSize) / Math.log(2)));
+          const f = new import_fft.default(fftSize);
+          const Y = f.createComplexArray();
+          const irFFT = f.createComplexArray();
+          const paddedInputData = Array.from(
+            pad(inputBuffer.getChannelData(0), fftSize)
+          );
+          const paddedIrData = Array.from(pad(state.audioToPlay, fftSize));
+          f.realTransform(Y, paddedInputData);
+          f.realTransform(irFFT, paddedIrData);
+          for (let i = 0; i <= fftSize / 2; i += 2) {
+            const r1 = Y[i];
+            const i1 = Y[i + 1];
+            const r2 = irFFT[i];
+            const i2 = irFFT[i + 1];
+            Y[i] = r1 * r2 - i1 * i2;
+            Y[i + 1] = r1 * i2 + r2 * i1;
+          }
+          f.completeSpectrum(Y);
+          const output = f.createComplexArray();
+          f.inverseTransform(output, Y);
+          const sourceBuffer = await state.ctx.createBuffer(1, fftSize, SAMPLE_RATE);
+          const outputChannel = sourceBuffer.getChannelData(0);
+          let maxValue = -Infinity;
+          for (let i = 0; i < fftSize; ++i) {
+            outputChannel[i] = output[i * 2];
+            maxValue = Math.max(Math.abs(outputChannel[i]), maxValue);
+          }
+          state.source = state.ctx.createBufferSource();
+          state.source.buffer = sourceBuffer;
+          const gain = state.ctx.createGain();
+          gain.gain.value = 1 / maxValue;
+          state.source.connect(gain);
+          gain.connect(state.ctx.destination);
           state.source.start(0);
         }
       };
@@ -294381,19 +294832,6 @@ void main() {
                   })
                 ]),
                 (0, import_mithril.default)("label.block", [
-                  "Number of bounces:",
-                  (0, import_mithril.default)("input", {
-                    type: "number",
-                    min: 0,
-                    value: state.minBounces,
-                    oninput: function(e) {
-                      state.minBounces = parseInt(
-                        e.target.value
-                      );
-                    }
-                  })
-                ]),
-                (0, import_mithril.default)("label.block", [
                   "Output duration (s):",
                   (0, import_mithril.default)("input", {
                     type: "number",
@@ -294426,6 +294864,14 @@ void main() {
                   onclick: state.playAudio
                 },
                 "Play audio"
+              ),
+              (0, import_mithril.default)(
+                "button.block",
+                {
+                  disabled: state.audioToPlay === null,
+                  onclick: state.playConvolved
+                },
+                "Play convolved audio"
               ),
               (0, import_mithril.default)(WaveformPlot),
               (0, import_mithril.default)(MagnitudePlot)

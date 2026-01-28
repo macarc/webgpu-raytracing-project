@@ -293,7 +293,7 @@ function specularRayIntersectionShaderCode(
           if (cosNormalAngleToReceiver > 0) {
             let rayTriangleDistance = raydistancetravelled + distanceToReceiver;
 
-            let totalIntensity = (1-material.scatter) * additionDueToRay + material.scatter * cosNormalAngleToReceiver;
+            let totalIntensity = cosNormalAngleToReceiver;//  (1-material.scatter) * additionDueToRay + material.scatter * cosNormalAngleToReceiver;
 
             // TODO: this is a waste of memory.
             band_125[index].time = rayTriangleDistance;
@@ -574,14 +574,11 @@ export async function rayTrace(
 
   // Number of bounces per pass is limited by how large the output buffer is allowed to be.
   // Each ray outputs 2 floats (distance and intensity) per bounce.
-  const maximumBouncesPerPass = Math.floor(
+  const bouncesPerPass = Math.floor(
     maxStorageBufferSize / (2 * FLOAT32_SIZE * settings.rayCount),
   );
 
-  const bouncesPerPass = Math.min(settings.minBounces, maximumBouncesPerPass);
-  const numberOfPasses = Math.ceil(settings.minBounces / bouncesPerPass);
-
-  const numberOfBounces = numberOfPasses * bouncesPerPass;
+  const maxPasses = 100;
 
   const outputSize = 2 * bouncesPerPass * settings.rayCount;
 
@@ -631,11 +628,17 @@ export async function rayTrace(
   let output2000 = new Float32Array(SAMPLE_RATE * settings.audioDuration);
   let output4000 = new Float32Array(SAMPLE_RATE * settings.audioDuration);
 
-  for (let i = 0; i < numberOfPasses; i++) {
-    update(i * bouncesPerPass, numberOfBounces);
+  const THRESHOLD = 1e-12;
+  let averageValue = 0;
+
+  for (let i = 0; i < maxPasses; i++) {
+    update(i * bouncesPerPass, 10 * bouncesPerPass);
 
     // Run the shader and get the result.
     const result = await rayTracer.runPass(settings.rayCount);
+
+    let thisPassAverageValue = 0;
+    let thisPassMaxValue = 0;
 
     for (let j = 0; j < result[0].length; j += 2) {
       const index = Math.round(SAMPLE_RATE * (result[0][j] / SPEED_OF_SOUND));
@@ -646,10 +649,38 @@ export async function rayTrace(
       output1000[index] += result[3][j + 1] * air_absorption;
       output2000[index] += result[4][j + 1] * air_absorption;
       output4000[index] += result[5][j + 1] * air_absorption;
+
+      // TODO: can probably do in shader.
+      const avg =
+        (result[0][j + 1] +
+          result[1][j + 1] +
+          result[2][j + 1] +
+          result[3][j + 1] +
+          result[4][j + 1] +
+          result[5][j + 1]) *
+        air_absorption;
+      thisPassAverageValue += avg;
+      thisPassMaxValue = Math.max(Math.abs(avg), thisPassMaxValue);
+    }
+
+    if (i === 0) {
+      averageValue = thisPassAverageValue;
+      console.log("average", thisPassAverageValue, averageValue);
+    } else {
+      if (thisPassAverageValue > averageValue) {
+        // This could occur if the passes are so short that the first pass
+        // has no audio in it at all.
+        averageValue = thisPassAverageValue;
+      } else if (thisPassMaxValue < THRESHOLD * averageValue) {
+        console.log("below threshold on pass", i);
+        break;
+      }
     }
   }
 
-  update(numberOfBounces, numberOfBounces);
+  console.log(bouncesPerPass);
+
+  update(maxPasses, maxPasses);
 
   const outputAudio = combineFilteredAudio(
     output125,

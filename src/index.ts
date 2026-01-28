@@ -6,12 +6,13 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { orientTriangles } from "./orient_surfaces";
 import { boxRoom } from "./geometry_data";
+import FFT from "fft.js";
+import { pad } from "./dsp";
 
 const INITIAL_GEOMETRY_DIMENSIONS = [10, 10, 5];
 
 let state = {
   rayCount: 20000,
-  minBounces: 10000,
   audioDuration: 10,
   // NOTE: placing at the exact origin [0,0,0] causes artefacts.
   // TODO: once diffusion has been implemented, try [0,0,0] again.
@@ -446,19 +447,6 @@ let AppView = {
               value: state.rayCount,
               oninput: function (e: InputEvent) {
                 state.rayCount = parseInt((e.target as HTMLInputElement).value);
-              },
-            }),
-          ]),
-          m("label.block", [
-            "Number of bounces:",
-            m("input", {
-              type: "number",
-              min: 0,
-              value: state.minBounces,
-              oninput: function (e: InputEvent) {
-                state.minBounces = parseInt(
-                  (e.target as HTMLInputElement).value,
-                );
               },
             }),
           ]),
