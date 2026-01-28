@@ -135,3 +135,19 @@ export function combineFilteredAudio(
 
   return output;
 }
+
+/**
+ * Zero-pad the end of a Float32Array.
+ * @param data array to zero-pad.
+ * @param length output data length.
+ * @returns padded Float32Array.
+ */
+export function pad(data: Float32Array, length: number): Float32Array {
+  const output = new Float32Array(length);
+
+  for (let i = 0; i < data.length; ++i) {
+    output[i] = data[i];
+  }
+
+  return output;
+}

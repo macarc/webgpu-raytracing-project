@@ -100,6 +100,98 @@ let state = {
     state.source.connect(state.ctx.destination);
     state.source.start(0);
   },
+
+  playConvolved: async function () {
+    // If no ray-tracing has happened, ignore.
+    if (!state.audioToPlay) {
+      return;
+    }
+
+    // Create an AudioContext if one does not exist.
+    if (!state.ctx) {
+      state.ctx = new AudioContext({
+        sampleRate: SAMPLE_RATE,
+      });
+    }
+
+    // Stop the audio if it is already playing.
+    state.source?.stop();
+
+    // Fetch the audio to be convolved.
+    const inputAudio = await fetch("speechdirectsound_48.wav");
+    const inputAudioArrayBuffer = await inputAudio.arrayBuffer();
+
+    // TODO BUG: match sample rate.
+    const inputBuffer = await state.ctx.decodeAudioData(inputAudioArrayBuffer);
+
+    // Get the FFT size (a power of two).
+    const fftMinSize = Math.max(inputBuffer.length, state.audioToPlay.length);
+    // https://stackoverflow.com/a/466256
+    const fftSize = Math.pow(2, Math.ceil(Math.log(fftMinSize) / Math.log(2)));
+
+    const f = new FFT(fftSize);
+
+    // Create Fourier-domain arrays.
+    const Y = f.createComplexArray();
+    const irFFT = f.createComplexArray();
+
+    // Zero-pad data up to fftSize.
+    const paddedInputData = Array.from(
+      pad(inputBuffer.getChannelData(0), fftSize),
+    );
+    const paddedIrData = Array.from(pad(state.audioToPlay, fftSize));
+
+    // DFT.
+    // Y/irFFT contain interleaved (real, imaginary) samples.
+    f.realTransform(Y, paddedInputData);
+    f.realTransform(irFFT, paddedIrData);
+
+    // Multiply (complex interleaved) irFFT by Y.
+    // Only need to multiply up to fftSize/2 since the other half is
+    // empty and populated by completeSpectrum() below.
+    for (let i = 0; i <= fftSize / 2; i += 2) {
+      const r1 = Y[i];
+      const i1 = Y[i + 1];
+      const r2 = irFFT[i];
+      const i2 = irFFT[i + 1];
+
+      Y[i] = r1 * r2 - i1 * i2;
+      Y[i + 1] = r1 * i2 + r2 * i1;
+    }
+
+    // Complete Y using Hermitian symmetry (for real audio).
+    f.completeSpectrum(Y);
+
+    // Inverse transform audio.
+    const output = f.createComplexArray();
+    f.inverseTransform(output, Y);
+
+    // Create output audio buffer.
+    const sourceBuffer = await state.ctx.createBuffer(1, fftSize, SAMPLE_RATE);
+    const outputChannel = sourceBuffer.getChannelData(0);
+
+    let maxValue = -Infinity;
+
+    // Store every second sample (skipping imaginary samples).
+    for (let i = 0; i < fftSize; ++i) {
+      outputChannel[i] = output[i * 2];
+
+      maxValue = Math.max(Math.abs(outputChannel[i]), maxValue);
+    }
+
+    // Create the audio buffer source to play.
+    state.source = state.ctx.createBufferSource();
+    state.source.buffer = sourceBuffer;
+
+    // Add gain to cancel out volume increate due to multiplication.
+    const gain = state.ctx.createGain();
+    gain.gain.value = 1 / maxValue;
+
+    // Start playing the audio buffer source.
+    state.source.connect(gain);
+    gain.connect(state.ctx.destination);
+    state.source.start(0);
+  },
 };
 
 function ScatterPlot(
@@ -483,6 +575,14 @@ let AppView = {
             onclick: state.playAudio,
           },
           "Play audio",
+        ),
+        m(
+          "button.block",
+          {
+            disabled: state.audioToPlay === null,
+            onclick: state.playConvolved,
+          },
+          "Play convolved audio",
         ),
         m(WaveformPlot),
         m(MagnitudePlot),

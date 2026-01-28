@@ -17,6 +17,7 @@
     "@types/three": "^0.182.0",
     "@webgpu/types": "^0.1.65",
     "esbuild": "^0.25.10",
+    "fft.js": "^4.0.4",
     "mithril": "^2.3.8",
     "plotly.js-dist": "^3.1.1",
     "prettier": "^3.8.0",
