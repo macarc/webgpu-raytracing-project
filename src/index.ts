@@ -118,7 +118,7 @@ let state = {
     state.source?.stop();
 
     // Fetch the audio to be convolved.
-    const inputAudio = await fetch("speechdirectsound_48.wav");
+    const inputAudio = await fetch("res/speechdirectsound_48.wav");
     const inputAudioArrayBuffer = await inputAudio.arrayBuffer();
 
     // TODO BUG: match sample rate.

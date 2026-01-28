@@ -294494,7 +294494,7 @@ void main() {
             });
           }
           state.source?.stop();
-          const inputAudio = await fetch("speechdirectsound_48.wav");
+          const inputAudio = await fetch("res/speechdirectsound_48.wav");
           const inputAudioArrayBuffer = await inputAudio.arrayBuffer();
           const inputBuffer = await state.ctx.decodeAudioData(inputAudioArrayBuffer);
           const fftMinSize = Math.max(inputBuffer.length, state.audioToPlay.length);
