@@ -10,7 +10,6 @@ import {
   WORKGROUP_SIZE,
 } from "./constants";
 import { materialsToFloatArray, trianglesToFloatArray } from "./floatarrays";
-import { orientTriangles } from "./orient_surfaces";
 import { combineFilteredAudio } from "./dsp";
 
 // From WebGPU specification
@@ -26,7 +25,6 @@ export interface Settings {
   sourcePosition: Vec3;
   receiverPosition: Vec3;
   rayCount: number;
-  minBounces: number;
   audioDuration: number;
   geometry: Triangle[];
 }
@@ -540,10 +538,7 @@ export async function rayTrace(
   console.time("Total (including setup)");
   console.log("Creating geometry");
   const rays: Ray[] = [];
-
-  // Create the geometry.
-  // Orient the triangles so that they all face outwards.
-  const triangles = await orientTriangles(settings.geometry);
+  const triangles = settings.geometry;
 
   // Create the rays.
   const goldenRatio = (1 + Math.sqrt(5)) / 2;
@@ -659,7 +654,7 @@ export async function rayTrace(
           result[4][j + 1] +
           result[5][j + 1]) *
         air_absorption;
-      thisPassAverageValue += avg;
+      thisPassAverageValue += Math.abs(avg);
       thisPassMaxValue = Math.max(Math.abs(avg), thisPassMaxValue);
     }
 
@@ -677,8 +672,6 @@ export async function rayTrace(
       }
     }
   }
-
-  console.log(bouncesPerPass);
 
   update(maxPasses, maxPasses);
 

@@ -4,29 +4,21 @@ import m from "mithril";
 import Plotly, { Data } from "plotly.js-dist";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { orientTriangles } from "./orient_surfaces";
-import { boxRoom } from "./geometry_data";
 import FFT from "fft.js";
 import { pad } from "./dsp";
-
-const INITIAL_GEOMETRY_DIMENSIONS = [10, 10, 5];
+import {
+  BoxRoomGeometry,
+  Geometry,
+  LoadedGeometry,
+  NoGeometry,
+} from "./geometry";
 
 let state = {
   rayCount: 20000,
   audioDuration: 10,
-  // NOTE: placing at the exact origin [0,0,0] causes artefacts.
-  // TODO: once diffusion has been implemented, try [0,0,0] again.
   sourcePosition: [0, 0, 0] as Vec3,
   receiverPosition: [3.0, 0.0, 0.0] as Vec3,
-  geometryDimensions: [10, 10, 5] as Vec3,
-  geometry: boxRoom({
-    xDim: INITIAL_GEOMETRY_DIMENSIONS[0],
-    yDim: INITIAL_GEOMETRY_DIMENSIONS[1],
-    zDim: INITIAL_GEOMETRY_DIMENSIONS[2],
-    floorMaterial: "carpet",
-    wallMaterial: "plaster",
-    ceilingMaterial: "plaster",
-  }),
+  geometry: new NoGeometry() as Geometry,
 
   audioToPlay: null as Float32Array | null,
   ctx: null as AudioContext | null,
@@ -34,29 +26,33 @@ let state = {
   rayTracingProgress: [0, 0] as [number, number],
   source: null as AudioBufferSourceNode | null,
 
-  updateGeometry: function () {
-    // Don't update the geometry if there's a zero in it (this may occur if the user
-    // deletes the value before typing another).
-    if (
-      state.geometryDimensions.includes(0) ||
-      state.geometryDimensions.includes(NaN)
-    ) {
-      return;
-    }
+  setBoxGeometry: async function () {
+    state.geometry = new BoxRoomGeometry();
+    await state.geometry.initialise();
+  },
 
-    state.geometry = boxRoom({
-      xDim: state.geometryDimensions[0],
-      yDim: state.geometryDimensions[1],
-      zDim: state.geometryDimensions[2],
-      floorMaterial: "carpet",
-      wallMaterial: "plaster",
-      ceilingMaterial: "plaster",
-    });
+  setLoadGeometry: async function () {
+    state.geometry = new LoadedGeometry();
+    await state.geometry.initialise();
+  },
+
+  setTestGeometry: async function () {
+    state.geometry = new LoadedGeometry("res/auditorium1_scale.glb");
+    await state.geometry.initialise();
   },
 
   runRaytracing: async function () {
     state.running = true;
-    state.audioToPlay = await rayTrace(state, state.rayTraceUpdate);
+    state.audioToPlay = await rayTrace(
+      {
+        sourcePosition: state.sourcePosition,
+        receiverPosition: state.receiverPosition,
+        geometry: state.geometry.triangles(),
+        rayCount: state.rayCount,
+        audioDuration: state.audioDuration,
+      },
+      state.rayTraceUpdate,
+    );
     state.running = false;
   },
 
@@ -312,15 +308,17 @@ let ThreeView = {
     }
 
     // If the geometry has changed, update it.
-    if (ThreeView.geometryData !== state.geometry) {
+    if (ThreeView.geometryData !== state.geometry.triangles()) {
       // Create geometry.
       const geometry = new THREE.BufferGeometry();
       const vertices = new Float32Array(
-        (await orientTriangles(state.geometry)).flatMap((triangle) => [
-          ...triangle.p1,
-          ...triangle.p2,
-          ...triangle.p3,
-        ]),
+        state.geometry
+          .triangles()
+          .flatMap((triangle) => [
+            ...triangle.p1,
+            ...triangle.p2,
+            ...triangle.p3,
+          ]),
       );
       geometry.setAttribute("position", new THREE.BufferAttribute(vertices, 3));
 
@@ -344,7 +342,7 @@ let ThreeView = {
       // Create the new meshes.
       ThreeView.mesh = new THREE.Mesh(geometry, material);
       ThreeView.wireframeMesh = new THREE.Mesh(geometry, wireframeMaterial);
-      ThreeView.geometryData = state.geometry;
+      ThreeView.geometryData = state.geometry.triangles();
 
       // Add the new meshes to the scene.
       if (ThreeView.mesh) {
@@ -358,9 +356,11 @@ let ThreeView = {
     // Update the source and receiver positions.
     if (ThreeView.source) {
       ThreeView.source.position.set(...state.sourcePosition);
+      ThreeView.source.visible = state.geometry.triangles().length > 0;
     }
     if (ThreeView.receiver) {
       ThreeView.receiver.position.set(...state.receiverPosition);
+      ThreeView.receiver.visible = state.geometry.triangles().length > 0;
     }
 
     ThreeView.updatingMesh = false;
@@ -436,39 +436,12 @@ let AppView = {
       m(ThreeView),
       m("div.sidebar", [
         m("section", { style: "border:1px solid black;" }, [
-          m("label.v", [
-            "Room dimensions:",
-            m("input.v", {
-              type: "number",
-              value: state.geometryDimensions[0],
-              oninput: function (e: InputEvent) {
-                state.geometryDimensions[0] = parseFloat(
-                  (e.target as HTMLInputElement).value,
-                );
-                state.updateGeometry();
-              },
-            }),
-            m("input.v", {
-              type: "number",
-              value: state.geometryDimensions[1],
-              oninput: function (e: InputEvent) {
-                state.geometryDimensions[1] = parseFloat(
-                  (e.target as HTMLInputElement).value,
-                );
-                state.updateGeometry();
-              },
-            }),
-            m("input.v", {
-              type: "number",
-              value: state.geometryDimensions[2],
-              oninput: function (e: InputEvent) {
-                state.geometryDimensions[2] = parseFloat(
-                  (e.target as HTMLInputElement).value,
-                );
-                state.updateGeometry();
-              },
-            }),
-          ]),
+          m("button", { onclick: state.setBoxGeometry }, "Load box room"),
+          m("button", { onclick: state.setLoadGeometry }, "Load geometry"),
+          m("button", { onclick: state.setTestGeometry }, "Load test geometry"),
+        ]),
+        m("section", { style: "border:1px solid black;" }, [
+          state.geometry.view(),
           m("label.v", [
             "Source position:",
             m("input.v", {
