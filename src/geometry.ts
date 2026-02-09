@@ -1,6 +1,11 @@
 import { Triangle } from "./constants";
 import m from "mithril";
-import { boxRoom, BoxRoomConfig, loadGeometry } from "./geometry_helpers";
+import {
+  boxRoom,
+  BoxRoomConfig,
+  checkForHoles,
+  loadGeometry,
+} from "./geometry_helpers";
 
 export abstract class Geometry {
   abstract initialise(): Promise<void>;
@@ -105,6 +110,15 @@ export class LoadedGeometry extends Geometry {
       const data = await open3DModel();
       this.geometry = await loadGeometry(data);
     }
+
+    const hasHoles = checkForHoles(this.geometry);
+    if (hasHoles !== false) {
+      alert(
+        "Loaded geometry has holes, so may not ray-trace correctly!\nUnconnected edge coordinates:\n" +
+          hasHoles,
+      );
+    }
+
     this.updateScaledGeometry();
   }
 

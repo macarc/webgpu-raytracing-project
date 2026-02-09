@@ -300058,8 +300058,16 @@ void main() {
             triangles.push({
               material: "plaster",
               p1: [v[idx[i] * 3], v[idx[i] * 3 + 1], v[idx[i] * 3 + 2]],
-              p2: [v[idx[i + 1] * 3], v[idx[i + 1] * 3 + 1], v[idx[i + 1] * 3 + 2]],
-              p3: [v[idx[i + 2] * 3], v[idx[i + 2] * 3 + 1], v[idx[i + 2] * 3 + 2]]
+              p2: [
+                v[idx[i + 1] * 3],
+                v[idx[i + 1] * 3 + 1],
+                v[idx[i + 1] * 3 + 2]
+              ],
+              p3: [
+                v[idx[i + 2] * 3],
+                v[idx[i + 2] * 3 + 1],
+                v[idx[i + 2] * 3 + 2]
+              ]
             });
           }
         } else if (vertexCoordinates) {
@@ -300164,6 +300172,40 @@ void main() {
     ];
     return orientTriangles(unorientedTriangles);
   }
+  function checkForHoles(triangles) {
+    const edgeCounts = {};
+    for (const triangle of triangles) {
+      const edges = [
+        [triangle.p1, triangle.p2],
+        [triangle.p2, triangle.p3],
+        [triangle.p3, triangle.p1]
+      ];
+      const sortedEdges = edges.map((edge) => {
+        if (edge[0].toString() > edge[1].toString()) {
+          return [edge[1], edge[0]];
+        }
+        return edge;
+      });
+      for (const edge of sortedEdges) {
+        const key = edge.toString();
+        if (Object.hasOwn(edgeCounts, key)) {
+          edgeCounts[key]++;
+        } else {
+          edgeCounts[key] = 1;
+        }
+      }
+    }
+    let msg = "";
+    for (const [edge, count] of Object.entries(edgeCounts)) {
+      if (count == 1) {
+        msg += edge + "\n";
+      }
+    }
+    if (msg.length > 0) {
+      return msg;
+    }
+    return false;
+  }
   var init_geometry_helpers = __esm({
     "src/geometry_helpers.ts"() {
       "use strict";
@@ -300247,9 +300289,7 @@ void main() {
               type: "number",
               value: this.config.xDim,
               oninput: (e) => {
-                this.config.xDim = parseFloat(
-                  e.target.value
-                );
+                this.config.xDim = parseFloat(e.target.value);
                 this.updateGeometry();
               }
             }),
@@ -300257,9 +300297,7 @@ void main() {
               type: "number",
               value: this.config.yDim,
               oninput: (e) => {
-                this.config.yDim = parseFloat(
-                  e.target.value
-                );
+                this.config.yDim = parseFloat(e.target.value);
                 this.updateGeometry();
               }
             }),
@@ -300267,9 +300305,7 @@ void main() {
               type: "number",
               value: this.config.zDim,
               oninput: (e) => {
-                this.config.zDim = parseFloat(
-                  e.target.value
-                );
+                this.config.zDim = parseFloat(e.target.value);
                 this.updateGeometry();
               }
             })
@@ -300302,6 +300338,12 @@ void main() {
             const data = await open3DModel();
             this.geometry = await loadGeometry(data);
           }
+          const hasHoles = checkForHoles(this.geometry);
+          if (hasHoles !== false) {
+            alert(
+              "Loaded geometry has holes, so may not ray-trace correctly!\nUnconnected edge coordinates:\n" + hasHoles
+            );
+          }
           this.updateScaledGeometry();
         }
         triangles() {
@@ -300316,9 +300358,7 @@ void main() {
               step: 0.1,
               value: this.scale,
               oninput: (e) => {
-                this.scale = parseFloat(
-                  e.target.value
-                );
+                this.scale = parseFloat(e.target.value);
                 this.updateScaledGeometry();
               }
             })
@@ -300326,12 +300366,14 @@ void main() {
         }
         updateScaledGeometry() {
           if (this.scale > 0) {
-            this.scaledGeometry = this.geometry.map((triangle) => ({
-              material: triangle.material,
-              p1: triangle.p1.map((v) => v * this.scale),
-              p2: triangle.p2.map((v) => v * this.scale),
-              p3: triangle.p3.map((v) => v * this.scale)
-            }));
+            this.scaledGeometry = this.geometry.map(
+              (triangle) => ({
+                material: triangle.material,
+                p1: triangle.p1.map((v) => v * this.scale),
+                p2: triangle.p2.map((v) => v * this.scale),
+                p3: triangle.p3.map((v) => v * this.scale)
+              })
+            );
           }
         }
       };
@@ -300375,13 +300417,16 @@ void main() {
         },
         runRaytracing: async function() {
           state.running = true;
-          state.audioToPlay = await rayTrace({
-            sourcePosition: state.sourcePosition,
-            receiverPosition: state.receiverPosition,
-            geometry: state.geometry.triangles(),
-            rayCount: state.rayCount,
-            audioDuration: state.audioDuration
-          }, state.rayTraceUpdate);
+          state.audioToPlay = await rayTrace(
+            {
+              sourcePosition: state.sourcePosition,
+              receiverPosition: state.receiverPosition,
+              geometry: state.geometry.triangles(),
+              rayCount: state.rayCount,
+              audioDuration: state.audioDuration
+            },
+            state.rayTraceUpdate
+          );
           state.running = false;
         },
         rayTraceUpdate: async function(bounces, totalBounces) {
@@ -300782,7 +300827,7 @@ void main() {
           ]);
         }
       };
-      document.addEventListener("DOMContentLoaded", async () => {
+      document.addEventListener("DOMContentLoaded", () => {
         const root = document.querySelector("#root");
         if (root) {
           import_mithril2.default.mount(root, AppView);

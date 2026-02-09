@@ -16,6 +16,13 @@ function isMesh(obj: Object3D): obj is Mesh {
   return (obj as Mesh).isMesh || false;
 }
 
+/**
+ * Load a GLTF file.
+ * Loads the triangles of all mesh objects from the file and
+ * orients them.
+ * @param data GLB file contents.
+ * @returns oriented triangles loaded from the GLTF file.
+ */
 export async function loadGeometry(
   data: string | ArrayBuffer,
 ): Promise<Triangle[]> {
@@ -68,6 +75,11 @@ export async function loadGeometry(
   return triangles;
 }
 
+/**
+ * Create a shoebox room.
+ * @param config settings for room.
+ * @returns oriented triangles forming a cuboid with dimensions and materials specified by config.
+ */
 export async function boxRoom(config: BoxRoomConfig): Promise<Triangle[]> {
   const xp = config.xDim / 2;
   const yp = config.yDim / 2;
@@ -156,4 +168,60 @@ export async function boxRoom(config: BoxRoomConfig): Promise<Triangle[]> {
   ];
 
   return orientTriangles(unorientedTriangles);
+}
+
+/**
+ * Check whether a set of triangles forms a closed shape or has a hole.
+ * This works by checking to ensure that all edges are shared by at least two
+ * triangles in the list. This won't catch every case with a hole, but will
+ * catch nearly all practical cases.
+ * O(n).
+ * @param triangles geometry to check for holes in.
+ * @returns a string containing the unconnected edges, or false if there are no holes.
+ */
+export function checkForHoles(triangles: Triangle[]): string | false {
+  // Dictionary from (stringified) edge to number of occurrences in the triangles list.
+  const edgeCounts: Record<string, number> = {};
+
+  for (const triangle of triangles) {
+    const edges = [
+      [triangle.p1, triangle.p2],
+      [triangle.p2, triangle.p3],
+      [triangle.p3, triangle.p1],
+    ];
+
+    // Sort the vertices in each edge so that
+    // the same edge will map to the same key in edgeCounts.
+    const sortedEdges = edges.map((edge) => {
+      if (edge[0].toString() > edge[1].toString()) {
+        return [edge[1], edge[0]];
+      }
+      return edge;
+    });
+
+    // Add edges to edgeCounts.
+    for (const edge of sortedEdges) {
+      const key = edge.toString();
+      if (Object.hasOwn(edgeCounts, key)) {
+        edgeCounts[key]++;
+      } else {
+        edgeCounts[key] = 1;
+      }
+    }
+  }
+
+  let msg = "";
+
+  // Check if any edges occur less than twice.
+  for (const [edge, count] of Object.entries(edgeCounts)) {
+    if (count == 1) {
+      msg += edge + "\n";
+    }
+  }
+
+  if (msg.length > 0) {
+    return msg;
+  }
+
+  return false;
 }
