@@ -391,14 +391,14 @@
   }
 
   struct Triangle {
-    material: f32,
+    material: f32,  // Index into materials array.
     x: f32, y: f32, z: f32,
     u1: f32, u2: f32, u3: f32,
     v1: f32, v2: f32, v3: f32,
   }
 
   struct Hit {
-    time: f32,
+    time: f32,  // TODO: rename (to distance).
     intensity: f32,
   }
 
@@ -629,10 +629,10 @@
             let distanceFromRayToReceiver = length(vecToReceiver - rayVecToClosestReceiverPoint);
             let additionDueToRay = f32(distanceFromRayToReceiver <= ${RECEIVER_RADIUS});
               
-
-            var totalIntensity = cosNormalAngleToReceiver;
+            // Well this seems to be working now! TODO: work out why it wasn't before. Might be because of the previous bug in the rayVecToClosestPoint implementation.
+            // let totalIntensity = cosNormalAngleToReceiver + additionDueToRay;
             // let totalIntensity = (1 - material.scatter) * additionDueToRay + material.scatter * cosNormalAngleToReceiver;
-
+            let totalIntensity = additionDueToRay;
             // if (is_first_run && n < SPECULAR_BOUNCES) {
             //   totalIntensity += additionDueToRay / 10;
             // }
@@ -839,7 +839,7 @@
       init_floatarrays();
       init_dsp();
       STANDARD_MAX_STORAGE_BUFFER_SIZE = 134217728;
-      RECEIVER_RADIUS = 1;
+      RECEIVER_RADIUS = 0.1;
       AIR_ABSORPTION_COEFF = 13e-4;
       SpecularRayTracer = class {
         device;
@@ -848,7 +848,6 @@
         outputBuffers;
         stagingBuffers;
         constructor(gpuDevice, rays, triangles, materials, outputs, code) {
-          console.log(triangles);
           this.device = gpuDevice;
           const rayBuffer = this.device.createBuffer({
             size: rays.length * FLOAT32_SIZE,
@@ -303607,15 +303606,10 @@ void main() {
       const p1 = new Float32Array(tri.p1);
       const p2 = new Float32Array(tri.p2);
       const p3 = new Float32Array(tri.p3);
-      if (i === 64412) {
-        console.log(tri);
-        console.log(p1, p2, p3);
-      }
       if (tri.p1[0] === tri.p2[0] && tri.p1[1] === tri.p2[1] && tri.p1[2] === tri.p2[2] || tri.p2[0] === tri.p3[0] && tri.p2[1] === tri.p3[1] && tri.p2[2] === tri.p3[2] || tri.p1[0] === tri.p3[0] && tri.p1[1] === tri.p3[1] && tri.p1[2] === tri.p3[2]) {
         indicesToRemove.push(i);
       }
     }
-    console.log("removing", indicesToRemove);
     for (let j = 0; j < indicesToRemove.length; ++j) {
       const indexToRemove = indicesToRemove[j] - j;
       triangles.splice(indexToRemove, 1);
@@ -303627,11 +303621,13 @@ void main() {
       shaderCode,
       [
         {
-          data: new Float32Array(triangles.flatMap((tri) => [
-            ...tri.p1,
-            ...tri.p2.map((p, i) => p - tri.p1[i]),
-            ...tri.p3.map((p, i) => p - tri.p1[i])
-          ])),
+          data: new Float32Array(
+            triangles.flatMap((tri) => [
+              ...tri.p1,
+              ...tri.p2.map((p, i) => p - tri.p1[i]),
+              ...tri.p3.map((p, i) => p - tri.p1[i])
+            ])
+          ),
           readonly: true,
           output: false
         },
@@ -303852,7 +303848,7 @@ void main() {
         triangles.push(...bufferGeometryToTriangles(obj.geometry));
       }
     });
-    console.log(triangles);
+    console.log("Loaded", triangles);
     await orientTriangles(triangles);
     return triangles;
   }
@@ -304050,7 +304046,7 @@ void main() {
   function pathToFormat3D(path) {
     return path.toLowerCase().endsWith(".3dm") ? "3dm" : "gltf";
   }
-  var import_mithril, Geometry, BoxRoomGeometry, LoadedGeometry, RoundGeometry;
+  var import_mithril, Geometry, NoGeometry, BoxRoomGeometry, LoadedGeometry, RoundGeometry;
   var init_geometry = __esm({
     "src/geometry.ts"() {
       "use strict";
@@ -304061,6 +304057,19 @@ void main() {
         selectedIndex = -1;
         selectedTriangle() {
           return this.triangles()[this.selectedIndex] || null;
+        }
+      };
+      NoGeometry = class extends Geometry {
+        async initialise() {
+          return;
+        }
+        triangles() {
+          return [];
+        }
+        view() {
+          return [];
+        }
+        setTriangleMaterial(index, material) {
         }
       };
       BoxRoomGeometry = class extends Geometry {
@@ -304194,18 +304203,12 @@ void main() {
       };
       RoundGeometry = class extends Geometry {
         geometry = [];
+        radius = 20;
+        minTriangleCount = 6e3;
+        actualTriangleCount = 0;
         constructor() {
           super();
-          console.log("wahey");
-          const r = 20;
-          const triangleCount = 6e3;
-          const widthSegments = Math.ceil(Math.sqrt(triangleCount / 2));
-          const heightSegments = Math.ceil(Math.sqrt(triangleCount / 2));
-          console.log(
-            "sphere with " + widthSegments * heightSegments * 2 + " triangles"
-          );
-          const sphere = new SphereGeometry(r, widthSegments, heightSegments);
-          this.geometry = bufferGeometryToTriangles(sphere);
+          this.generateSphere();
         }
         async initialise() {
         }
@@ -304216,7 +304219,41 @@ void main() {
           this.geometry[index].material = material;
         }
         view() {
-          return [];
+          return [
+            (0, import_mithril.default)("label.v", [
+              "Minimum number of triangles:",
+              (0, import_mithril.default)("input", {
+                type: "number",
+                value: this.minTriangleCount,
+                min: 0,
+                step: 1,
+                onchange: (e) => this.setMinTriangleCount(
+                  parseInt(e.target.value)
+                )
+              })
+            ]),
+            (0, import_mithril.default)("span", ` Actual triangle count: ${this.actualTriangleCount}`)
+          ];
+        }
+        setMinTriangleCount(count) {
+          if (count) {
+            this.minTriangleCount = count;
+            this.generateSphere();
+          }
+        }
+        generateSphere() {
+          const widthSegments = Math.ceil(Math.sqrt(this.minTriangleCount / 2));
+          const heightSegments = Math.ceil(Math.sqrt(this.minTriangleCount / 2));
+          console.log(
+            "sphere with " + widthSegments * heightSegments * 2 + " triangles"
+          );
+          this.actualTriangleCount = widthSegments * heightSegments * 2;
+          const sphere = new SphereGeometry(
+            this.radius,
+            widthSegments,
+            heightSegments
+          );
+          this.geometry = bufferGeometryToTriangles(sphere);
         }
       };
     }
@@ -304239,7 +304276,7 @@ void main() {
         audioDuration: 10,
         sourcePosition: [0, 0, 0],
         receiverPosition: [3, 0, 0],
-        geometry: new RoundGeometry(),
+        geometry: new NoGeometry(),
         materials: [
           {
             name: "carpet",
@@ -304279,6 +304316,10 @@ void main() {
         source: null,
         setBoxGeometry: async function() {
           state.geometry = new BoxRoomGeometry();
+          await state.geometry.initialise();
+        },
+        setRoundGeometry: async function() {
+          state.geometry = new RoundGeometry();
           await state.geometry.initialise();
         },
         setLoadGeometry: async function() {
@@ -304390,7 +304431,7 @@ void main() {
               newMaterial
             );
           } else {
-            console.log("Unknown material", newMaterial);
+            console.error("Unknown material", newMaterial);
           }
         },
         setMaterialBand: function(e, material, band) {
@@ -304546,6 +304587,8 @@ void main() {
               );
             }
             const selectedMaterial = new MeshBasicMaterial({ color: "green" });
+            selectedMaterial.transparent = true;
+            selectedMaterial.opacity = 0.9;
             if (ThreeView.mesh) {
               ThreeView.scene.remove(ThreeView.mesh);
             }
@@ -304646,22 +304689,27 @@ void main() {
             const rootObject = new Group();
             for (let i = 0; i < triangles.length; ++i) {
               const tri = triangles[i];
-              const vertices1 = new Float32Array([...tri.p1, ...tri.p2, ...tri.p3]);
-              const vertices2 = new Float32Array([...tri.p2, ...tri.p1, ...tri.p3]);
-              const geom1 = new BufferGeometry();
-              geom1.setAttribute("position", new BufferAttribute(vertices1, 3));
-              const geom2 = new BufferGeometry();
-              geom2.setAttribute("position", new BufferAttribute(vertices2, 3));
-              const mesh1 = new Mesh(geom1);
-              mesh1.userData["triangleIndex"] = i;
-              const mesh2 = new Mesh(geom2);
-              mesh2.userData["triangleIndex"] = i;
-              rootObject.add(mesh1);
-              rootObject.add(mesh2);
+              const vertices = new Float32Array([
+                ...tri.p1,
+                ...tri.p2,
+                ...tri.p3,
+                // Backface.
+                ...tri.p2,
+                ...tri.p1,
+                ...tri.p3
+              ]);
+              const geometry = new BufferGeometry();
+              geometry.setAttribute(
+                "position",
+                new BufferAttribute(vertices, 3)
+              );
+              const mesh = new Mesh(geometry);
+              mesh.userData["triangleIndex"] = i;
+              rootObject.add(mesh);
             }
             const intersections = caster.intersectObjects([rootObject], true);
             const indices = intersections.map(
-              (intersection) => intersection.object.userData["triangleIndex"]
+              (intersection) => intersection.object.userData["triangleIndex"] || 0
             );
             state.geometry.selectedIndex = indices[(indices.indexOf(state.geometry.selectedIndex) + 1) % indices.length];
           }
@@ -304680,6 +304728,7 @@ void main() {
             (0, import_mithril2.default)("div.sidebar", [
               (0, import_mithril2.default)("section", { style: "border:1px solid black;" }, [
                 (0, import_mithril2.default)("button", { onclick: state.setBoxGeometry }, "Load box room"),
+                (0, import_mithril2.default)("button", { onclick: state.setRoundGeometry }, "Load sphere"),
                 (0, import_mithril2.default)("button", { onclick: state.setLoadGeometry }, "Load geometry"),
                 (0, import_mithril2.default)("button", { onclick: state.setTestGeometry }, "Load test geometry")
               ]),
@@ -304746,84 +304795,84 @@ void main() {
                   })
                 ])
               ]),
-              (0, import_mithril2.default)(
-                "section",
-                { style: "border:1px solid black;" },
-                [
-                  ...state.materials.map(
-                    (material) => (0, import_mithril2.default)("section", [
-                      (0, import_mithril2.default)("p", material.name[0].toLocaleUpperCase(), material.name.slice(1)),
-                      (0, import_mithril2.default)("label", [
-                        "125Hz:",
-                        (0, import_mithril2.default)("input", {
-                          type: "number",
-                          min: 0,
-                          max: 1,
-                          step: 0.01,
-                          value: material.a125,
-                          onchange: (e) => state.setMaterialBand(e, material, "a125")
-                        })
-                      ]),
-                      (0, import_mithril2.default)("label", [
-                        "250Hz:",
-                        (0, import_mithril2.default)("input", {
-                          type: "number",
-                          min: 0,
-                          max: 1,
-                          step: 0.01,
-                          value: material.a250,
-                          onchange: (e) => state.setMaterialBand(e, material, "a250")
-                        })
-                      ]),
-                      (0, import_mithril2.default)("label", [
-                        "500Hz:",
-                        (0, import_mithril2.default)("input", {
-                          type: "number",
-                          min: 0,
-                          max: 1,
-                          step: 0.01,
-                          value: material.a500,
-                          onchange: (e) => state.setMaterialBand(e, material, "a500")
-                        })
-                      ]),
-                      (0, import_mithril2.default)("label", [
-                        "1kHz:",
-                        (0, import_mithril2.default)("input", {
-                          type: "number",
-                          min: 0,
-                          max: 1,
-                          step: 0.01,
-                          value: material.a1000,
-                          onchange: (e) => state.setMaterialBand(e, material, "a1000")
-                        })
-                      ]),
-                      (0, import_mithril2.default)("label", [
-                        "2kHz:",
-                        (0, import_mithril2.default)("input", {
-                          type: "number",
-                          min: 0,
-                          max: 1,
-                          step: 0.01,
-                          value: material.a2000,
-                          onchange: (e) => state.setMaterialBand(e, material, "a2000")
-                        })
-                      ]),
-                      (0, import_mithril2.default)("label", [
-                        "4kHz:",
-                        (0, import_mithril2.default)("input", {
-                          type: "number",
-                          min: 0,
-                          max: 1,
-                          step: 0.01,
-                          value: material.a4000,
-                          onchange: (e) => state.setMaterialBand(e, material, "a4000")
-                        })
-                      ])
+              (0, import_mithril2.default)("section", { style: "border:1px solid black;" }, [
+                ...state.materials.map(
+                  (material) => (0, import_mithril2.default)("section", [
+                    (0, import_mithril2.default)(
+                      "p",
+                      material.name[0].toLocaleUpperCase(),
+                      material.name.slice(1)
+                    ),
+                    (0, import_mithril2.default)("label", [
+                      "125Hz:",
+                      (0, import_mithril2.default)("input", {
+                        type: "number",
+                        min: 0,
+                        max: 1,
+                        step: 0.01,
+                        value: material.a125,
+                        onchange: (e) => state.setMaterialBand(e, material, "a125")
+                      })
+                    ]),
+                    (0, import_mithril2.default)("label", [
+                      "250Hz:",
+                      (0, import_mithril2.default)("input", {
+                        type: "number",
+                        min: 0,
+                        max: 1,
+                        step: 0.01,
+                        value: material.a250,
+                        onchange: (e) => state.setMaterialBand(e, material, "a250")
+                      })
+                    ]),
+                    (0, import_mithril2.default)("label", [
+                      "500Hz:",
+                      (0, import_mithril2.default)("input", {
+                        type: "number",
+                        min: 0,
+                        max: 1,
+                        step: 0.01,
+                        value: material.a500,
+                        onchange: (e) => state.setMaterialBand(e, material, "a500")
+                      })
+                    ]),
+                    (0, import_mithril2.default)("label", [
+                      "1kHz:",
+                      (0, import_mithril2.default)("input", {
+                        type: "number",
+                        min: 0,
+                        max: 1,
+                        step: 0.01,
+                        value: material.a1000,
+                        onchange: (e) => state.setMaterialBand(e, material, "a1000")
+                      })
+                    ]),
+                    (0, import_mithril2.default)("label", [
+                      "2kHz:",
+                      (0, import_mithril2.default)("input", {
+                        type: "number",
+                        min: 0,
+                        max: 1,
+                        step: 0.01,
+                        value: material.a2000,
+                        onchange: (e) => state.setMaterialBand(e, material, "a2000")
+                      })
+                    ]),
+                    (0, import_mithril2.default)("label", [
+                      "4kHz:",
+                      (0, import_mithril2.default)("input", {
+                        type: "number",
+                        min: 0,
+                        max: 1,
+                        step: 0.01,
+                        value: material.a4000,
+                        onchange: (e) => state.setMaterialBand(e, material, "a4000")
+                      })
                     ])
-                  ),
-                  (0, import_mithril2.default)("button", { onclick: state.createMaterial }, "Create material")
-                ]
-              ),
+                  ])
+                ),
+                (0, import_mithril2.default)("button", { onclick: state.createMaterial }, "Create material")
+              ]),
               state.geometry.selectedTriangle() ? (0, import_mithril2.default)("section", { style: "border:1px solid black;" }, [
                 (0, import_mithril2.default)("label.block", [
                   "Material:",

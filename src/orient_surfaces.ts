@@ -133,11 +133,13 @@ export async function orientTriangles(
     shaderCode,
     [
       {
-        data: new Float32Array(triangles.flatMap(tri => [
-          ...tri.p1,
-          ...tri.p2.map((p,i) => p - tri.p1[i]),
-          ...tri.p3.map((p,i) => p - tri.p1[i]),
-        ])),
+        data: new Float32Array(
+          triangles.flatMap((tri) => [
+            ...tri.p1,
+            ...tri.p2.map((p, i) => p - tri.p1[i]),
+            ...tri.p3.map((p, i) => p - tri.p1[i]),
+          ]),
+        ),
         readonly: true,
         output: false,
       },

@@ -197,19 +197,13 @@ export class LoadedGeometry extends Geometry {
 
 export class RoundGeometry extends Geometry {
   geometry: Triangle[] = [];
+  radius = 20;
+  minTriangleCount = 6000;
+  actualTriangleCount = 0;
 
   constructor() {
     super();
-    console.log("wahey");
-    const r = 20;
-    const triangleCount = 6000;
-    const widthSegments = Math.ceil(Math.sqrt(triangleCount / 2));
-    const heightSegments = Math.ceil(Math.sqrt(triangleCount / 2));
-    console.log(
-      "sphere with " + widthSegments * heightSegments * 2 + " triangles",
-    );
-    const sphere = new SphereGeometry(r, widthSegments, heightSegments);
-    this.geometry = bufferGeometryToTriangles(sphere);
+    this.generateSphere();
   }
 
   async initialise(): Promise<void> {}
@@ -223,7 +217,44 @@ export class RoundGeometry extends Geometry {
   }
 
   view(): m.Children {
-    return [];
+    return [
+      m("label.v", [
+        "Minimum number of triangles:",
+        m("input", {
+          type: "number",
+          value: this.minTriangleCount,
+          min: 0,
+          step: 1,
+          onchange: (e: InputEvent) =>
+            this.setMinTriangleCount(
+              parseInt((e.target as HTMLInputElement).value),
+            ),
+        }),
+      ]),
+      m("span", ` Actual triangle count: ${this.actualTriangleCount}`),
+    ];
+  }
+
+  private setMinTriangleCount(count: number | undefined) {
+    if (count) {
+      this.minTriangleCount = count;
+      this.generateSphere();
+    }
+  }
+
+  private generateSphere() {
+    const widthSegments = Math.ceil(Math.sqrt(this.minTriangleCount / 2));
+    const heightSegments = Math.ceil(Math.sqrt(this.minTriangleCount / 2));
+    console.log(
+      "sphere with " + widthSegments * heightSegments * 2 + " triangles",
+    );
+    this.actualTriangleCount = widthSegments * heightSegments * 2;
+    const sphere = new SphereGeometry(
+      this.radius,
+      widthSegments,
+      heightSegments,
+    );
+    this.geometry = bufferGeometryToTriangles(sphere);
   }
 }
 

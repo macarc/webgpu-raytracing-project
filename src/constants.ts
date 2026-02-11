@@ -32,8 +32,11 @@ export type Material = {
   scatter: number;
 };
 
-export function materialNameToIndex(materials: Material[], name: string): number {
-  const index = materials.findIndex(material => material.name === name);
+export function materialNameToIndex(
+  materials: Material[],
+  name: string,
+): number {
+  const index = materials.findIndex((material) => material.name === name);
   if (index === -1) {
     throw new Error(`Unknown material: '${name}'`);
   }

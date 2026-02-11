@@ -92,14 +92,14 @@ function specularRayIntersectionShaderCode(
   }
 
   struct Triangle {
-    material: f32,
+    material: f32,  // Index into materials array.
     x: f32, y: f32, z: f32,
     u1: f32, u2: f32, u3: f32,
     v1: f32, v2: f32, v3: f32,
   }
 
   struct Hit {
-    time: f32,
+    time: f32,  // TODO: rename (to distance).
     intensity: f32,
   }
 

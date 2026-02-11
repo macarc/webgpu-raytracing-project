@@ -19,7 +19,7 @@ let state = {
   audioDuration: 10,
   sourcePosition: [0, 0, 0] as Vec3,
   receiverPosition: [3.0, 0.0, 0.0] as Vec3,
-  geometry: new RoundGeometry() as Geometry,
+  geometry: new NoGeometry() as Geometry,
   materials: [
     {
       name: "carpet",
@@ -61,6 +61,11 @@ let state = {
 
   setBoxGeometry: async function () {
     state.geometry = new BoxRoomGeometry();
+    await state.geometry.initialise();
+  },
+
+  setRoundGeometry: async function () {
+    state.geometry = new RoundGeometry();
     await state.geometry.initialise();
   },
 
@@ -233,11 +238,15 @@ let state = {
         newMaterial,
       );
     } else {
-      console.log("Unknown material", newMaterial);
+      console.error("Unknown material", newMaterial);
     }
   },
 
-  setMaterialBand: function (e: InputEvent, material: Material, band: 'a125' | 'a250' | 'a500' | 'a1000' | 'a2000' | 'a4000') {
+  setMaterialBand: function (
+    e: InputEvent,
+    material: Material,
+    band: "a125" | "a250" | "a500" | "a1000" | "a2000" | "a4000",
+  ) {
     const el = e.target as HTMLInputElement;
     const value = parseFloat(el.value);
 
@@ -257,8 +266,8 @@ let state = {
       a4000: 0,
       // TODO: scatter
       scatter: 0.2,
-    })
-  }
+    });
+  },
 };
 
 function ScatterPlot(
@@ -433,6 +442,8 @@ let ThreeView = {
         );
       }
       const selectedMaterial = new THREE.MeshBasicMaterial({ color: "green" });
+      selectedMaterial.transparent = true;
+      selectedMaterial.opacity = 0.9;
 
       // Remove old meshes.
       if (ThreeView.mesh) {
@@ -560,27 +571,37 @@ let ThreeView = {
       for (let i = 0; i < triangles.length; ++i) {
         const tri = triangles[i];
 
-        const vertices1 = new Float32Array([...tri.p1, ...tri.p2, ...tri.p3]);
-        const vertices2 = new Float32Array([...tri.p2, ...tri.p1, ...tri.p3]);
-        const geom1 = new THREE.BufferGeometry();
-        geom1.setAttribute("position", new THREE.BufferAttribute(vertices1, 3));
-        const geom2 = new THREE.BufferGeometry();
-        geom2.setAttribute("position", new THREE.BufferAttribute(vertices2, 3));
+        const vertices = new Float32Array([
+          ...tri.p1,
+          ...tri.p2,
+          ...tri.p3,
+          // Backface.
+          ...tri.p2,
+          ...tri.p1,
+          ...tri.p3,
+        ]);
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute(
+          "position",
+          new THREE.BufferAttribute(vertices, 3),
+        );
 
-        const mesh1 = new THREE.Mesh(geom1);
-        mesh1.userData["triangleIndex"] = i;
-        const mesh2 = new THREE.Mesh(geom2);
-        mesh2.userData["triangleIndex"] = i;
-        rootObject.add(mesh1);
-        rootObject.add(mesh2);
+        const mesh = new THREE.Mesh(geometry);
+        mesh.userData["triangleIndex"] = i;
+        rootObject.add(mesh);
       }
 
       const intersections = caster.intersectObjects([rootObject], true);
       const indices = intersections.map(
         (intersection) =>
-          intersection.object.userData["triangleIndex"] as number,
+          (intersection.object.userData["triangleIndex"] as
+            | number
+            | undefined) || 0,
       );
 
+      // Get the selected triangle. Clicking multiple times cycles through all triangles
+      // under the cursor (starting with the closest one). This allows selecting triangles
+      // that are 'hidden' beneath other ones.
       state.geometry.selectedIndex =
         indices[
           (indices.indexOf(state.geometry.selectedIndex) + 1) % indices.length
@@ -602,6 +623,7 @@ let AppView = {
       m("div.sidebar", [
         m("section", { style: "border:1px solid black;" }, [
           m("button", { onclick: state.setBoxGeometry }, "Load box room"),
+          m("button", { onclick: state.setRoundGeometry }, "Load sphere"),
           m("button", { onclick: state.setLoadGeometry }, "Load geometry"),
           m("button", { onclick: state.setTestGeometry }, "Load test geometry"),
         ]),
@@ -668,12 +690,14 @@ let AppView = {
             }),
           ]),
         ]),
-        m(
-          "section",
-          { style: "border:1px solid black;" },
-          [ ...state.materials.map((material) =>
+        m("section", { style: "border:1px solid black;" }, [
+          ...state.materials.map((material) =>
             m("section", [
-              m("p", material.name[0].toLocaleUpperCase(), material.name.slice(1)),
+              m(
+                "p",
+                material.name[0].toLocaleUpperCase(),
+                material.name.slice(1),
+              ),
               m("label", [
                 "125Hz:",
                 m("input", {
@@ -682,7 +706,8 @@ let AppView = {
                   max: 1,
                   step: 0.01,
                   value: material.a125,
-                  onchange: (e: InputEvent) => state.setMaterialBand(e, material, 'a125')
+                  onchange: (e: InputEvent) =>
+                    state.setMaterialBand(e, material, "a125"),
                 }),
               ]),
               m("label", [
@@ -693,7 +718,8 @@ let AppView = {
                   max: 1,
                   step: 0.01,
                   value: material.a250,
-                  onchange: (e: InputEvent) => state.setMaterialBand(e, material, 'a250')
+                  onchange: (e: InputEvent) =>
+                    state.setMaterialBand(e, material, "a250"),
                 }),
               ]),
               m("label", [
@@ -704,7 +730,8 @@ let AppView = {
                   max: 1,
                   step: 0.01,
                   value: material.a500,
-                  onchange: (e: InputEvent) => state.setMaterialBand(e, material, 'a500')
+                  onchange: (e: InputEvent) =>
+                    state.setMaterialBand(e, material, "a500"),
                 }),
               ]),
               m("label", [
@@ -715,7 +742,8 @@ let AppView = {
                   max: 1,
                   step: 0.01,
                   value: material.a1000,
-                  onchange: (e: InputEvent) => state.setMaterialBand(e, material, 'a1000')
+                  onchange: (e: InputEvent) =>
+                    state.setMaterialBand(e, material, "a1000"),
                 }),
               ]),
               m("label", [
@@ -726,7 +754,8 @@ let AppView = {
                   max: 1,
                   step: 0.01,
                   value: material.a2000,
-                  onchange: (e: InputEvent) => state.setMaterialBand(e, material, 'a2000')
+                  onchange: (e: InputEvent) =>
+                    state.setMaterialBand(e, material, "a2000"),
                 }),
               ]),
               m("label", [
@@ -737,14 +766,14 @@ let AppView = {
                   max: 1,
                   step: 0.01,
                   value: material.a4000,
-                  onchange: (e: InputEvent) => state.setMaterialBand(e, material, 'a4000')
+                  onchange: (e: InputEvent) =>
+                    state.setMaterialBand(e, material, "a4000"),
                 }),
               ]),
             ]),
           ),
-            m("button", { onclick: state.createMaterial }, "Create material")
-          ]
-        ),
+          m("button", { onclick: state.createMaterial }, "Create material"),
+        ]),
         state.geometry.selectedTriangle()
           ? m("section", { style: "border:1px solid black;" }, [
               m("label.block", [
