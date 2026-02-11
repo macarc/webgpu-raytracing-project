@@ -1,7 +1,7 @@
 import { getGPUDevice } from "./webgpu";
 import {
   FLOAT32_SIZE,
-  materials,
+  Material,
   Ray,
   SAMPLE_RATE,
   SPEED_OF_SOUND,
@@ -27,6 +27,7 @@ export interface Settings {
   rayCount: number;
   audioDuration: number;
   geometry: Triangle[];
+  materials: Material[];
 }
 
 /**
@@ -61,6 +62,7 @@ function normalize(v: Vec3): Vec3 {
 
 function specularRayIntersectionShaderCode(
   receiverPosition: Vec3,
+  materials: Material[],
   bounceCount: number,
 ) {
   return /* wgsl */ `
@@ -90,7 +92,7 @@ function specularRayIntersectionShaderCode(
   }
 
   struct Triangle {
-    material: u32,
+    material: f32,
     x: f32, y: f32, z: f32,
     u1: f32, u2: f32, u3: f32,
     v1: f32, v2: f32, v3: f32,
@@ -597,8 +599,8 @@ export async function rayTrace(
         1,
       ]),
     ),
-    trianglesToFloatArray(triangles),
-    materialsToFloatArray(materials),
+    trianglesToFloatArray(triangles, settings.materials),
+    materialsToFloatArray(settings.materials),
     [
       new Float32Array(outputSize),
       new Float32Array(outputSize),
@@ -609,6 +611,7 @@ export async function rayTrace(
     ],
     specularRayIntersectionShaderCode(
       settings.receiverPosition,
+      settings.materials,
       bouncesPerPass,
     ),
   );

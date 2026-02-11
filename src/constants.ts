@@ -32,45 +32,10 @@ export type Material = {
   scatter: number;
 };
 
-export const materials: Material[] = [
-  {
-    name: "carpet",
-    a125: 0.15,
-    a250: 0.25,
-    a500: 0.5,
-    a1000: 0.6,
-    a2000: 0.7,
-    a4000: 0.7,
-    scatter: 0.2,
-  },
-  {
-    name: "concrete",
-    a125: 0.12,
-    a250: 0.09,
-    a500: 0.07,
-    a1000: 0.05,
-    a2000: 0.05,
-    a4000: 0.04,
-    scatter: 0.1,
-  },
-  {
-    name: "plaster",
-    a125: 0.14,
-    a250: 0.1,
-    a500: 0.06,
-    a1000: 0.05,
-    a2000: 0.04,
-    a4000: 0.04,
-    scatter: 0.1,
-  },
-];
-
-export function materialNameToIndex(name: string): number {
-  for (let i = 0; i < materials.length; ++i) {
-    if (materials[i].name === name) {
-      return i;
-    }
+export function materialNameToIndex(materials: Material[], name: string): number {
+  const index = materials.findIndex(material => material.name === name);
+  if (index === -1) {
+    throw new Error(`Unknown material: '${name}'`);
   }
-
-  throw new Error(`Unknown material: '${name}'`);
+  return index;
 }

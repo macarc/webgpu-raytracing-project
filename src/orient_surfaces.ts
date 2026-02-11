@@ -1,11 +1,9 @@
 import { runShader } from "./webgpu";
 import { WORKGROUP_SIZE } from "./constants";
 import { Triangle } from "./constants";
-import { trianglesToFloatArray } from "./floatarrays";
 
 const shaderCode = /* wgsl */ `
   struct Triangle {
-    material: f32,
     x: f32, y: f32, z: f32,
     u1: f32, u2: f32, u3: f32,
     v1: f32, v2: f32, v3: f32,
@@ -135,7 +133,11 @@ export async function orientTriangles(
     shaderCode,
     [
       {
-        data: trianglesToFloatArray(triangles),
+        data: new Float32Array(triangles.flatMap(tri => [
+          ...tri.p1,
+          ...tri.p2.map((p,i) => p - tri.p1[i]),
+          ...tri.p3.map((p,i) => p - tri.p1[i]),
+        ])),
         readonly: true,
         output: false,
       },

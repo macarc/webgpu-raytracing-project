@@ -30,15 +30,14 @@
   ));
 
   // src/constants.ts
-  function materialNameToIndex(name2) {
-    for (let i = 0; i < materials.length; ++i) {
-      if (materials[i].name === name2) {
-        return i;
-      }
+  function materialNameToIndex(materials, name2) {
+    const index = materials.findIndex((material) => material.name === name2);
+    if (index === -1) {
+      throw new Error(`Unknown material: '${name2}'`);
     }
-    throw new Error(`Unknown material: '${name2}'`);
+    return index;
   }
-  var FLOAT32_SIZE, WORKGROUP_SIZE, SAMPLE_RATE, SPEED_OF_SOUND, materials;
+  var FLOAT32_SIZE, WORKGROUP_SIZE, SAMPLE_RATE, SPEED_OF_SOUND;
   var init_constants = __esm({
     "src/constants.ts"() {
       "use strict";
@@ -46,38 +45,6 @@
       WORKGROUP_SIZE = 64;
       SAMPLE_RATE = 48e3;
       SPEED_OF_SOUND = 340;
-      materials = [
-        {
-          name: "carpet",
-          a125: 0.15,
-          a250: 0.25,
-          a500: 0.5,
-          a1000: 0.6,
-          a2000: 0.7,
-          a4000: 0.7,
-          scatter: 0.2
-        },
-        {
-          name: "concrete",
-          a125: 0.12,
-          a250: 0.09,
-          a500: 0.07,
-          a1000: 0.05,
-          a2000: 0.05,
-          a4000: 0.04,
-          scatter: 0.1
-        },
-        {
-          name: "plaster",
-          a125: 0.14,
-          a250: 0.1,
-          a500: 0.06,
-          a1000: 0.05,
-          a2000: 0.04,
-          a4000: 0.04,
-          scatter: 0.1
-        }
-      ];
     }
   });
 
@@ -187,10 +154,10 @@
   });
 
   // src/floatarrays.ts
-  function trianglesToFloatArray(triangles) {
+  function trianglesToFloatArray(triangles, materials) {
     return new Float32Array(
       triangles.flatMap((triangle) => [
-        materialNameToIndex(triangle.material),
+        materialNameToIndex(materials, triangle.material),
         ...triangle.p1,
         triangle.p2[0] - triangle.p1[0],
         triangle.p2[1] - triangle.p1[1],
@@ -201,9 +168,9 @@
       ])
     );
   }
-  function materialsToFloatArray(materials2) {
+  function materialsToFloatArray(materials) {
     return new Float32Array(
-      materials2.flatMap((material) => [
+      materials.flatMap((material) => [
         1 - material.a125,
         1 - material.a250,
         1 - material.a500,
@@ -394,7 +361,7 @@
     const magnitude = Math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2);
     return [v[0] / magnitude, v[1] / magnitude, v[2] / magnitude];
   }
-  function specularRayIntersectionShaderCode(receiverPosition, bounceCount) {
+  function specularRayIntersectionShaderCode(receiverPosition, materials, bounceCount) {
     return (
       /* wgsl */
       `
@@ -424,7 +391,7 @@
   }
 
   struct Triangle {
-    material: u32,
+    material: f32,
     x: f32, y: f32, z: f32,
     u1: f32, u2: f32, u3: f32,
     v1: f32, v2: f32, v3: f32,
@@ -648,7 +615,7 @@
       // This should always be true - it should always intersect a triangle.
       if (closestTriangleIndex < triangleCount) {
         let triangle = triangleBuffer[closestTriangleIndex];
-        let material = materials[triangle.material];
+        let material = materials[u32(triangle.material)];
 
         // If the ray to the receiver did not hit a triangle before hitting the receiver,
         // add the contribution to the output.
@@ -794,8 +761,8 @@
           1
         ])
       ),
-      trianglesToFloatArray(triangles),
-      materialsToFloatArray(materials),
+      trianglesToFloatArray(triangles, settings.materials),
+      materialsToFloatArray(settings.materials),
       [
         new Float32Array(outputSize),
         new Float32Array(outputSize),
@@ -806,6 +773,7 @@
       ],
       specularRayIntersectionShaderCode(
         settings.receiverPosition,
+        settings.materials,
         bouncesPerPass
       )
     );
@@ -879,7 +847,8 @@
         bindGroup;
         outputBuffers;
         stagingBuffers;
-        constructor(gpuDevice, rays, triangles, materials2, outputs, code) {
+        constructor(gpuDevice, rays, triangles, materials, outputs, code) {
+          console.log(triangles);
           this.device = gpuDevice;
           const rayBuffer = this.device.createBuffer({
             size: rays.length * FLOAT32_SIZE,
@@ -890,7 +859,7 @@
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
           });
           const materialsBuffer = this.device.createBuffer({
-            size: materials2.length * FLOAT32_SIZE,
+            size: materials.length * FLOAT32_SIZE,
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
           });
           this.outputBuffers = outputs.map(
@@ -984,7 +953,7 @@
           });
           this.device.queue.writeBuffer(rayBuffer, 0, rays);
           this.device.queue.writeBuffer(triangleBuffer, 0, triangles);
-          this.device.queue.writeBuffer(materialsBuffer, 0, materials2);
+          this.device.queue.writeBuffer(materialsBuffer, 0, materials);
           for (let i = 0; i < outputs.length; i++) {
             this.device.queue.writeBuffer(this.outputBuffers[i], 0, outputs[i]);
           }
@@ -267389,7 +267358,7 @@ uniform ${i3} ${a3} u_${s3};
     }
     throw new Error(`Unknown texture type ${type}.`);
   }
-  var REVISION, MOUSE, TOUCH, CullFaceNone, CullFaceBack, CullFaceFront, PCFShadowMap, PCFSoftShadowMap, VSMShadowMap, FrontSide, BackSide, DoubleSide, NoBlending, NormalBlending, AdditiveBlending, SubtractiveBlending, MultiplyBlending, CustomBlending, AddEquation, SubtractEquation, ReverseSubtractEquation, MinEquation, MaxEquation, ZeroFactor, OneFactor, SrcColorFactor, OneMinusSrcColorFactor, SrcAlphaFactor, OneMinusSrcAlphaFactor, DstAlphaFactor, OneMinusDstAlphaFactor, DstColorFactor, OneMinusDstColorFactor, SrcAlphaSaturateFactor, ConstantColorFactor, OneMinusConstantColorFactor, ConstantAlphaFactor, OneMinusConstantAlphaFactor, NeverDepth, AlwaysDepth, LessDepth, LessEqualDepth, EqualDepth, GreaterEqualDepth, GreaterDepth, NotEqualDepth, MultiplyOperation, MixOperation, AddOperation, NoToneMapping, LinearToneMapping, ReinhardToneMapping, CineonToneMapping, ACESFilmicToneMapping, CustomToneMapping, AgXToneMapping, NeutralToneMapping, AttachedBindMode, DetachedBindMode, UVMapping, CubeReflectionMapping, CubeRefractionMapping, EquirectangularReflectionMapping, EquirectangularRefractionMapping, CubeUVReflectionMapping, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter, NearestMipmapNearestFilter, NearestMipmapLinearFilter, LinearFilter, LinearMipmapNearestFilter, LinearMipmapLinearFilter, UnsignedByteType, ByteType, ShortType, UnsignedShortType, IntType, UnsignedIntType, FloatType, HalfFloatType, UnsignedShort4444Type, UnsignedShort5551Type, UnsignedInt248Type, UnsignedInt5999Type, UnsignedInt101111Type, AlphaFormat, RGBFormat, RGBAFormat, DepthFormat, DepthStencilFormat, RedFormat, RedIntegerFormat, RGFormat, RGIntegerFormat, RGBAIntegerFormat, RGB_S3TC_DXT1_Format, RGBA_S3TC_DXT1_Format, RGBA_S3TC_DXT3_Format, RGBA_S3TC_DXT5_Format, RGB_PVRTC_4BPPV1_Format, RGB_PVRTC_2BPPV1_Format, RGBA_PVRTC_4BPPV1_Format, RGBA_PVRTC_2BPPV1_Format, RGB_ETC1_Format, RGB_ETC2_Format, RGBA_ETC2_EAC_Format, R11_EAC_Format, SIGNED_R11_EAC_Format, RG11_EAC_Format, SIGNED_RG11_EAC_Format, RGBA_ASTC_4x4_Format, RGBA_ASTC_5x4_Format, RGBA_ASTC_5x5_Format, RGBA_ASTC_6x5_Format, RGBA_ASTC_6x6_Format, RGBA_ASTC_8x5_Format, RGBA_ASTC_8x6_Format, RGBA_ASTC_8x8_Format, RGBA_ASTC_10x5_Format, RGBA_ASTC_10x6_Format, RGBA_ASTC_10x8_Format, RGBA_ASTC_10x10_Format, RGBA_ASTC_12x10_Format, RGBA_ASTC_12x12_Format, RGBA_BPTC_Format, RGB_BPTC_SIGNED_Format, RGB_BPTC_UNSIGNED_Format, RED_RGTC1_Format, SIGNED_RED_RGTC1_Format, RED_GREEN_RGTC2_Format, SIGNED_RED_GREEN_RGTC2_Format, InterpolateDiscrete, InterpolateLinear, InterpolateSmooth, ZeroCurvatureEnding, ZeroSlopeEnding, WrapAroundEnding, NormalAnimationBlendMode, TrianglesDrawMode, TriangleStripDrawMode, TriangleFanDrawMode, BasicDepthPacking, TangentSpaceNormalMap, ObjectSpaceNormalMap, NoColorSpace, SRGBColorSpace, LinearSRGBColorSpace, LinearTransfer, SRGBTransfer, KeepStencilOp, AlwaysStencilFunc, NeverCompare, LessCompare, EqualCompare, LessEqualCompare, GreaterCompare, NotEqualCompare, GreaterEqualCompare, AlwaysCompare, StaticDrawUsage, GLSL3, WebGLCoordinateSystem, WebGPUCoordinateSystem, TYPED_ARRAYS, _cache, _setConsoleFunction, EventDispatcher, _lut, _seed, DEG2RAD, RAD2DEG, MathUtils, Vector2, Quaternion, Vector3, _vector$c, _quaternion$4, Matrix3, _m3, LINEAR_REC709_TO_XYZ, XYZ_TO_LINEAR_REC709, ColorManagement, _canvas, ImageUtils, _sourceId, Source, _textureId, _tempVec3, Texture, Vector4, RenderTarget, WebGLRenderTarget, DataArrayTexture, Data3DTexture, Box3, _points, _vector$b, _box$4, _v0$2, _v1$7, _v2$4, _f0, _f1, _f2, _center, _extents, _triangleNormal, _testAxis, _box$3, _v1$6, _v2$3, Sphere, _vector$a, _segCenter, _segDir, _diff, _edge1, _edge2, _normal$1, Ray2, Matrix4, _v1$5, _m1$2, _zero, _one, _x, _y, _z, _matrix$2, _quaternion$3, Euler, Layers, _object3DId, _v1$4, _q1, _m1$1, _target, _position$3, _scale$2, _quaternion$2, _xAxis, _yAxis, _zAxis, _addedEvent, _removedEvent, _childaddedEvent, _childremovedEvent, Object3D, _v0$1, _v1$3, _v2$2, _v3$2, _vab, _vac, _vbc, _vap, _vbp, _vcp, _v40, _v41, _v42, Triangle3, _colorKeywords, _hslA, _hslB, Color, _color, _materialId, Material2, MeshBasicMaterial, _tables, DataUtils, _vector$9, _vector2$1, _id$2, BufferAttribute, Uint16BufferAttribute, Uint32BufferAttribute, Float32BufferAttribute, _id$1, _m1, _obj, _offset, _box$2, _boxMorphTargets, _vector$8, BufferGeometry, _inverseMatrix$3, _ray$3, _sphere$6, _sphereHitAt, _vA$1, _vB$1, _vC$1, _tempA, _morphA, _intersectionPoint, _intersectionPointWorld, Mesh, BoxGeometry, UniformsUtils, default_vertex, default_fragment, ShaderMaterial, Camera, _v3$1, _minTarget, _maxTarget, PerspectiveCamera, fov, aspect, CubeCamera, CubeTexture, WebGLCubeRenderTarget, Group, _moveEvent, WebXRController, Scene, InterleavedBuffer, _vector$7, InterleavedBufferAttribute, SpriteMaterial, _geometry, _intersectPoint, _worldScale, _mvPosition, _alignedPosition, _rotatedPosition, _viewWorldMatrix, _vA, _vB, _vC, _uvA, _uvB, _uvC, Sprite, _basePosition, _skinIndex, _skinWeight, _vector3, _matrix4, _vertex, _sphere$5, _inverseMatrix$2, _ray$2, SkinnedMesh, Bone, DataTexture, _offsetMatrix, _identityMatrix, Skeleton, InstancedBufferAttribute, _instanceLocalMatrix, _instanceWorldMatrix, _instanceIntersects, _box3, _identity, _mesh$1, _sphere$4, InstancedMesh, _vector1, _vector2, _normalMatrix, Plane, _sphere$3, _defaultSpriteCenter, _vector$6, Frustum, LineBasicMaterial, _vStart, _vEnd, _inverseMatrix$1, _ray$1, _sphere$1, _intersectPointOnRay, _intersectPointOnSegment, Line, _start, _end, LineSegments, LineLoop, PointsMaterial, _inverseMatrix, _ray, _sphere, _position$2, Points, CanvasTexture, DepthTexture, CubeDepthTexture, ExternalTexture, PlaneGeometry, SphereGeometry, RawShaderMaterial, MeshStandardMaterial, MeshPhysicalMaterial, MeshDepthMaterial, MeshDistanceMaterial, Interpolant, CubicInterpolant, LinearInterpolant, DiscreteInterpolant, KeyframeTrack, BooleanKeyframeTrack, ColorKeyframeTrack, NumberKeyframeTrack, QuaternionLinearInterpolant, QuaternionKeyframeTrack, StringKeyframeTrack, VectorKeyframeTrack, AnimationClip, Cache, LoadingManager, DefaultLoadingManager, Loader, loading, HttpError, FileLoader, _loading, ImageLoader, DataTextureLoader, TextureLoader, Light, _projScreenMatrix, _lightPositionWorld, _lookTarget, LightShadow, SpotLightShadow, SpotLight, PointLightShadow, PointLight, OrthographicCamera, DirectionalLightShadow, DirectionalLight, RectAreaLight, LoaderUtils, InstancedBufferGeometry, BufferGeometryLoader, _errorMap, ImageBitmapLoader, ArrayCamera, _RESERVED_CHARS_RE, _reservedRe, _wordChar, _wordCharOrDot, _directoryRe, _nodeRe, _objectRe, _propertyRe, _trackRe, _supportedObjectNames, Composite, PropertyBinding, _controlInterpolantsResultBuffer, _matrix, Raycaster, Spherical, Controls;
+  var REVISION, MOUSE, TOUCH, CullFaceNone, CullFaceBack, CullFaceFront, PCFShadowMap, PCFSoftShadowMap, VSMShadowMap, FrontSide, BackSide, DoubleSide, NoBlending, NormalBlending, AdditiveBlending, SubtractiveBlending, MultiplyBlending, CustomBlending, AddEquation, SubtractEquation, ReverseSubtractEquation, MinEquation, MaxEquation, ZeroFactor, OneFactor, SrcColorFactor, OneMinusSrcColorFactor, SrcAlphaFactor, OneMinusSrcAlphaFactor, DstAlphaFactor, OneMinusDstAlphaFactor, DstColorFactor, OneMinusDstColorFactor, SrcAlphaSaturateFactor, ConstantColorFactor, OneMinusConstantColorFactor, ConstantAlphaFactor, OneMinusConstantAlphaFactor, NeverDepth, AlwaysDepth, LessDepth, LessEqualDepth, EqualDepth, GreaterEqualDepth, GreaterDepth, NotEqualDepth, MultiplyOperation, MixOperation, AddOperation, NoToneMapping, LinearToneMapping, ReinhardToneMapping, CineonToneMapping, ACESFilmicToneMapping, CustomToneMapping, AgXToneMapping, NeutralToneMapping, AttachedBindMode, DetachedBindMode, UVMapping, CubeReflectionMapping, CubeRefractionMapping, EquirectangularReflectionMapping, EquirectangularRefractionMapping, CubeUVReflectionMapping, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter, NearestMipmapNearestFilter, NearestMipmapLinearFilter, LinearFilter, LinearMipmapNearestFilter, LinearMipmapLinearFilter, UnsignedByteType, ByteType, ShortType, UnsignedShortType, IntType, UnsignedIntType, FloatType, HalfFloatType, UnsignedShort4444Type, UnsignedShort5551Type, UnsignedInt248Type, UnsignedInt5999Type, UnsignedInt101111Type, AlphaFormat, RGBFormat, RGBAFormat, DepthFormat, DepthStencilFormat, RedFormat, RedIntegerFormat, RGFormat, RGIntegerFormat, RGBAIntegerFormat, RGB_S3TC_DXT1_Format, RGBA_S3TC_DXT1_Format, RGBA_S3TC_DXT3_Format, RGBA_S3TC_DXT5_Format, RGB_PVRTC_4BPPV1_Format, RGB_PVRTC_2BPPV1_Format, RGBA_PVRTC_4BPPV1_Format, RGBA_PVRTC_2BPPV1_Format, RGB_ETC1_Format, RGB_ETC2_Format, RGBA_ETC2_EAC_Format, R11_EAC_Format, SIGNED_R11_EAC_Format, RG11_EAC_Format, SIGNED_RG11_EAC_Format, RGBA_ASTC_4x4_Format, RGBA_ASTC_5x4_Format, RGBA_ASTC_5x5_Format, RGBA_ASTC_6x5_Format, RGBA_ASTC_6x6_Format, RGBA_ASTC_8x5_Format, RGBA_ASTC_8x6_Format, RGBA_ASTC_8x8_Format, RGBA_ASTC_10x5_Format, RGBA_ASTC_10x6_Format, RGBA_ASTC_10x8_Format, RGBA_ASTC_10x10_Format, RGBA_ASTC_12x10_Format, RGBA_ASTC_12x12_Format, RGBA_BPTC_Format, RGB_BPTC_SIGNED_Format, RGB_BPTC_UNSIGNED_Format, RED_RGTC1_Format, SIGNED_RED_RGTC1_Format, RED_GREEN_RGTC2_Format, SIGNED_RED_GREEN_RGTC2_Format, InterpolateDiscrete, InterpolateLinear, InterpolateSmooth, ZeroCurvatureEnding, ZeroSlopeEnding, WrapAroundEnding, NormalAnimationBlendMode, TrianglesDrawMode, TriangleStripDrawMode, TriangleFanDrawMode, BasicDepthPacking, TangentSpaceNormalMap, ObjectSpaceNormalMap, NoColorSpace, SRGBColorSpace, LinearSRGBColorSpace, LinearTransfer, SRGBTransfer, KeepStencilOp, AlwaysStencilFunc, NeverCompare, LessCompare, EqualCompare, LessEqualCompare, GreaterCompare, NotEqualCompare, GreaterEqualCompare, AlwaysCompare, StaticDrawUsage, GLSL3, WebGLCoordinateSystem, WebGPUCoordinateSystem, TYPED_ARRAYS, _cache, _setConsoleFunction, EventDispatcher, _lut, _seed, DEG2RAD, RAD2DEG, MathUtils, Vector2, Quaternion, Vector3, _vector$c, _quaternion$4, Matrix3, _m3, LINEAR_REC709_TO_XYZ, XYZ_TO_LINEAR_REC709, ColorManagement, _canvas, ImageUtils, _sourceId, Source, _textureId, _tempVec3, Texture, Vector4, RenderTarget, WebGLRenderTarget, DataArrayTexture, Data3DTexture, Box3, _points, _vector$b, _box$4, _v0$2, _v1$7, _v2$4, _f0, _f1, _f2, _center, _extents, _triangleNormal, _testAxis, _box$3, _v1$6, _v2$3, Sphere, _vector$a, _segCenter, _segDir, _diff, _edge1, _edge2, _normal$1, Ray2, Matrix4, _v1$5, _m1$2, _zero, _one, _x, _y, _z, _matrix$2, _quaternion$3, Euler, Layers, _object3DId, _v1$4, _q1, _m1$1, _target, _position$3, _scale$2, _quaternion$2, _xAxis, _yAxis, _zAxis, _addedEvent, _removedEvent, _childaddedEvent, _childremovedEvent, Object3D, _v0$1, _v1$3, _v2$2, _v3$2, _vab, _vac, _vbc, _vap, _vbp, _vcp, _v40, _v41, _v42, Triangle3, _colorKeywords, _hslA, _hslB, Color, _color, _materialId, Material3, MeshBasicMaterial, _tables, DataUtils, _vector$9, _vector2$1, _id$2, BufferAttribute, Uint16BufferAttribute, Uint32BufferAttribute, Float32BufferAttribute, _id$1, _m1, _obj, _offset, _box$2, _boxMorphTargets, _vector$8, BufferGeometry, _inverseMatrix$3, _ray$3, _sphere$6, _sphereHitAt, _vA$1, _vB$1, _vC$1, _tempA, _morphA, _intersectionPoint, _intersectionPointWorld, Mesh, BoxGeometry, UniformsUtils, default_vertex, default_fragment, ShaderMaterial, Camera, _v3$1, _minTarget, _maxTarget, PerspectiveCamera, fov, aspect, CubeCamera, CubeTexture, WebGLCubeRenderTarget, Group, _moveEvent, WebXRController, Scene, InterleavedBuffer, _vector$7, InterleavedBufferAttribute, SpriteMaterial, _geometry, _intersectPoint, _worldScale, _mvPosition, _alignedPosition, _rotatedPosition, _viewWorldMatrix, _vA, _vB, _vC, _uvA, _uvB, _uvC, Sprite, _basePosition, _skinIndex, _skinWeight, _vector3, _matrix4, _vertex, _sphere$5, _inverseMatrix$2, _ray$2, SkinnedMesh, Bone, DataTexture, _offsetMatrix, _identityMatrix, Skeleton, InstancedBufferAttribute, _instanceLocalMatrix, _instanceWorldMatrix, _instanceIntersects, _box3, _identity, _mesh$1, _sphere$4, InstancedMesh, _vector1, _vector2, _normalMatrix, Plane, _sphere$3, _defaultSpriteCenter, _vector$6, Frustum, LineBasicMaterial, _vStart, _vEnd, _inverseMatrix$1, _ray$1, _sphere$1, _intersectPointOnRay, _intersectPointOnSegment, Line, _start, _end, LineSegments, LineLoop, PointsMaterial, _inverseMatrix, _ray, _sphere, _position$2, Points, CanvasTexture, DepthTexture, CubeDepthTexture, ExternalTexture, PlaneGeometry, SphereGeometry, RawShaderMaterial, MeshStandardMaterial, MeshPhysicalMaterial, MeshDepthMaterial, MeshDistanceMaterial, Interpolant, CubicInterpolant, LinearInterpolant, DiscreteInterpolant, KeyframeTrack, BooleanKeyframeTrack, ColorKeyframeTrack, NumberKeyframeTrack, QuaternionLinearInterpolant, QuaternionKeyframeTrack, StringKeyframeTrack, VectorKeyframeTrack, AnimationClip, Cache, LoadingManager, DefaultLoadingManager, Loader, loading, HttpError, FileLoader, _loading, ImageLoader, DataTextureLoader, TextureLoader, Light, _projScreenMatrix, _lightPositionWorld, _lookTarget, LightShadow, SpotLightShadow, SpotLight, PointLightShadow, PointLight, OrthographicCamera, DirectionalLightShadow, DirectionalLight, RectAreaLight, LoaderUtils, InstancedBufferGeometry, BufferGeometryLoader, _errorMap, ImageBitmapLoader, ArrayCamera, _RESERVED_CHARS_RE, _reservedRe, _wordChar, _wordCharOrDot, _directoryRe, _nodeRe, _objectRe, _propertyRe, _trackRe, _supportedObjectNames, Composite, PropertyBinding, _controlInterpolantsResultBuffer, _matrix, Raycaster, Spherical, Controls;
   var init_three_core = __esm({
     "node_modules/three/build/three.core.js"() {
       REVISION = "182";
@@ -275509,7 +275478,7 @@ uniform ${i3} ${a3} u_${s3};
           }
           if (isRootObject) {
             const geometries = extractFromCache(meta.geometries);
-            const materials2 = extractFromCache(meta.materials);
+            const materials = extractFromCache(meta.materials);
             const textures = extractFromCache(meta.textures);
             const images = extractFromCache(meta.images);
             const shapes = extractFromCache(meta.shapes);
@@ -275517,7 +275486,7 @@ uniform ${i3} ${a3} u_${s3};
             const animations = extractFromCache(meta.animations);
             const nodes = extractFromCache(meta.nodes);
             if (geometries.length > 0) output.geometries = geometries;
-            if (materials2.length > 0) output.materials = materials2;
+            if (materials.length > 0) output.materials = materials;
             if (textures.length > 0) output.textures = textures;
             if (images.length > 0) output.images = images;
             if (shapes.length > 0) output.shapes = shapes;
@@ -276704,7 +276673,7 @@ uniform ${i3} ${a3} u_${s3};
       _color = /* @__PURE__ */ new Color();
       Color.NAMES = _colorKeywords;
       _materialId = 0;
-      Material2 = class extends EventDispatcher {
+      Material3 = class extends EventDispatcher {
         /**
          * Constructs a new material.
          */
@@ -277124,7 +277093,7 @@ uniform ${i3} ${a3} u_${s3};
           if (value === true) this.version++;
         }
       };
-      MeshBasicMaterial = class extends Material2 {
+      MeshBasicMaterial = class extends Material3 {
         /**
          * Constructs a new mesh basic material.
          *
@@ -278725,7 +278694,7 @@ uniform ${i3} ${a3} u_${s3};
       UniformsUtils = { clone: cloneUniforms, merge: mergeUniforms };
       default_vertex = "void main() {\n	gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );\n}";
       default_fragment = "void main() {\n	gl_FragColor = vec4( 1.0, 0.0, 0.0, 1.0 );\n}";
-      ShaderMaterial = class extends Material2 {
+      ShaderMaterial = class extends Material3 {
         /**
          * Constructs a new shader material.
          *
@@ -280189,7 +280158,7 @@ uniform ${i3} ${a3} u_${s3};
           }
         }
       };
-      SpriteMaterial = class extends Material2 {
+      SpriteMaterial = class extends Material3 {
         /**
          * Constructs a new sprite material.
          *
@@ -281379,7 +281348,7 @@ uniform ${i3} ${a3} u_${s3};
           return new this.constructor().copy(this);
         }
       };
-      LineBasicMaterial = class extends Material2 {
+      LineBasicMaterial = class extends Material3 {
         /**
          * Constructs a new line basic material.
          *
@@ -281593,7 +281562,7 @@ uniform ${i3} ${a3} u_${s3};
           this.type = "LineLoop";
         }
       };
-      PointsMaterial = class extends Material2 {
+      PointsMaterial = class extends Material3 {
         /**
          * Constructs a new points material.
          *
@@ -282000,7 +281969,7 @@ uniform ${i3} ${a3} u_${s3};
           this.type = "RawShaderMaterial";
         }
       };
-      MeshStandardMaterial = class extends Material2 {
+      MeshStandardMaterial = class extends Material3 {
         /**
          * Constructs a new mesh standard material.
          *
@@ -282285,7 +282254,7 @@ uniform ${i3} ${a3} u_${s3};
           return this;
         }
       };
-      MeshDepthMaterial = class extends Material2 {
+      MeshDepthMaterial = class extends Material3 {
         /**
          * Constructs a new mesh depth material.
          *
@@ -282322,7 +282291,7 @@ uniform ${i3} ${a3} u_${s3};
           return this;
         }
       };
-      MeshDistanceMaterial = class extends Material2 {
+      MeshDistanceMaterial = class extends Material3 {
         /**
          * Constructs a new mesh distance material.
          *
@@ -295285,7 +295254,7 @@ void main() {
           }
           let extensions, capabilities, state, info;
           let properties, textures, cubemaps, cubeuvmaps, attributes, geometries, objects;
-          let programCache, materials2, renderLists, renderStates, clipping, shadowMap;
+          let programCache, materials, renderLists, renderStates, clipping, shadowMap;
           let background, morphtargets, bufferRenderer, indexedBufferRenderer;
           let utils, bindingStates, uniformsGroups;
           function initGLContext() {
@@ -295309,7 +295278,7 @@ void main() {
             morphtargets = new WebGLMorphtargets(_gl, capabilities, textures);
             clipping = new WebGLClipping(properties);
             programCache = new WebGLPrograms(_this, cubemaps, cubeuvmaps, extensions, capabilities, bindingStates, clipping);
-            materials2 = new WebGLMaterials(_this, properties);
+            materials = new WebGLMaterials(_this, properties);
             renderLists = new WebGLRenderLists();
             renderStates = new WebGLRenderStates(extensions);
             background = new WebGLBackground(_this, cubemaps, cubeuvmaps, state, objects, _alpha, premultipliedAlpha);
@@ -295689,7 +295658,7 @@ void main() {
               });
             }
             currentRenderState.setupLights();
-            const materials3 = /* @__PURE__ */ new Set();
+            const materials2 = /* @__PURE__ */ new Set();
             scene.traverse(function(object) {
               if (!(object.isMesh || object.isPoints || object.isLine || object.isSprite)) {
                 return;
@@ -295700,29 +295669,29 @@ void main() {
                   for (let i = 0; i < material.length; i++) {
                     const material2 = material[i];
                     prepareMaterial(material2, targetScene, object);
-                    materials3.add(material2);
+                    materials2.add(material2);
                   }
                 } else {
                   prepareMaterial(material, targetScene, object);
-                  materials3.add(material);
+                  materials2.add(material);
                 }
               }
             });
             currentRenderState = renderStateStack.pop();
-            return materials3;
+            return materials2;
           };
           this.compileAsync = function(scene, camera, targetScene = null) {
-            const materials3 = this.compile(scene, camera, targetScene);
+            const materials2 = this.compile(scene, camera, targetScene);
             return new Promise((resolve) => {
               function checkMaterialsReady() {
-                materials3.forEach(function(material) {
+                materials2.forEach(function(material) {
                   const materialProperties = properties.get(material);
                   const program = materialProperties.currentProgram;
                   if (program.isReady()) {
-                    materials3.delete(material);
+                    materials2.delete(material);
                   }
                 });
-                if (materials3.size === 0) {
+                if (materials2.size === 0) {
                   resolve(scene);
                   return;
                 }
@@ -296288,9 +296257,9 @@ void main() {
                 markUniformsLightsNeedsUpdate(m_uniforms, refreshLights);
               }
               if (fog && material.fog === true) {
-                materials2.refreshFogUniforms(m_uniforms, fog);
+                materials.refreshFogUniforms(m_uniforms, fog);
               }
-              materials2.refreshMaterialUniforms(m_uniforms, material, _pixelRatio, _height, currentRenderState.state.transmissionRenderTarget[camera.id]);
+              materials.refreshMaterialUniforms(m_uniforms, material, _pixelRatio, _height, currentRenderState.state.transmissionRenderTarget[camera.id]);
               WebGLUniforms.upload(_gl, getUniformList(materialProperties), m_uniforms, textures);
             }
             if (material.isShaderMaterial && material.uniformsNeedUpdate === true) {
@@ -299940,7 +299909,7 @@ void main() {
             let pointsMaterial = this.cache.get(cacheKey);
             if (!pointsMaterial) {
               pointsMaterial = new PointsMaterial();
-              Material2.prototype.copy.call(pointsMaterial, material);
+              Material3.prototype.copy.call(pointsMaterial, material);
               pointsMaterial.color.copy(material.color);
               pointsMaterial.map = material.map;
               pointsMaterial.sizeAttenuation = false;
@@ -299952,7 +299921,7 @@ void main() {
             let lineMaterial = this.cache.get(cacheKey);
             if (!lineMaterial) {
               lineMaterial = new LineBasicMaterial();
-              Material2.prototype.copy.call(lineMaterial, material);
+              Material3.prototype.copy.call(lineMaterial, material);
               lineMaterial.color.copy(material.color);
               lineMaterial.map = material.map;
               this.cache.add(cacheKey, lineMaterial);
@@ -300145,14 +300114,14 @@ void main() {
           }
           pending.push(parser.loadGeometries(primitives));
           return Promise.all(pending).then(function(results) {
-            const materials2 = results.slice(0, results.length - 1);
+            const materials = results.slice(0, results.length - 1);
             const geometries = results[results.length - 1];
             const meshes = [];
             for (let i = 0, il = geometries.length; i < il; i++) {
               const geometry = geometries[i];
               const primitive = primitives[i];
               let mesh;
-              const material = materials2[i];
+              const material = materials[i];
               if (primitive.mode === WEBGL_CONSTANTS.TRIANGLES || primitive.mode === WEBGL_CONSTANTS.TRIANGLE_STRIP || primitive.mode === WEBGL_CONSTANTS.TRIANGLE_FAN || primitive.mode === void 0) {
                 mesh = meshDef.isSkinnedMesh === true ? new SkinnedMesh(geometry, material) : new Mesh(geometry, material);
                 if (mesh.isSkinnedMesh === true) {
@@ -300490,7 +300459,7 @@ void main() {
             const reduceAssociations = (node) => {
               const reducedAssociations = /* @__PURE__ */ new Map();
               for (const [key, value] of parser.associations) {
-                if (key instanceof Material2 || key instanceof Texture) {
+                if (key instanceof Material3 || key instanceof Texture) {
                   reducedAssociations.set(key, value);
                 }
               }
@@ -302607,7 +302576,7 @@ void main() {
       const arr = new Uint8Array(buffer);
       const doc = rhino2.File3dm.fromByteArray(arr);
       const objects = [];
-      const materials2 = [];
+      const materials = [];
       const layers = [];
       const views = [];
       const namedViews = [];
@@ -302670,7 +302639,7 @@ void main() {
           material.pbr = extractProperties(_material.physicallyBased());
         }
         material.textures = textures;
-        materials2.push(material);
+        materials.push(material);
         _material.delete();
       }
       for (let i = 0; i < doc.layers().count; i++) {
@@ -302756,7 +302725,7 @@ void main() {
         postEffects: extractProperties(doc.settings().renderSettings().postEffects)
       };
       doc.delete();
-      return { objects, materials: materials2, layers, views, namedViews, groups, strings, settings, renderSettings, renderEnvironment };
+      return { objects, materials, layers, views, namedViews, groups, strings, settings, renderSettings, renderEnvironment };
     }
     function extractTextures(m2, tTypes, d) {
       const textures = [];
@@ -303326,7 +303295,7 @@ void main() {
           object.userData["materials"] = null;
           object.name = this.url;
           let objects = data.objects;
-          const materials2 = data.materials;
+          const materials = data.materials;
           for (let i = 0; i < objects.length; i++) {
             const obj = objects[i];
             const attributes = obj.attributes;
@@ -303353,7 +303322,7 @@ void main() {
                 }
                 let material = null;
                 if (matId >= 0) {
-                  const rMaterial = materials2[matId];
+                  const rMaterial = materials[matId];
                   material = this._createMaterial(rMaterial, data.renderEnvironment);
                 }
                 const _object = this._createObject(obj, material);
@@ -303658,7 +303627,11 @@ void main() {
       shaderCode,
       [
         {
-          data: trianglesToFloatArray(triangles),
+          data: new Float32Array(triangles.flatMap((tri) => [
+            ...tri.p1,
+            ...tri.p2.map((p, i) => p - tri.p1[i]),
+            ...tri.p3.map((p, i) => p - tri.p1[i])
+          ])),
           readonly: true,
           output: false
         },
@@ -303698,11 +303671,9 @@ void main() {
       "use strict";
       init_webgpu();
       init_constants();
-      init_floatarrays();
       shaderCode = /* wgsl */
       `
   struct Triangle {
-    material: f32,
     x: f32, y: f32, z: f32,
     u1: f32, u2: f32, u3: f32,
     v1: f32, v2: f32, v3: f32,
@@ -304269,6 +304240,38 @@ void main() {
         sourcePosition: [0, 0, 0],
         receiverPosition: [3, 0, 0],
         geometry: new RoundGeometry(),
+        materials: [
+          {
+            name: "carpet",
+            a125: 0.15,
+            a250: 0.25,
+            a500: 0.5,
+            a1000: 0.6,
+            a2000: 0.7,
+            a4000: 0.7,
+            scatter: 0.2
+          },
+          {
+            name: "concrete",
+            a125: 0.12,
+            a250: 0.09,
+            a500: 0.07,
+            a1000: 0.05,
+            a2000: 0.05,
+            a4000: 0.04,
+            scatter: 0.1
+          },
+          {
+            name: "plaster",
+            a125: 0.14,
+            a250: 0.1,
+            a500: 0.06,
+            a1000: 0.05,
+            a2000: 0.04,
+            a4000: 0.04,
+            scatter: 0.1
+          }
+        ],
         audioToPlay: null,
         ctx: null,
         running: false,
@@ -304293,6 +304296,7 @@ void main() {
               sourcePosition: state.sourcePosition,
               receiverPosition: state.receiverPosition,
               geometry: state.geometry.triangles(),
+              materials: state.materials,
               rayCount: state.rayCount,
               audioDuration: state.audioDuration
             },
@@ -304380,7 +304384,7 @@ void main() {
         },
         setSelectedMaterial: function(e) {
           const newMaterial = e.target.value;
-          if (materials.map((m3) => m3.name).includes(newMaterial)) {
+          if (state.materials.map((m3) => m3.name).includes(newMaterial)) {
             state.geometry.setTriangleMaterial(
               state.geometry.selectedIndex,
               newMaterial
@@ -304388,6 +304392,26 @@ void main() {
           } else {
             console.log("Unknown material", newMaterial);
           }
+        },
+        setMaterialBand: function(e, material, band) {
+          const el = e.target;
+          const value = parseFloat(el.value);
+          if (value !== void 0 && 0 <= value && value <= 1) {
+            material[band] = value;
+          }
+        },
+        createMaterial: function() {
+          state.materials.push({
+            name: "material" + state.materials.length,
+            a125: 0,
+            a250: 0,
+            a500: 0,
+            a1000: 0,
+            a2000: 0,
+            a4000: 0,
+            // TODO: scatter
+            scatter: 0.2
+          });
         }
       };
       function ScatterPlot(id, layout, getData) {
@@ -304722,10 +304746,88 @@ void main() {
                   })
                 ])
               ]),
+              (0, import_mithril2.default)(
+                "section",
+                { style: "border:1px solid black;" },
+                [
+                  ...state.materials.map(
+                    (material) => (0, import_mithril2.default)("section", [
+                      (0, import_mithril2.default)("p", material.name[0].toLocaleUpperCase(), material.name.slice(1)),
+                      (0, import_mithril2.default)("label", [
+                        "125Hz:",
+                        (0, import_mithril2.default)("input", {
+                          type: "number",
+                          min: 0,
+                          max: 1,
+                          step: 0.01,
+                          value: material.a125,
+                          onchange: (e) => state.setMaterialBand(e, material, "a125")
+                        })
+                      ]),
+                      (0, import_mithril2.default)("label", [
+                        "250Hz:",
+                        (0, import_mithril2.default)("input", {
+                          type: "number",
+                          min: 0,
+                          max: 1,
+                          step: 0.01,
+                          value: material.a250,
+                          onchange: (e) => state.setMaterialBand(e, material, "a250")
+                        })
+                      ]),
+                      (0, import_mithril2.default)("label", [
+                        "500Hz:",
+                        (0, import_mithril2.default)("input", {
+                          type: "number",
+                          min: 0,
+                          max: 1,
+                          step: 0.01,
+                          value: material.a500,
+                          onchange: (e) => state.setMaterialBand(e, material, "a500")
+                        })
+                      ]),
+                      (0, import_mithril2.default)("label", [
+                        "1kHz:",
+                        (0, import_mithril2.default)("input", {
+                          type: "number",
+                          min: 0,
+                          max: 1,
+                          step: 0.01,
+                          value: material.a1000,
+                          onchange: (e) => state.setMaterialBand(e, material, "a1000")
+                        })
+                      ]),
+                      (0, import_mithril2.default)("label", [
+                        "2kHz:",
+                        (0, import_mithril2.default)("input", {
+                          type: "number",
+                          min: 0,
+                          max: 1,
+                          step: 0.01,
+                          value: material.a2000,
+                          onchange: (e) => state.setMaterialBand(e, material, "a2000")
+                        })
+                      ]),
+                      (0, import_mithril2.default)("label", [
+                        "4kHz:",
+                        (0, import_mithril2.default)("input", {
+                          type: "number",
+                          min: 0,
+                          max: 1,
+                          step: 0.01,
+                          value: material.a4000,
+                          onchange: (e) => state.setMaterialBand(e, material, "a4000")
+                        })
+                      ])
+                    ])
+                  ),
+                  (0, import_mithril2.default)("button", { onclick: state.createMaterial }, "Create material")
+                ]
+              ),
               state.geometry.selectedTriangle() ? (0, import_mithril2.default)("section", { style: "border:1px solid black;" }, [
                 (0, import_mithril2.default)("label.block", [
                   "Material:",
-                  ...materials.map(
+                  ...state.materials.map(
                     (material) => (0, import_mithril2.default)("label.v", [
                       (0, import_mithril2.default)("input", {
                         type: "radio",

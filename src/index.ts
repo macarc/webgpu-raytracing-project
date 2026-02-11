@@ -1,5 +1,5 @@
 import { rayTrace } from "./ray_tracing";
-import { materials, SAMPLE_RATE, Triangle, Vec3 } from "./constants";
+import { Material, SAMPLE_RATE, Triangle, Vec3 } from "./constants";
 import m from "mithril";
 import Plotly, { Data } from "plotly.js-dist";
 import * as THREE from "three";
@@ -20,6 +20,38 @@ let state = {
   sourcePosition: [0, 0, 0] as Vec3,
   receiverPosition: [3.0, 0.0, 0.0] as Vec3,
   geometry: new RoundGeometry() as Geometry,
+  materials: [
+    {
+      name: "carpet",
+      a125: 0.15,
+      a250: 0.25,
+      a500: 0.5,
+      a1000: 0.6,
+      a2000: 0.7,
+      a4000: 0.7,
+      scatter: 0.2,
+    },
+    {
+      name: "concrete",
+      a125: 0.12,
+      a250: 0.09,
+      a500: 0.07,
+      a1000: 0.05,
+      a2000: 0.05,
+      a4000: 0.04,
+      scatter: 0.1,
+    },
+    {
+      name: "plaster",
+      a125: 0.14,
+      a250: 0.1,
+      a500: 0.06,
+      a1000: 0.05,
+      a2000: 0.04,
+      a4000: 0.04,
+      scatter: 0.1,
+    },
+  ] as Material[],
 
   audioToPlay: null as Float32Array | null,
   ctx: null as AudioContext | null,
@@ -50,6 +82,7 @@ let state = {
         sourcePosition: state.sourcePosition,
         receiverPosition: state.receiverPosition,
         geometry: state.geometry.triangles(),
+        materials: state.materials,
         rayCount: state.rayCount,
         audioDuration: state.audioDuration,
       },
@@ -194,7 +227,7 @@ let state = {
   setSelectedMaterial: function (e: InputEvent) {
     const newMaterial = (e.target as HTMLInputElement).value;
 
-    if (materials.map((m) => m.name).includes(newMaterial)) {
+    if (state.materials.map((m) => m.name).includes(newMaterial)) {
       state.geometry.setTriangleMaterial(
         state.geometry.selectedIndex,
         newMaterial,
@@ -203,6 +236,29 @@ let state = {
       console.log("Unknown material", newMaterial);
     }
   },
+
+  setMaterialBand: function (e: InputEvent, material: Material, band: 'a125' | 'a250' | 'a500' | 'a1000' | 'a2000' | 'a4000') {
+    const el = e.target as HTMLInputElement;
+    const value = parseFloat(el.value);
+
+    if (value !== undefined && 0 <= value && value <= 1) {
+      material[band] = value;
+    }
+  },
+
+  createMaterial: function () {
+    state.materials.push({
+      name: "material" + state.materials.length,
+      a125: 0,
+      a250: 0,
+      a500: 0,
+      a1000: 0,
+      a2000: 0,
+      a4000: 0,
+      // TODO: scatter
+      scatter: 0.2,
+    })
+  }
 };
 
 function ScatterPlot(
@@ -612,11 +668,88 @@ let AppView = {
             }),
           ]),
         ]),
+        m(
+          "section",
+          { style: "border:1px solid black;" },
+          [ ...state.materials.map((material) =>
+            m("section", [
+              m("p", material.name[0].toLocaleUpperCase(), material.name.slice(1)),
+              m("label", [
+                "125Hz:",
+                m("input", {
+                  type: "number",
+                  min: 0,
+                  max: 1,
+                  step: 0.01,
+                  value: material.a125,
+                  onchange: (e: InputEvent) => state.setMaterialBand(e, material, 'a125')
+                }),
+              ]),
+              m("label", [
+                "250Hz:",
+                m("input", {
+                  type: "number",
+                  min: 0,
+                  max: 1,
+                  step: 0.01,
+                  value: material.a250,
+                  onchange: (e: InputEvent) => state.setMaterialBand(e, material, 'a250')
+                }),
+              ]),
+              m("label", [
+                "500Hz:",
+                m("input", {
+                  type: "number",
+                  min: 0,
+                  max: 1,
+                  step: 0.01,
+                  value: material.a500,
+                  onchange: (e: InputEvent) => state.setMaterialBand(e, material, 'a500')
+                }),
+              ]),
+              m("label", [
+                "1kHz:",
+                m("input", {
+                  type: "number",
+                  min: 0,
+                  max: 1,
+                  step: 0.01,
+                  value: material.a1000,
+                  onchange: (e: InputEvent) => state.setMaterialBand(e, material, 'a1000')
+                }),
+              ]),
+              m("label", [
+                "2kHz:",
+                m("input", {
+                  type: "number",
+                  min: 0,
+                  max: 1,
+                  step: 0.01,
+                  value: material.a2000,
+                  onchange: (e: InputEvent) => state.setMaterialBand(e, material, 'a2000')
+                }),
+              ]),
+              m("label", [
+                "4kHz:",
+                m("input", {
+                  type: "number",
+                  min: 0,
+                  max: 1,
+                  step: 0.01,
+                  value: material.a4000,
+                  onchange: (e: InputEvent) => state.setMaterialBand(e, material, 'a4000')
+                }),
+              ]),
+            ]),
+          ),
+            m("button", { onclick: state.createMaterial }, "Create material")
+          ]
+        ),
         state.geometry.selectedTriangle()
           ? m("section", { style: "border:1px solid black;" }, [
               m("label.block", [
                 "Material:",
-                ...materials.map((material) =>
+                ...state.materials.map((material) =>
                   m("label.v", [
                     m("input", {
                       type: "radio",

@@ -2,10 +2,11 @@ import { materialNameToIndex, Triangle, Material } from "./constants";
 
 export function trianglesToFloatArray(
   triangles: Triangle[],
+  materials: Material[],
 ): Float32Array<ArrayBuffer> {
   return new Float32Array(
     triangles.flatMap((triangle) => [
-      materialNameToIndex(triangle.material),
+      materialNameToIndex(materials, triangle.material),
       ...triangle.p1,
       triangle.p2[0] - triangle.p1[0],
       triangle.p2[1] - triangle.p1[1],
