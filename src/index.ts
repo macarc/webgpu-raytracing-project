@@ -1,5 +1,5 @@
 import { rayTrace } from "./ray_tracing";
-import { SAMPLE_RATE, Triangle, Vec3 } from "./constants";
+import { materials, SAMPLE_RATE, Triangle, Vec3 } from "./constants";
 import m from "mithril";
 import Plotly, { Data } from "plotly.js-dist";
 import * as THREE from "three";
@@ -11,6 +11,7 @@ import {
   Geometry,
   LoadedGeometry,
   NoGeometry,
+  RoundGeometry,
 } from "./geometry";
 
 let state = {
@@ -18,7 +19,7 @@ let state = {
   audioDuration: 10,
   sourcePosition: [0, 0, 0] as Vec3,
   receiverPosition: [3.0, 0.0, 0.0] as Vec3,
-  geometry: new NoGeometry() as Geometry,
+  geometry: new RoundGeometry() as Geometry,
 
   audioToPlay: null as Float32Array | null,
   ctx: null as AudioContext | null,
@@ -37,7 +38,8 @@ let state = {
   },
 
   setTestGeometry: async function () {
-    state.geometry = new LoadedGeometry("res/auditorium1_scale.glb");
+    // state.geometry = new LoadedGeometry("res/auditorium1_scale.glb");
+    state.geometry = new LoadedGeometry("res/Modern Bathroom.3dm");
     await state.geometry.initialise();
   },
 
@@ -188,6 +190,19 @@ let state = {
     gain.connect(state.ctx.destination);
     state.source.start(0);
   },
+
+  setSelectedMaterial: function (e: InputEvent) {
+    const newMaterial = (e.target as HTMLInputElement).value;
+
+    if (materials.map((m) => m.name).includes(newMaterial)) {
+      state.geometry.setTriangleMaterial(
+        state.geometry.selectedIndex,
+        newMaterial,
+      );
+    } else {
+      console.log("Unknown material", newMaterial);
+    }
+  },
 };
 
 function ScatterPlot(
@@ -282,8 +297,10 @@ let ThreeView = {
   scene: null as THREE.Scene | null,
   mesh: null as THREE.Mesh | null,
   wireframeMesh: null as THREE.Mesh | null,
+  selectedMesh: null as THREE.Mesh | null,
   source: null as THREE.Mesh | null,
   receiver: null as THREE.Mesh | null,
+  camera: null as THREE.Camera | null,
 
   // Since updating the mesh takes a little time (due to re-orienting the triangles),
   // this flag is set when updating to avoid another update interfering (e.g. if the
@@ -293,6 +310,7 @@ let ThreeView = {
   // Store the last-used geometry, so that the mesh is only
   // redrawn if it changes (i.e. state.geometry doesn't match).
   geometryData: [] as Triangle[],
+  selectedTriangle: -1,
 
   updateMesh: async function () {
     // TODO BUG: this will mean that some updates are skipped, which could include
@@ -308,9 +326,15 @@ let ThreeView = {
     }
 
     // If the geometry has changed, update it.
-    if (ThreeView.geometryData !== state.geometry.triangles()) {
-      // Create geometry.
-      const geometry = new THREE.BufferGeometry();
+    if (
+      ThreeView.geometryData !== state.geometry.triangles() ||
+      ThreeView.selectedTriangle !== state.geometry.selectedIndex
+    ) {
+      const unselectedTriangles = state.geometry.triangles().slice();
+      unselectedTriangles.splice(state.geometry.selectedIndex, 1);
+
+      const selectedTriangle = state.geometry.selectedTriangle();
+
       const vertices = new Float32Array(
         state.geometry
           .triangles()
@@ -320,6 +344,9 @@ let ThreeView = {
             ...triangle.p3,
           ]),
       );
+
+      // Create geometry.
+      const geometry = new THREE.BufferGeometry();
       geometry.setAttribute("position", new THREE.BufferAttribute(vertices, 3));
 
       // Create materials.
@@ -331,9 +358,32 @@ let ThreeView = {
         wireframe: true,
       });
 
+      const selectedGeometry = new THREE.BufferGeometry();
+      if (selectedTriangle) {
+        selectedGeometry.setAttribute(
+          "position",
+          new THREE.BufferAttribute(
+            new Float32Array([
+              ...selectedTriangle.p1,
+              ...selectedTriangle.p2,
+              ...selectedTriangle.p3,
+              // Backface.
+              ...selectedTriangle.p2,
+              ...selectedTriangle.p1,
+              ...selectedTriangle.p3,
+            ]),
+            3,
+          ),
+        );
+      }
+      const selectedMaterial = new THREE.MeshBasicMaterial({ color: "green" });
+
       // Remove old meshes.
       if (ThreeView.mesh) {
         ThreeView.scene.remove(ThreeView.mesh);
+      }
+      if (ThreeView.selectedMesh) {
+        ThreeView.scene.remove(ThreeView.selectedMesh);
       }
       if (ThreeView.wireframeMesh) {
         ThreeView.scene.remove(ThreeView.wireframeMesh);
@@ -343,10 +393,19 @@ let ThreeView = {
       ThreeView.mesh = new THREE.Mesh(geometry, material);
       ThreeView.wireframeMesh = new THREE.Mesh(geometry, wireframeMaterial);
       ThreeView.geometryData = state.geometry.triangles();
+      ThreeView.selectedTriangle = state.geometry.selectedIndex;
+
+      ThreeView.selectedMesh = new THREE.Mesh(
+        selectedGeometry,
+        selectedMaterial,
+      );
 
       // Add the new meshes to the scene.
       if (ThreeView.mesh) {
         ThreeView.scene.add(ThreeView.mesh);
+      }
+      if (ThreeView.selectedMesh) {
+        ThreeView.scene.add(ThreeView.selectedMesh);
       }
       if (ThreeView.wireframeMesh) {
         ThreeView.scene.add(ThreeView.wireframeMesh);
@@ -370,14 +429,14 @@ let ThreeView = {
     const scene = new THREE.Scene();
     ThreeView.scene = scene;
 
-    const camera = new THREE.PerspectiveCamera(
+    ThreeView.camera = new THREE.PerspectiveCamera(
       75,
       vnode.dom.clientWidth / vnode.dom.clientHeight,
       0.1,
       1000,
     );
     // Set z-direction to be up.
-    camera.up.set(0, 0, 1);
+    ThreeView.camera.up.set(0, 0, 1);
 
     const renderer = new THREE.WebGLRenderer({
       canvas: vnode.dom,
@@ -405,26 +464,76 @@ let ThreeView = {
 
     await ThreeView.updateMesh();
 
-    camera.position.x = 20;
-    camera.position.y = -25;
-    camera.position.z = 25;
+    ThreeView.camera.position.x = 20;
+    ThreeView.camera.position.y = -25;
+    ThreeView.camera.position.z = 25;
 
-    const orbitControls = new OrbitControls(camera, renderer.domElement);
+    const orbitControls = new OrbitControls(
+      ThreeView.camera,
+      renderer.domElement,
+    );
 
     renderer.setSize(vnode.dom.clientWidth, vnode.dom.clientHeight);
     renderer.setClearColor("white");
 
     const animate = () => {
       orbitControls.update();
-      renderer.render(scene, camera);
+
+      if (ThreeView.camera) {
+        renderer.render(scene, ThreeView.camera);
+      }
     };
     renderer.setAnimationLoop(animate);
   },
   onupdate: async function () {
     await ThreeView.updateMesh();
   },
+  onclick: function (e: MouseEvent) {
+    if (ThreeView.camera) {
+      const canvas = e.target as HTMLCanvasElement;
+      const x = (2 * e.clientX) / canvas.clientWidth - 1;
+      const y = 1 - (2 * e.clientY) / canvas.clientHeight;
+
+      const caster = new THREE.Raycaster();
+      caster.setFromCamera(new THREE.Vector2(x, y), ThreeView.camera);
+
+      const triangles = state.geometry.triangles();
+
+      const rootObject = new THREE.Group();
+
+      for (let i = 0; i < triangles.length; ++i) {
+        const tri = triangles[i];
+
+        const vertices1 = new Float32Array([...tri.p1, ...tri.p2, ...tri.p3]);
+        const vertices2 = new Float32Array([...tri.p2, ...tri.p1, ...tri.p3]);
+        const geom1 = new THREE.BufferGeometry();
+        geom1.setAttribute("position", new THREE.BufferAttribute(vertices1, 3));
+        const geom2 = new THREE.BufferGeometry();
+        geom2.setAttribute("position", new THREE.BufferAttribute(vertices2, 3));
+
+        const mesh1 = new THREE.Mesh(geom1);
+        mesh1.userData["triangleIndex"] = i;
+        const mesh2 = new THREE.Mesh(geom2);
+        mesh2.userData["triangleIndex"] = i;
+        rootObject.add(mesh1);
+        rootObject.add(mesh2);
+      }
+
+      const intersections = caster.intersectObjects([rootObject], true);
+      const indices = intersections.map(
+        (intersection) =>
+          intersection.object.userData["triangleIndex"] as number,
+      );
+
+      state.geometry.selectedIndex =
+        indices[
+          (indices.indexOf(state.geometry.selectedIndex) + 1) % indices.length
+        ];
+    }
+  },
   view: function () {
     return m("canvas.three", {
+      onclick: this.onclick,
       style: "position: fixed; top: 0; left: 0; width: 50vw; height: 100vh;",
     });
   },
@@ -503,6 +612,27 @@ let AppView = {
             }),
           ]),
         ]),
+        state.geometry.selectedTriangle()
+          ? m("section", { style: "border:1px solid black;" }, [
+              m("label.block", [
+                "Material:",
+                ...materials.map((material) =>
+                  m("label.v", [
+                    m("input", {
+                      type: "radio",
+                      name: "select-material",
+                      value: material.name,
+                      checked:
+                        state.geometry.selectedTriangle()?.material ===
+                        material.name,
+                      onchange: (e: InputEvent) => state.setSelectedMaterial(e),
+                    }),
+                    material.name,
+                  ]),
+                ),
+              ]),
+            ])
+          : null,
         m("section", { style: "border:1px solid black;" }, [
           m("label.block", [
             "Ray count:",

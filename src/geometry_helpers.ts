@@ -1,6 +1,7 @@
-import { Mesh, Object3D } from "three";
-import { Triangle } from "./constants";
+import { BufferGeometry, Mesh, Object3D } from "three";
+import { Triangle, Vec3 } from "./constants";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { Rhino3dmLoader } from "three/examples/jsm/loaders/3DMLoader.js";
 import { orientTriangles } from "./orient_surfaces";
 
 export type BoxRoomConfig = {
@@ -16,6 +17,59 @@ function isMesh(obj: Object3D): obj is Mesh {
   return (obj as Mesh).isMesh || false;
 }
 
+export type Format3D = "3dm" | "gltf";
+
+export function loadObjectFromData(
+  data: ArrayBuffer,
+  filetype: Format3D,
+): Promise<Object3D> {
+  if (filetype === "3dm") {
+    const rhino = new Rhino3dmLoader();
+    rhino.setLibraryPath("public/");
+    return new Promise((res, rej) => rhino.parse(data, res, rej));
+  } else {
+    const loader = new GLTFLoader();
+    return new Promise((res, rej) =>
+      loader.parse(data, "[loaded model]", (gltf) => res(gltf.scene), rej),
+    );
+  }
+}
+
+export function bufferGeometryToTriangles(
+  geometry: BufferGeometry,
+): Triangle[] {
+  const triangles: Triangle[] = [];
+
+  const indices = geometry.getIndex();
+  const vertexCoordinates = geometry.getAttribute("position");
+  if (indices && vertexCoordinates) {
+    const idx = indices.array;
+    const v = vertexCoordinates.array;
+
+    for (let i = 0; i < idx.length; i += 3) {
+      triangles.push({
+        material: "plaster",
+        p1: [v[idx[i] * 3], v[idx[i] * 3 + 1], v[idx[i] * 3 + 2]],
+        p2: [v[idx[i + 1] * 3], v[idx[i + 1] * 3 + 1], v[idx[i + 1] * 3 + 2]],
+        p3: [v[idx[i + 2] * 3], v[idx[i + 2] * 3 + 1], v[idx[i + 2] * 3 + 2]],
+      });
+    }
+  } else if (vertexCoordinates) {
+    const v = vertexCoordinates.array;
+
+    for (let i = 0; i < v.length; i += 9) {
+      triangles.push({
+        material: "plaster",
+        p1: [v[i], v[i + 1], v[i + 2]],
+        p2: [v[i + 3], v[i + 4], v[i + 5]],
+        p3: [v[i + 6], v[i + 7], v[i + 8]],
+      });
+    }
+  }
+
+  return triangles;
+}
+
 /**
  * Load a GLTF file.
  * Loads the triangles of all mesh objects from the file and
@@ -24,51 +78,19 @@ function isMesh(obj: Object3D): obj is Mesh {
  * @returns oriented triangles loaded from the GLTF file.
  */
 export async function loadGeometry(
-  data: string | ArrayBuffer,
+  data: ArrayBuffer,
+  filetype: Format3D,
 ): Promise<Triangle[]> {
-  const loader = new GLTFLoader();
-  const model = await loader.parseAsync(data, "loaded model");
-
+  const object = await loadObjectFromData(data, filetype);
   const triangles: Triangle[] = [];
 
-  model.scene.traverse((obj) => {
+  object.traverse((obj) => {
     if (isMesh(obj)) {
-      const indices = obj.geometry.index;
-      const vertexCoordinates = obj.geometry.getAttribute("position");
-      if (indices && vertexCoordinates) {
-        const idx = indices.array;
-        const v = vertexCoordinates.array;
-
-        for (let i = 0; i < idx.length; i += 3) {
-          triangles.push({
-            material: "plaster",
-            p1: [v[idx[i] * 3], v[idx[i] * 3 + 1], v[idx[i] * 3 + 2]],
-            p2: [
-              v[idx[i + 1] * 3],
-              v[idx[i + 1] * 3 + 1],
-              v[idx[i + 1] * 3 + 2],
-            ],
-            p3: [
-              v[idx[i + 2] * 3],
-              v[idx[i + 2] * 3 + 1],
-              v[idx[i + 2] * 3 + 2],
-            ],
-          });
-        }
-      } else if (vertexCoordinates) {
-        const v = vertexCoordinates.array;
-
-        for (let i = 0; i < v.length; i += 9) {
-          triangles.push({
-            material: "plaster",
-            p1: [v[i], v[i + 1], v[i + 2]],
-            p2: [v[i + 3], v[i + 4], v[i + 5]],
-            p3: [v[i + 6], v[i + 7], v[i + 8]],
-          });
-        }
-      }
+      triangles.push(...bufferGeometryToTriangles(obj.geometry));
     }
   });
+
+  console.log(triangles);
 
   await orientTriangles(triangles);
 
@@ -214,7 +236,7 @@ export function checkForHoles(triangles: Triangle[]): string | false {
 
   // Check if any edges occur less than twice.
   for (const [edge, count] of Object.entries(edgeCounts)) {
-    if (count == 1) {
+    if (count === 1) {
       msg += edge + "\n";
     }
   }
@@ -224,4 +246,36 @@ export function checkForHoles(triangles: Triangle[]): string | false {
   }
 
   return false;
+}
+
+/**
+ * Rotate a vector around one of the basis vector axes.
+ * @param vec vector to rotate.
+ * @param axisIndex index of axis.
+ * @returns rotated vector.
+ */
+function swap2(vec: Vec3, axisIndex: 0 | 1 | 2): Vec3 {
+  switch (axisIndex) {
+    case 0:
+      return [vec[0], -vec[2], vec[1]];
+    case 1:
+      return [-vec[2], vec[1], vec[0]];
+    case 2:
+      return [-vec[1], vec[0], vec[2]];
+  }
+}
+
+/**
+ * Rotate all triangles about an axis.
+ * @param triangles triangles to rotate.
+ * @param axis axis about which to rotate.
+ */
+export function rotate(triangles: Triangle[], axis: "x" | "y" | "z") {
+  const axisIndex = axis === "x" ? 0 : axis === "y" ? 1 : 2;
+
+  for (const triangle of triangles) {
+    triangle.p1 = swap2(triangle.p1, axisIndex);
+    triangle.p2 = swap2(triangle.p2, axisIndex);
+    triangle.p3 = swap2(triangle.p3, axisIndex);
+  }
 }
