@@ -90,7 +90,7 @@ export async function loadGeometry(
     }
   });
 
-  console.log(triangles);
+  console.log("Loaded", triangles);
 
   await orientTriangles(triangles);
 
@@ -196,7 +196,7 @@ export async function boxRoom(config: BoxRoomConfig): Promise<Triangle[]> {
  * Check whether a set of triangles forms a closed shape or has a hole.
  * This works by checking to ensure that all edges are shared by at least two
  * triangles in the list. This won't catch every case with a hole, but will
- * catch nearly all practical cases.
+ * catch many practical cases.
  * O(n).
  * @param triangles geometry to check for holes in.
  * @returns a string containing the unconnected edges, or false if there are no holes.

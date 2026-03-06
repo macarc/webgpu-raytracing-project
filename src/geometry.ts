@@ -9,7 +9,7 @@ import {
   loadGeometry,
   rotate,
 } from "./geometry_helpers";
-import { BufferGeometry, SphereGeometry } from "three";
+import { SphereGeometry } from "three";
 
 export abstract class Geometry {
   abstract initialise(): Promise<void>;
@@ -161,7 +161,7 @@ export class LoadedGeometry extends Geometry {
 
   view(): m.Children {
     return [
-      m("label", [
+      m("label.v", [
         "Scale:",
         m("input.v", {
           type: "number",

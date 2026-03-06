@@ -19,6 +19,7 @@ let state = {
   audioDuration: 10,
   sourcePosition: [0, 0, 0] as Vec3,
   receiverPosition: [3.0, 0.0, 0.0] as Vec3,
+  receiverRadius: 0.2 as number | undefined,
   geometry: new NoGeometry() as Geometry,
   materials: [
     {
@@ -86,6 +87,7 @@ let state = {
       {
         sourcePosition: state.sourcePosition,
         receiverPosition: state.receiverPosition,
+        receiverRadius: state.receiverRadius || 0,
         geometry: state.geometry.triangles(),
         materials: state.materials,
         rayCount: state.rayCount,
@@ -485,6 +487,8 @@ let ThreeView = {
       ThreeView.source.visible = state.geometry.triangles().length > 0;
     }
     if (ThreeView.receiver) {
+      const r = state.receiverRadius || 0;
+      ThreeView.receiver.scale.set(r, r, r);
       ThreeView.receiver.position.set(...state.receiverPosition);
       ThreeView.receiver.visible = state.geometry.triangles().length > 0;
     }
@@ -626,9 +630,10 @@ let AppView = {
           m("button", { onclick: state.setRoundGeometry }, "Load sphere"),
           m("button", { onclick: state.setLoadGeometry }, "Load geometry"),
           m("button", { onclick: state.setTestGeometry }, "Load test geometry"),
+
+          state.geometry.view(),
         ]),
         m("section", { style: "border:1px solid black;" }, [
-          state.geometry.view(),
           m("label.v", [
             "Source position:",
             m("input.v", {
@@ -689,6 +694,14 @@ let AppView = {
               },
             }),
           ]),
+          m("label", [
+            "Receiver radius:",
+            m("input", { type: "number", min: 0, step: 0.05, value: state.receiverRadius, oninput: function (e: InputEvent) {
+              const r = parseFloat((e.target as HTMLInputElement).value);
+              state.receiverRadius = r;
+            }
+            })
+          ])
         ]),
         m("section", { style: "border:1px solid black;" }, [
           ...state.materials.map((material) =>

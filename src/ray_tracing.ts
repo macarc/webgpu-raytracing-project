@@ -16,14 +16,13 @@ import { combineFilteredAudio } from "./dsp";
 const STANDARD_MAX_STORAGE_BUFFER_SIZE = 134217728;
 const STANDARD_MAX_UNIFORM_BUFFER_SIZE = 65536;
 
-const RECEIVER_RADIUS = 1.0;
-
 // TODO: frequency dependent.
 const AIR_ABSORPTION_COEFF = 0.0013;
 
 export interface Settings {
   sourcePosition: Vec3;
   receiverPosition: Vec3;
+  receiverRadius: number;
   rayCount: number;
   audioDuration: number;
   geometry: Triangle[];
@@ -62,6 +61,7 @@ function normalize(v: Vec3): Vec3 {
 
 function specularRayIntersectionShaderCode(
   receiverPosition: Vec3,
+  receiverRadius: number,
   materials: Material[],
   bounceCount: number,
 ) {
@@ -140,6 +140,10 @@ function specularRayIntersectionShaderCode(
 
   @group(0) @binding(7)
   var<storage, read_write> band_4000: array<Hit>;
+
+  @group(0) @binding(8)
+  var<uniform> materials: array<Material, ${materials.length}>;
+
 
   @compute @workgroup_size(${WORKGROUP_SIZE})
   fn main(
@@ -278,22 +282,23 @@ function specularRayIntersectionShaderCode(
       // This should always be true - it should always intersect a triangle.
       if (closestTriangleIndex < triangleCount) {
         let triangle = triangleBuffer[closestTriangleIndex];
-        let material = materials[triangle.material];
+        let material = materials[u32(triangle.material)];
 
         // If the ray to the receiver did not hit a triangle before hitting the receiver,
         // add the contribution to the output.
         if (receiverRayTriangleDistance >= distanceToReceiver) {
           let cosNormalAngleToReceiver = dot(directionToReceiver, -lastsurfacenormal);
 
-          let rayVecToClosestReceiverPoint = dot(vecToReceiver, raydirection);
-          let distanceFromRayToReceiver = length(vecToReceiver - rayVecToClosestReceiverPoint);
-          let additionDueToRay = f32(distanceFromRayToReceiver <= ${RECEIVER_RADIUS});
-
           // Only count if the ray is not intersecting the last surface.
-          if (cosNormalAngleToReceiver > 0) {
+          if (cosNormalAngleToReceiver >= 0) {
             let rayTriangleDistance = raydistancetravelled + distanceToReceiver;
+            let rayVecToClosestReceiverPoint = dot(vecToReceiver, raydirection) * raydirection;
+            let distanceFromRayToReceiver = length(vecToReceiver - rayVecToClosestReceiverPoint);
+            let additionDueToRay = f32(distanceFromRayToReceiver <= ${receiverRadius});
 
-            let totalIntensity = cosNormalAngleToReceiver;//  (1-material.scatter) * additionDueToRay + material.scatter * cosNormalAngleToReceiver;
+            // let totalIntensity = additionDueToRay + cosNormalAngleToReceiver;
+            let totalIntensity = (1 - material.scatter) * additionDueToRay + material.scatter * cosNormalAngleToReceiver;
+            // let totalIntensity = additionDueToRay;
 
             // TODO: this is a waste of memory.
             band_125[index].time = rayTriangleDistance;
@@ -317,7 +322,7 @@ function specularRayIntersectionShaderCode(
 
         let triangleNormal = normalize(cross(edge1, edge2));
         let reflected = normalize(reflect(raydirection, triangleNormal));
-        let newposition = rayposition + raydirection * distance;
+        let newposition = rayposition + raydirection * rayTriangleDistance;
 
         rayposition = newposition;
         raydirection = reflected;
@@ -575,7 +580,8 @@ export async function rayTrace(
     maxStorageBufferSize / (2 * FLOAT32_SIZE * settings.rayCount),
   );
 
-  const maxPasses = 100;
+  // TODO: expose this as a setting.
+  const maxPasses = 5;
 
   const outputSize = 2 * bouncesPerPass * settings.rayCount;
 
@@ -611,6 +617,7 @@ export async function rayTrace(
     ],
     specularRayIntersectionShaderCode(
       settings.receiverPosition,
+      settings.receiverRadius,
       settings.materials,
       bouncesPerPass,
     ),
