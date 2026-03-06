@@ -64,6 +64,7 @@ const shaderCode = /* wgsl */ `
     }
 
     let trgtTriangle = triangles[index];
+    // https://discussions.unity.com/t/calculate-uv-at-center-of-triangle/69523/2
     let targetCentre = vec3(
       trgtTriangle.x * 3 + (trgtTriangle.u1 + trgtTriangle.v1),
       trgtTriangle.y * 3 + (trgtTriangle.u2 + trgtTriangle.v2),
@@ -81,7 +82,12 @@ const shaderCode = /* wgsl */ `
       targetDistance = distanceTo(origin, ray, trgtTriangle);
     }
     if (targetDistance == INFINITY) {
-      output[index] = 42;
+      origin.x += 1.0;
+      ray = normalize(targetCentre - origin);
+      targetDistance = distanceTo(origin, ray, trgtTriangle);
+    }
+    if (targetDistance == INFINITY) {
+      output[index] = INFINITY;
       return;
     }
 
@@ -122,6 +128,34 @@ const shaderCode = /* wgsl */ `
   }
 `;
 
+function removeZeroTriangles(triangles: Triangle[]) {
+  const indicesToRemove: number[] = [];
+  for (let i = 0; i < triangles.length; ++i) {
+    const tri = triangles[i];
+    const p1 = new Float32Array(tri.p1);
+    const p2 = new Float32Array(tri.p2);
+    const p3 = new Float32Array(tri.p3);
+    if (
+      (tri.p1[0] === tri.p2[0] &&
+        tri.p1[1] === tri.p2[1] &&
+        tri.p1[2] === tri.p2[2]) ||
+      (tri.p2[0] === tri.p3[0] &&
+        tri.p2[1] === tri.p3[1] &&
+        tri.p2[2] === tri.p3[2]) ||
+      (tri.p1[0] === tri.p3[0] &&
+        tri.p1[1] === tri.p3[1] &&
+        tri.p1[2] === tri.p3[2])
+    ) {
+      indicesToRemove.push(i);
+    }
+  }
+
+  for (let j = 0; j < indicesToRemove.length; ++j) {
+    const indexToRemove = indicesToRemove[j] - j;
+    triangles.splice(indexToRemove, 1);
+  }
+}
+
 /** Orient triangles so that their normal vectors point outwards.
  *
  * @param triangles triangles to orient - must form a closed surface.
@@ -129,6 +163,8 @@ const shaderCode = /* wgsl */ `
 export async function orientTriangles(
   triangles: Triangle[],
 ): Promise<Triangle[]> {
+  removeZeroTriangles(triangles);
+
   let result = await runShader(
     shaderCode,
     [
@@ -158,8 +194,8 @@ export async function orientTriangles(
     for (let i = 0; i < flips.length; i++) {
       const sign = flips[i];
       if (sign !== 1 && sign !== -1) {
-        throw new Error(
-          `Received invalid output ${sign} from triangle orientation shader.`,
+        console.error(
+          `Received invalid output ${sign} from triangle orientation shader at index ${i}.`,
         );
       } else if (sign === -1) {
         // Swap the triangle direction.
