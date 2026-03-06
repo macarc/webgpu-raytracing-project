@@ -568,6 +568,8 @@ export async function rayTrace(
     });
   }
 
+  console.log(rays);
+
   const gpuDevice = await getGPUDevice();
 
   if (!gpuDevice) {
@@ -733,6 +735,8 @@ export async function rayTrace(
       }
     }
   }
+
+  console.log(plottedRayCoordinates);
 
   update(maxPasses, maxPasses);
 

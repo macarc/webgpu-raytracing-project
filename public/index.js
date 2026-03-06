@@ -729,6 +729,7 @@
         direction: normalize(ray)
       });
     }
+    console.log(rays);
     const gpuDevice = await getGPUDevice();
     if (!gpuDevice) {
       throw new Error("Aborted due to null GPU device");
@@ -846,6 +847,7 @@
         }
       }
     }
+    console.log(plottedRayCoordinates);
     update(maxPasses, maxPasses);
     const outputAudio = combineFilteredAudio(
       output125,
