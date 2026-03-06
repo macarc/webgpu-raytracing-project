@@ -19,6 +19,57 @@ function isMesh(obj: Object3D): obj is Mesh {
 
 export type Format3D = "3dm" | "gltf";
 
+/* https://github.com/maximeq/three-js-disposer/blob/r4.130/src/disposer.ts */
+
+function disposeNode(node: Object3D) {
+  if (node instanceof Mesh) {
+    if (node.geometry) {
+      node.geometry.dispose();
+    }
+
+    if (node.material) {
+      if (node.material && node.material.materials) {
+        for (let i = 0; i < node.material.materials.length; ++i) {
+          const mtrl = node.material.materials[i];
+          if (mtrl.map) mtrl.map.dispose();
+          if (mtrl.lightMap) mtrl.lightMap.dispose();
+          if (mtrl.bumpMap) mtrl.bumpMap.dispose();
+          if (mtrl.normalMap) mtrl.normalMap.dispose();
+          if (mtrl.specularMap) mtrl.specularMap.dispose();
+          if (mtrl.envMap) mtrl.envMap.dispose();
+
+          mtrl.dispose(); // disposes any programs associated with the material
+        }
+      } else {
+        if (node.material.map) node.material.map.dispose();
+        if (node.material.lightMap) node.material.lightMap.dispose();
+        if (node.material.bumpMap) node.material.bumpMap.dispose();
+        if (node.material.normalMap) node.material.normalMap.dispose();
+        if (node.material.specularMap) node.material.specularMap.dispose();
+        if (node.material.envMap) node.material.envMap.dispose();
+
+        node.material.dispose(); // disposes any programs associated with the material
+      }
+    }
+  }
+}
+
+function disposeHierarchy(node: Object3D, callback: (node: Object3D) => void) {
+  for (var i = node.children.length - 1; i >= 0; i--) {
+    var child = node.children[i];
+    disposeHierarchy(child, callback);
+    callback(child);
+  }
+}
+
+export function dispose(o: Object3D | null) {
+  if (o) {
+    disposeHierarchy(o, disposeNode);
+  }
+}
+
+/* end https://github.com/maximeq/three-js-disposer/blob/r4.130/src/disposer.ts */
+
 export function loadObjectFromData(
   data: ArrayBuffer,
   filetype: Format3D,
@@ -87,12 +138,15 @@ export async function loadGeometry(
   object.traverse((obj) => {
     if (isMesh(obj)) {
       triangles.push(...bufferGeometryToTriangles(obj.geometry));
+      obj.geometry.dispose();
     }
   });
 
   console.log("Loaded", triangles);
 
   await orientTriangles(triangles);
+
+  dispose(object);
 
   return triangles;
 }

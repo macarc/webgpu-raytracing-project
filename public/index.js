@@ -430,10 +430,10 @@
   var<storage, read_write> band_2000_and_4000: array<f32>;
 
   // @group(0) @binding(6)
-  // var<storage, read_write> band_2000: array<Hit>;
+  // var<storage, read_write> x_and_y: array<float>;
 
   // @group(0) @binding(7)
-  // var<storage, read_write> band_4000: array<Hit>;
+  // var<storage, read_write> z: array<float>;
 
   @group(0) @binding(8)
   var<uniform> materials: array<Material, ${materials.length}>;
@@ -175627,7 +175627,7 @@ void main() {
                 this.below = below;
                 calcTrace[0].trace._glTrace = this;
               };
-              proto.dispose = function dispose() {
+              proto.dispose = function dispose2() {
                 var map = this.subplot.map;
                 var order = this.clusterEnabled ? ORDER.cluster : ORDER.nonCluster;
                 for (var i = order.length - 1; i >= 0; i--) {
@@ -223114,7 +223114,7 @@ void main() {
                 this.below = below;
                 calcTrace[0].trace._glTrace = this;
               };
-              proto.dispose = function dispose() {
+              proto.dispose = function dispose2() {
                 var map = this.subplot.map;
                 var order = this.clusterEnabled ? ORDER.cluster : ORDER.nonCluster;
                 for (var i = order.length - 1; i >= 0; i--) {
@@ -285811,7 +285811,7 @@ uniform ${i3} ${a3} u_${s3};
       color.getRGB(_rgb, getUnlitUniformColorSpace(renderer));
       state.buffers.color.setClear(_rgb.r, _rgb.g, _rgb.b, alpha2, premultipliedAlpha);
     }
-    function dispose() {
+    function dispose2() {
       if (boxMesh !== void 0) {
         boxMesh.geometry.dispose();
         boxMesh.material.dispose();
@@ -285841,7 +285841,7 @@ uniform ${i3} ${a3} u_${s3};
       },
       render,
       addToRenderList,
-      dispose
+      dispose: dispose2
     };
   }
   function WebGLBindingStates(gl2, attributes) {
@@ -286108,7 +286108,7 @@ uniform ${i3} ${a3} u_${s3};
       }
       disableUnusedAttributes();
     }
-    function dispose() {
+    function dispose2() {
       reset();
       for (const geometryId in bindingStates) {
         const programMap = bindingStates[geometryId];
@@ -286164,7 +286164,7 @@ uniform ${i3} ${a3} u_${s3};
       setup,
       reset,
       resetDefaultState,
-      dispose,
+      dispose: dispose2,
       releaseStatesOfGeometry,
       releaseStatesOfProgram,
       initAttributes,
@@ -286420,12 +286420,12 @@ uniform ${i3} ${a3} u_${s3};
         cubemap.dispose();
       }
     }
-    function dispose() {
+    function dispose2() {
       cubemaps = /* @__PURE__ */ new WeakMap();
     }
     return {
       get,
-      dispose
+      dispose: dispose2
     };
   }
   function _createPlanes(lodMax) {
@@ -286914,7 +286914,7 @@ uniform ${i3} ${a3} u_${s3};
         cubemapUV.dispose();
       }
     }
-    function dispose() {
+    function dispose2() {
       cubeUVmaps = /* @__PURE__ */ new WeakMap();
       if (pmremGenerator !== null) {
         pmremGenerator.dispose();
@@ -286923,7 +286923,7 @@ uniform ${i3} ${a3} u_${s3};
     }
     return {
       get,
-      dispose
+      dispose: dispose2
     };
   }
   function WebGLExtensions(gl2) {
@@ -287271,7 +287271,7 @@ uniform ${i3} ${a3} u_${s3};
       }
       return buffergeometry;
     }
-    function dispose() {
+    function dispose2() {
       updateMap = /* @__PURE__ */ new WeakMap();
     }
     function onInstancedMeshDispose(event) {
@@ -287282,7 +287282,7 @@ uniform ${i3} ${a3} u_${s3};
     }
     return {
       update,
-      dispose
+      dispose: dispose2
     };
   }
   function WebGLOutput(type, width, height, depth, stencil) {
@@ -289046,7 +289046,7 @@ uniform ${i3} ${a3} u_${s3};
     function releaseShaderCache(material) {
       _customShaders.remove(material);
     }
-    function dispose() {
+    function dispose2() {
       _customShaders.dispose();
     }
     return {
@@ -289058,7 +289058,7 @@ uniform ${i3} ${a3} u_${s3};
       releaseShaderCache,
       // Exposed for resource monitoring & error feedback via renderer.info:
       programs,
-      dispose
+      dispose: dispose2
     };
   }
   function WebGLProperties() {
@@ -289080,7 +289080,7 @@ uniform ${i3} ${a3} u_${s3};
     function update(object, key, value) {
       properties.get(object)[key] = value;
     }
-    function dispose() {
+    function dispose2() {
       properties = /* @__PURE__ */ new WeakMap();
     }
     return {
@@ -289088,7 +289088,7 @@ uniform ${i3} ${a3} u_${s3};
       get,
       remove,
       update,
-      dispose
+      dispose: dispose2
     };
   }
   function painterSortStable(a, b) {
@@ -289219,12 +289219,12 @@ uniform ${i3} ${a3} u_${s3};
       }
       return list;
     }
-    function dispose() {
+    function dispose2() {
       lists = /* @__PURE__ */ new WeakMap();
     }
     return {
       get,
-      dispose
+      dispose: dispose2
     };
   }
   function UniformsCache() {
@@ -289649,12 +289649,12 @@ uniform ${i3} ${a3} u_${s3};
       }
       return renderState;
     }
-    function dispose() {
+    function dispose2() {
       renderStates = /* @__PURE__ */ new WeakMap();
     }
     return {
       get,
-      dispose
+      dispose: dispose2
     };
   }
   function WebGLShadowMap(renderer, objects, capabilities) {
@@ -292573,7 +292573,7 @@ uniform ${i3} ${a3} u_${s3};
       delete buffers[uniformsGroup.id];
       delete updateList[uniformsGroup.id];
     }
-    function dispose() {
+    function dispose2() {
       for (const id in buffers) {
         gl2.deleteBuffer(buffers[id]);
       }
@@ -292584,7 +292584,7 @@ uniform ${i3} ${a3} u_${s3};
     return {
       bind,
       update,
-      dispose
+      dispose: dispose2
     };
   }
   function getDFGLUT() {
@@ -303779,6 +303779,47 @@ void main() {
   function isMesh(obj) {
     return obj.isMesh || false;
   }
+  function disposeNode(node) {
+    if (node instanceof Mesh) {
+      if (node.geometry) {
+        node.geometry.dispose();
+      }
+      if (node.material) {
+        if (node.material && node.material.materials) {
+          for (let i = 0; i < node.material.materials.length; ++i) {
+            const mtrl = node.material.materials[i];
+            if (mtrl.map) mtrl.map.dispose();
+            if (mtrl.lightMap) mtrl.lightMap.dispose();
+            if (mtrl.bumpMap) mtrl.bumpMap.dispose();
+            if (mtrl.normalMap) mtrl.normalMap.dispose();
+            if (mtrl.specularMap) mtrl.specularMap.dispose();
+            if (mtrl.envMap) mtrl.envMap.dispose();
+            mtrl.dispose();
+          }
+        } else {
+          if (node.material.map) node.material.map.dispose();
+          if (node.material.lightMap) node.material.lightMap.dispose();
+          if (node.material.bumpMap) node.material.bumpMap.dispose();
+          if (node.material.normalMap) node.material.normalMap.dispose();
+          if (node.material.specularMap) node.material.specularMap.dispose();
+          if (node.material.envMap) node.material.envMap.dispose();
+          node.material.dispose();
+        }
+      }
+    }
+  }
+  function disposeHierarchy(node, callback) {
+    for (var i = node.children.length - 1; i >= 0; i--) {
+      var child = node.children[i];
+      disposeHierarchy(child, callback);
+      callback(child);
+    }
+  }
+  function dispose(o) {
+    if (o) {
+      disposeHierarchy(o, disposeNode);
+    }
+  }
   function loadObjectFromData(data, filetype) {
     if (filetype === "3dm") {
       const rhino = new Rhino3dmLoader();
@@ -303825,10 +303866,12 @@ void main() {
     object.traverse((obj) => {
       if (isMesh(obj)) {
         triangles.push(...bufferGeometryToTriangles(obj.geometry));
+        obj.geometry.dispose();
       }
     });
     console.log("Loaded", triangles);
     await orientTriangles(triangles);
+    dispose(object);
     return triangles;
   }
   async function boxRoom(config) {
@@ -303972,6 +304015,7 @@ void main() {
   var init_geometry_helpers = __esm({
     "src/geometry_helpers.ts"() {
       "use strict";
+      init_three_module();
       init_GLTFLoader();
       init_DMLoader();
       init_orient_surfaces();
@@ -304250,6 +304294,7 @@ void main() {
       var import_fft = __toESM(require_fft());
       init_dsp();
       init_geometry();
+      init_geometry_helpers();
       var state = {
         rayCount: 2e4,
         audioDuration: 10,
@@ -304572,12 +304617,15 @@ void main() {
             selectedMaterial.opacity = 0.9;
             if (ThreeView.mesh) {
               ThreeView.scene.remove(ThreeView.mesh);
+              dispose(ThreeView.mesh);
             }
             if (ThreeView.selectedMesh) {
               ThreeView.scene.remove(ThreeView.selectedMesh);
+              dispose(ThreeView.selectedMesh);
             }
             if (ThreeView.wireframeMesh) {
               ThreeView.scene.remove(ThreeView.wireframeMesh);
+              dispose(ThreeView.wireframeMesh);
             }
             ThreeView.mesh = new Mesh(geometry, material);
             ThreeView.wireframeMesh = new Mesh(geometry, wireframeMaterial);
@@ -304695,6 +304743,7 @@ void main() {
               (intersection) => intersection.object.userData["triangleIndex"] || 0
             );
             state.geometry.selectedIndex = indices[(indices.indexOf(state.geometry.selectedIndex) + 1) % indices.length];
+            dispose(rootObject);
           }
         },
         view: function() {

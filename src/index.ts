@@ -13,6 +13,7 @@ import {
   NoGeometry,
   RoundGeometry,
 } from "./geometry";
+import { dispose } from "./geometry_helpers";
 
 let state = {
   rayCount: 20000,
@@ -450,12 +451,15 @@ let ThreeView = {
       // Remove old meshes.
       if (ThreeView.mesh) {
         ThreeView.scene.remove(ThreeView.mesh);
+        dispose(ThreeView.mesh);
       }
       if (ThreeView.selectedMesh) {
         ThreeView.scene.remove(ThreeView.selectedMesh);
+        dispose(ThreeView.selectedMesh);
       }
       if (ThreeView.wireframeMesh) {
         ThreeView.scene.remove(ThreeView.wireframeMesh);
+        dispose(ThreeView.wireframeMesh);
       }
 
       // Create the new meshes.
@@ -610,6 +614,8 @@ let ThreeView = {
         indices[
           (indices.indexOf(state.geometry.selectedIndex) + 1) % indices.length
         ];
+
+      dispose(rootObject);
     }
   },
   view: function () {
