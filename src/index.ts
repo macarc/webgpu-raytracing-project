@@ -696,12 +696,17 @@ let AppView = {
           ]),
           m("label", [
             "Receiver radius:",
-            m("input", { type: "number", min: 0, step: 0.05, value: state.receiverRadius, oninput: function (e: InputEvent) {
-              const r = parseFloat((e.target as HTMLInputElement).value);
-              state.receiverRadius = r;
-            }
-            })
-          ])
+            m("input", {
+              type: "number",
+              min: 0,
+              step: 0.05,
+              value: state.receiverRadius,
+              oninput: function (e: InputEvent) {
+                const r = parseFloat((e.target as HTMLInputElement).value);
+                state.receiverRadius = r;
+              },
+            }),
+          ]),
         ]),
         m("section", { style: "border:1px solid black;" }, [
           ...state.materials.map((material) =>

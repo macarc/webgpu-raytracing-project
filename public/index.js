@@ -361,7 +361,7 @@
     const magnitude = Math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2);
     return [v[0] / magnitude, v[1] / magnitude, v[2] / magnitude];
   }
-  function specularRayIntersectionShaderCode(receiverPosition, materials, bounceCount) {
+  function specularRayIntersectionShaderCode(receiverPosition, receiverRadius, materials, bounceCount) {
     return (
       /* wgsl */
       `
@@ -397,11 +397,6 @@
     v1: f32, v2: f32, v3: f32,
   }
 
-  struct Hit {
-    time: f32,  // TODO: rename (to distance).
-    intensity: f32,
-  }
-
   // TODO: could this just be part of the Triangle.
   struct Material {
     r125: f32,
@@ -423,22 +418,22 @@
   var<storage, read> triangleBuffer: array<Triangle>;
 
   @group(0) @binding(2)
-  var<storage, read_write> band_125: array<Hit>;
+  var<storage, read_write> distances: array<f32>;
 
   @group(0) @binding(3)
-  var<storage, read_write> band_250: array<Hit>;
+  var<storage, read_write> band_125_and_250: array<f32>;
 
   @group(0) @binding(4)
-  var<storage, read_write> band_500: array<Hit>;
+  var<storage, read_write> band_500_and_1000: array<f32>;
 
   @group(0) @binding(5)
-  var<storage, read_write> band_1000: array<Hit>;
+  var<storage, read_write> band_2000_and_4000: array<f32>;
 
-  @group(0) @binding(6)
-  var<storage, read_write> band_2000: array<Hit>;
+  // @group(0) @binding(6)
+  // var<storage, read_write> band_2000: array<Hit>;
 
-  @group(0) @binding(7)
-  var<storage, read_write> band_4000: array<Hit>;
+  // @group(0) @binding(7)
+  // var<storage, read_write> band_4000: array<Hit>;
 
   @group(0) @binding(8)
   var<uniform> materials: array<Material, ${materials.length}>;
@@ -517,12 +512,9 @@
 
     let receiverPosition = vec3f(${receiverPosition.join(",")});
 
-    // TODO: flaky.
-    let is_first_run = rayBuffer[0].intensity4000 == 1.0;
-    let SPECULAR_BOUNCES: u32 = 10;
-
     for (var n: u32 = 0; n < ${bounceCount}; n++) {
-      let index = rayIndex * ${bounceCount} + n;
+      let lowerIndex = rayIndex * ${bounceCount} + n;
+      let upperIndex = arrayLength(&distances) + lowerIndex;
 
       // TODO: infinity
       var rayTriangleDistance = 1e10;
@@ -605,12 +597,12 @@
         }
       }
 
-      band_125[index].intensity = 0;
-      band_250[index].intensity = 0;
-      band_500[index].intensity = 0;
-      band_1000[index].intensity = 0;
-      band_2000[index].intensity = 0;
-      band_4000[index].intensity = 0;
+      band_125_and_250[lowerIndex] = 0;
+      band_125_and_250[upperIndex] = 0;
+      band_500_and_1000[lowerIndex] = 0;
+      band_500_and_1000[upperIndex] = 0;
+      band_2000_and_4000[lowerIndex] = 0;
+      band_2000_and_4000[upperIndex] = 0;
 
       // This should always be true - it should always intersect a triangle.
       if (closestTriangleIndex < triangleCount) {
@@ -627,30 +619,20 @@
             let rayTriangleDistance = raydistancetravelled + distanceToReceiver;
             let rayVecToClosestReceiverPoint = dot(vecToReceiver, raydirection) * raydirection;
             let distanceFromRayToReceiver = length(vecToReceiver - rayVecToClosestReceiverPoint);
-            let additionDueToRay = f32(distanceFromRayToReceiver <= ${RECEIVER_RADIUS});
+            let additionDueToRay = f32(distanceFromRayToReceiver <= ${receiverRadius});
               
-            // Well this seems to be working now! TODO: work out why it wasn't before. Might be because of the previous bug in the rayVecToClosestPoint implementation.
-            // let totalIntensity = cosNormalAngleToReceiver + additionDueToRay;
-            // let totalIntensity = (1 - material.scatter) * additionDueToRay + material.scatter * cosNormalAngleToReceiver;
-            let totalIntensity = additionDueToRay;
-            // if (is_first_run && n < SPECULAR_BOUNCES) {
-            //   totalIntensity += additionDueToRay / 10;
-            // }
+            // let totalIntensity = additionDueToRay + cosNormalAngleToReceiver;
+            let totalIntensity = (1 - material.scatter) * additionDueToRay + material.scatter * cosNormalAngleToReceiver;
+            // let totalIntensity = additionDueToRay;
 
-            // TODO: this is a waste of memory.
-            band_125[index].time = rayTriangleDistance;
-            band_250[index].time = rayTriangleDistance;
-            band_500[index].time = rayTriangleDistance;
-            band_1000[index].time = rayTriangleDistance;
-            band_2000[index].time = rayTriangleDistance;
-            band_4000[index].time = rayTriangleDistance;
+            distances[lowerIndex] = rayTriangleDistance;
 
-            band_125[index].intensity = intensity_125 * totalIntensity;
-            band_250[index].intensity = intensity_250 * totalIntensity;
-            band_500[index].intensity = intensity_500 * totalIntensity;
-            band_1000[index].intensity = intensity_1000 * totalIntensity;
-            band_2000[index].intensity = intensity_2000 * totalIntensity;
-            band_4000[index].intensity = intensity_4000 * totalIntensity;
+            band_125_and_250[lowerIndex] = intensity_125 * totalIntensity;
+            band_125_and_250[upperIndex] = intensity_250 * totalIntensity;
+            band_500_and_1000[lowerIndex] = intensity_500 * totalIntensity;
+            band_500_and_1000[upperIndex] = intensity_1000 * totalIntensity;
+            band_2000_and_4000[lowerIndex] = intensity_2000 * totalIntensity;
+            band_2000_and_4000[upperIndex] = intensity_4000 * totalIntensity;
           }
         }
 
@@ -661,21 +643,30 @@
         let reflected = normalize(reflect(raydirection, triangleNormal));
         let newposition = rayposition + raydirection * rayTriangleDistance;
 
-        // let r1 = random_uniform(intensity_125 * f32(rayIndex * n));
-        // let r2 = random_uniform(2 * intensity_125 * f32(rayIndex * n));
+        // Collect random values between 0-1.
+        let seed = intensity_125 * f32(rayIndex * n);
 
-        // // NOTE: the argument is between 0.01 and 3.13 radians, so the angle will definitely be positive.
-        // let scattered_ray_angle1 = 3.14/2 * (1 - sin(r1 * 3.12 + 0.01));
-        // let scattered_ray_angle2 = r2 * 2 * 3.14159265;
+        let on_off_param = f32(random_uniform(seed) < material.scatter);
+        let r1 = random_uniform(seed * seed);
+        let r2 = random_uniform(2 * seed);
 
-        // let triangleSurfaceVector1 = normalize(edge1);
-        // let triangleSurfaceVector2 = cross(triangleNormal, triangleSurfaceVector1);
-        // let yaw_vector = triangleSurfaceVector1 * sin(scattered_ray_angle2) + triangleSurfaceVector2 * cos(scattered_ray_angle2);
+        let r1_sign = 2 * f32(random_uniform(2.4553 * seed * seed) < 0.5) - 1;
 
-        // let scattered = triangleNormal * cos(scattered_ray_angle1) + yaw_vector * sin(scattered_ray_angle1);
+        // Angle between -pi/2 and pi/2, most likely to be closer to 0.
+        let scattered_ray_angle1 = r1_sign * asin(r1);
+        let scattered_ray_angle2 = 2 * 3.141592654 * r2;
 
-        // let newdirection = normalize((1-s) * reflected + s * normalize(scattered));
+        let triangleSurfaceVector1 = normalize(edge1);
+        // TODO: can easily avoid this cross product.
+        let triangleSurfaceVector2 = cross(triangleNormal, triangleSurfaceVector1);
+
+        let p = sin(scattered_ray_angle2) * triangleSurfaceVector1 + cos(scattered_ray_angle2) * triangleSurfaceVector2;
+        let scattered = normalize(sin(scattered_ray_angle1) * p - cos(scattered_ray_angle1) * triangleNormal);
+
+        // let newdirection = normalize((1-material.scatter) * reflected + material.scatter * scattered);
+        // let newdirection = normalize((1-on_off_param) * reflected + on_off_param * scattered);
         let newdirection = reflected;
+        // let newdirection = scattered;
 
         rayposition = newposition;
         raydirection = newdirection;
@@ -764,15 +755,14 @@
       trianglesToFloatArray(triangles, settings.materials),
       materialsToFloatArray(settings.materials),
       [
-        new Float32Array(outputSize),
-        new Float32Array(outputSize),
-        new Float32Array(outputSize),
+        new Float32Array(outputSize / 2),
         new Float32Array(outputSize),
         new Float32Array(outputSize),
         new Float32Array(outputSize)
       ],
       specularRayIntersectionShaderCode(
         settings.receiverPosition,
+        settings.receiverRadius,
         settings.materials,
         bouncesPerPass
       )
@@ -791,16 +781,18 @@
       const result = await rayTracer.runPass(settings.rayCount);
       let thisPassAverageValue = 0;
       let thisPassMaxValue = 0;
-      for (let j = 0; j < result[0].length; j += 2) {
+      for (let j = 0; j < outputSize / 2; j += 2) {
         const index = Math.round(SAMPLE_RATE * (result[0][j] / SPEED_OF_SOUND));
         const air_absorption = Math.exp(-result[0][j] * AIR_ABSORPTION_COEFF);
-        output125[index] += result[0][j + 1] * air_absorption;
-        output250[index] += result[1][j + 1] * air_absorption;
-        output500[index] += result[2][j + 1] * air_absorption;
-        output1000[index] += result[3][j + 1] * air_absorption;
-        output2000[index] += result[4][j + 1] * air_absorption;
-        output4000[index] += result[5][j + 1] * air_absorption;
-        const avg = (result[0][j + 1] + result[1][j + 1] + result[2][j + 1] + result[3][j + 1] + result[4][j + 1] + result[5][j + 1]) * air_absorption;
+        const lowerIndex = j;
+        const upperIndex = outputSize / 2 + j;
+        output125[index] += result[1][lowerIndex] * air_absorption;
+        output250[index] += result[1][upperIndex] * air_absorption;
+        output500[index] += result[2][lowerIndex] * air_absorption;
+        output1000[index] += result[2][upperIndex] * air_absorption;
+        output2000[index] += result[3][lowerIndex] * air_absorption;
+        output4000[index] += result[3][upperIndex] * air_absorption;
+        const avg = (result[1][lowerIndex] + result[1][upperIndex] + result[2][lowerIndex] + result[2][upperIndex] + result[3][lowerIndex] + result[3][upperIndex]) * air_absorption;
         thisPassAverageValue += Math.abs(avg);
         thisPassMaxValue = Math.max(Math.abs(avg), thisPassMaxValue);
       }
@@ -830,7 +822,7 @@
     console.log(outputAudio.join(","));
     return outputAudio;
   }
-  var STANDARD_MAX_STORAGE_BUFFER_SIZE, RECEIVER_RADIUS, AIR_ABSORPTION_COEFF, SpecularRayTracer;
+  var STANDARD_MAX_STORAGE_BUFFER_SIZE, AIR_ABSORPTION_COEFF, SpecularRayTracer;
   var init_ray_tracing = __esm({
     "src/ray_tracing.ts"() {
       "use strict";
@@ -839,7 +831,6 @@
       init_floatarrays();
       init_dsp();
       STANDARD_MAX_STORAGE_BUFFER_SIZE = 134217728;
-      RECEIVER_RADIUS = 0.1;
       AIR_ABSORPTION_COEFF = 13e-4;
       SpecularRayTracer = class {
         device;
@@ -889,37 +880,25 @@
               },
               {
                 binding: 2,
-                // band 125
+                // distances
                 visibility: GPUShaderStage.COMPUTE,
                 buffer: { type: "storage" }
               },
               {
                 binding: 3,
-                // band 250
+                // band 250 and 500
                 visibility: GPUShaderStage.COMPUTE,
                 buffer: { type: "storage" }
               },
               {
                 binding: 4,
-                // band 500
+                // band 1000 and 2000
                 visibility: GPUShaderStage.COMPUTE,
                 buffer: { type: "storage" }
               },
               {
                 binding: 5,
-                // band 1000
-                visibility: GPUShaderStage.COMPUTE,
-                buffer: { type: "storage" }
-              },
-              {
-                binding: 6,
-                // band 2000
-                visibility: GPUShaderStage.COMPUTE,
-                buffer: { type: "storage" }
-              },
-              {
-                binding: 7,
-                // band 4000
+                // band 2000 and 4000
                 visibility: GPUShaderStage.COMPUTE,
                 buffer: { type: "storage" }
               },
@@ -304170,7 +304149,7 @@ void main() {
         }
         view() {
           return [
-            (0, import_mithril.default)("label", [
+            (0, import_mithril.default)("label.v", [
               "Scale:",
               (0, import_mithril.default)("input.v", {
                 type: "number",
@@ -304276,6 +304255,7 @@ void main() {
         audioDuration: 10,
         sourcePosition: [0, 0, 0],
         receiverPosition: [3, 0, 0],
+        receiverRadius: 0.2,
         geometry: new NoGeometry(),
         materials: [
           {
@@ -304336,6 +304316,7 @@ void main() {
             {
               sourcePosition: state.sourcePosition,
               receiverPosition: state.receiverPosition,
+              receiverRadius: state.receiverRadius || 0,
               geometry: state.geometry.triangles(),
               materials: state.materials,
               rayCount: state.rayCount,
@@ -304621,6 +304602,8 @@ void main() {
             ThreeView.source.visible = state.geometry.triangles().length > 0;
           }
           if (ThreeView.receiver) {
+            const r = state.receiverRadius || 0;
+            ThreeView.receiver.scale.set(r, r, r);
             ThreeView.receiver.position.set(...state.receiverPosition);
             ThreeView.receiver.visible = state.geometry.triangles().length > 0;
           }
@@ -304730,10 +304713,10 @@ void main() {
                 (0, import_mithril2.default)("button", { onclick: state.setBoxGeometry }, "Load box room"),
                 (0, import_mithril2.default)("button", { onclick: state.setRoundGeometry }, "Load sphere"),
                 (0, import_mithril2.default)("button", { onclick: state.setLoadGeometry }, "Load geometry"),
-                (0, import_mithril2.default)("button", { onclick: state.setTestGeometry }, "Load test geometry")
+                (0, import_mithril2.default)("button", { onclick: state.setTestGeometry }, "Load test geometry"),
+                state.geometry.view()
               ]),
               (0, import_mithril2.default)("section", { style: "border:1px solid black;" }, [
-                state.geometry.view(),
                 (0, import_mithril2.default)("label.v", [
                   "Source position:",
                   (0, import_mithril2.default)("input.v", {
@@ -304791,6 +304774,19 @@ void main() {
                       state.receiverPosition[2] = parseFloat(
                         e.target.value
                       );
+                    }
+                  })
+                ]),
+                (0, import_mithril2.default)("label", [
+                  "Receiver radius:",
+                  (0, import_mithril2.default)("input", {
+                    type: "number",
+                    min: 0,
+                    step: 0.05,
+                    value: state.receiverRadius,
+                    oninput: function(e) {
+                      const r = parseFloat(e.target.value);
+                      state.receiverRadius = r;
                     }
                   })
                 ])

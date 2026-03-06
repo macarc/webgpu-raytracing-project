@@ -98,11 +98,6 @@ function specularRayIntersectionShaderCode(
     v1: f32, v2: f32, v3: f32,
   }
 
-  struct Hit {
-    time: f32,  // TODO: rename (to distance).
-    intensity: f32,
-  }
-
   // TODO: could this just be part of the Triangle.
   struct Material {
     r125: f32,
@@ -124,22 +119,22 @@ function specularRayIntersectionShaderCode(
   var<storage, read> triangleBuffer: array<Triangle>;
 
   @group(0) @binding(2)
-  var<storage, read_write> band_125: array<Hit>;
+  var<storage, read_write> distances: array<f32>;
 
   @group(0) @binding(3)
-  var<storage, read_write> band_250: array<Hit>;
+  var<storage, read_write> band_125_and_250: array<f32>;
 
   @group(0) @binding(4)
-  var<storage, read_write> band_500: array<Hit>;
+  var<storage, read_write> band_500_and_1000: array<f32>;
 
   @group(0) @binding(5)
-  var<storage, read_write> band_1000: array<Hit>;
+  var<storage, read_write> band_2000_and_4000: array<f32>;
 
-  @group(0) @binding(6)
-  var<storage, read_write> band_2000: array<Hit>;
+  // @group(0) @binding(6)
+  // var<storage, read_write> band_2000: array<Hit>;
 
-  @group(0) @binding(7)
-  var<storage, read_write> band_4000: array<Hit>;
+  // @group(0) @binding(7)
+  // var<storage, read_write> band_4000: array<Hit>;
 
   @group(0) @binding(8)
   var<uniform> materials: array<Material, ${materials.length}>;
@@ -189,7 +184,8 @@ function specularRayIntersectionShaderCode(
     let receiverPosition = vec3f(${receiverPosition.join(",")});
 
     for (var n: u32 = 0; n < ${bounceCount}; n++) {
-      let index = rayIndex * ${bounceCount} + n;
+      let lowerIndex = rayIndex * ${bounceCount} + n;
+      let upperIndex = arrayLength(&distances) + lowerIndex;
 
       // TODO: infinity
       var rayTriangleDistance = 1e10;
@@ -272,12 +268,12 @@ function specularRayIntersectionShaderCode(
         }
       }
 
-      band_125[index].intensity = 0;
-      band_250[index].intensity = 0;
-      band_500[index].intensity = 0;
-      band_1000[index].intensity = 0;
-      band_2000[index].intensity = 0;
-      band_4000[index].intensity = 0;
+      band_125_and_250[lowerIndex] = 0;
+      band_125_and_250[upperIndex] = 0;
+      band_500_and_1000[lowerIndex] = 0;
+      band_500_and_1000[upperIndex] = 0;
+      band_2000_and_4000[lowerIndex] = 0;
+      band_2000_and_4000[upperIndex] = 0;
 
       // This should always be true - it should always intersect a triangle.
       if (closestTriangleIndex < triangleCount) {
@@ -295,25 +291,19 @@ function specularRayIntersectionShaderCode(
             let rayVecToClosestReceiverPoint = dot(vecToReceiver, raydirection) * raydirection;
             let distanceFromRayToReceiver = length(vecToReceiver - rayVecToClosestReceiverPoint);
             let additionDueToRay = f32(distanceFromRayToReceiver <= ${receiverRadius});
-
+              
             // let totalIntensity = additionDueToRay + cosNormalAngleToReceiver;
             let totalIntensity = (1 - material.scatter) * additionDueToRay + material.scatter * cosNormalAngleToReceiver;
             // let totalIntensity = additionDueToRay;
 
-            // TODO: this is a waste of memory.
-            band_125[index].time = rayTriangleDistance;
-            band_250[index].time = rayTriangleDistance;
-            band_500[index].time = rayTriangleDistance;
-            band_1000[index].time = rayTriangleDistance;
-            band_2000[index].time = rayTriangleDistance;
-            band_4000[index].time = rayTriangleDistance;
+            distances[lowerIndex] = rayTriangleDistance;
 
-            band_125[index].intensity = intensity_125 * totalIntensity;
-            band_250[index].intensity = intensity_250 * totalIntensity;
-            band_500[index].intensity = intensity_500 * totalIntensity;
-            band_1000[index].intensity = intensity_1000 * totalIntensity;
-            band_2000[index].intensity = intensity_2000 * totalIntensity;
-            band_4000[index].intensity = intensity_4000 * totalIntensity;
+            band_125_and_250[lowerIndex] = intensity_125 * totalIntensity;
+            band_125_and_250[upperIndex] = intensity_250 * totalIntensity;
+            band_500_and_1000[lowerIndex] = intensity_500 * totalIntensity;
+            band_500_and_1000[upperIndex] = intensity_1000 * totalIntensity;
+            band_2000_and_4000[lowerIndex] = intensity_2000 * totalIntensity;
+            band_2000_and_4000[upperIndex] = intensity_4000 * totalIntensity;
           }
         }
 
@@ -422,32 +412,22 @@ class SpecularRayTracer {
           buffer: { type: "read-only-storage" },
         },
         {
-          binding: 2, // band 125
+          binding: 2, // distances
           visibility: GPUShaderStage.COMPUTE,
           buffer: { type: "storage" },
         },
         {
-          binding: 3, // band 250
+          binding: 3, // band 250 and 500
           visibility: GPUShaderStage.COMPUTE,
           buffer: { type: "storage" },
         },
         {
-          binding: 4, // band 500
+          binding: 4, // band 1000 and 2000
           visibility: GPUShaderStage.COMPUTE,
           buffer: { type: "storage" },
         },
         {
-          binding: 5, // band 1000
-          visibility: GPUShaderStage.COMPUTE,
-          buffer: { type: "storage" },
-        },
-        {
-          binding: 6, // band 2000
-          visibility: GPUShaderStage.COMPUTE,
-          buffer: { type: "storage" },
-        },
-        {
-          binding: 7, // band 4000
+          binding: 5, // band 2000 and 4000
           visibility: GPUShaderStage.COMPUTE,
           buffer: { type: "storage" },
         },
@@ -608,9 +588,7 @@ export async function rayTrace(
     trianglesToFloatArray(triangles, settings.materials),
     materialsToFloatArray(settings.materials),
     [
-      new Float32Array(outputSize),
-      new Float32Array(outputSize),
-      new Float32Array(outputSize),
+      new Float32Array(outputSize / 2),
       new Float32Array(outputSize),
       new Float32Array(outputSize),
       new Float32Array(outputSize),
@@ -645,24 +623,28 @@ export async function rayTrace(
     let thisPassAverageValue = 0;
     let thisPassMaxValue = 0;
 
-    for (let j = 0; j < result[0].length; j += 2) {
+    for (let j = 0; j < outputSize / 2; j += 2) {
       const index = Math.round(SAMPLE_RATE * (result[0][j] / SPEED_OF_SOUND));
       const air_absorption = Math.exp(-result[0][j] * AIR_ABSORPTION_COEFF);
-      output125[index] += result[0][j + 1] * air_absorption;
-      output250[index] += result[1][j + 1] * air_absorption;
-      output500[index] += result[2][j + 1] * air_absorption;
-      output1000[index] += result[3][j + 1] * air_absorption;
-      output2000[index] += result[4][j + 1] * air_absorption;
-      output4000[index] += result[5][j + 1] * air_absorption;
+
+      const lowerIndex = j;
+      const upperIndex = outputSize / 2 + j;
+
+      output125[index] += result[1][lowerIndex] * air_absorption;
+      output250[index] += result[1][upperIndex] * air_absorption;
+      output500[index] += result[2][lowerIndex] * air_absorption;
+      output1000[index] += result[2][upperIndex] * air_absorption;
+      output2000[index] += result[3][lowerIndex] * air_absorption;
+      output4000[index] += result[3][upperIndex] * air_absorption;
 
       // TODO: can probably do in shader.
       const avg =
-        (result[0][j + 1] +
-          result[1][j + 1] +
-          result[2][j + 1] +
-          result[3][j + 1] +
-          result[4][j + 1] +
-          result[5][j + 1]) *
+        (result[1][lowerIndex] +
+          result[1][upperIndex] +
+          result[2][lowerIndex] +
+          result[2][upperIndex] +
+          result[3][lowerIndex] +
+          result[3][upperIndex]) *
         air_absorption;
       thisPassAverageValue += Math.abs(avg);
       thisPassMaxValue = Math.max(Math.abs(avg), thisPassMaxValue);
