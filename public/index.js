@@ -303751,13 +303751,12 @@ void main() {
     global_id : vec3u,
   ) {
     let index = global_id.x;
-
+    
     let triangleCount = u32(arrayLength(&triangles));
 
     // Avoid accessing the buffer out of bounds - this could happen
     // if NUM_RAYS and WORKGROUP_SIZE don't line up.
     if (index >= triangleCount) {
-      output[index] = 42;
       return;
     }
 
