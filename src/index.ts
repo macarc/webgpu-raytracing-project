@@ -491,6 +491,8 @@ let ThreeView = {
             3,
           ),
         );
+      } else {
+        selectedGeometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(), 3));
       }
       const selectedMaterial = new THREE.MeshBasicMaterial({ color: "green" });
       selectedMaterial.transparent = true;

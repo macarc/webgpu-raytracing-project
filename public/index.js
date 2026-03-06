@@ -304705,6 +304705,8 @@ void main() {
                   3
                 )
               );
+            } else {
+              selectedGeometry.setAttribute("position", new BufferAttribute(new Float32Array(), 3));
             }
             const selectedMaterial = new MeshBasicMaterial({ color: "green" });
             selectedMaterial.transparent = true;
