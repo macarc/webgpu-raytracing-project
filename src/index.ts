@@ -23,6 +23,7 @@ let state = {
   receiverRadius: 0.2 as number | undefined,
   rayPlotCount: 10,
   bouncePlotCount: 10,
+  throttle: 0,
   geometry: new NoGeometry() as Geometry,
   bounceCoordinates: [] as Float32Array<ArrayBuffer>[],
   materials: [
@@ -95,6 +96,7 @@ let state = {
         geometry: state.geometry.triangles(),
         materials: state.materials,
         rayCount: state.rayCount,
+        throttle: state.throttle,
         rayPlotCount: state.rayPlotCount,
         bouncePlotCount: state.bouncePlotCount,
         audioDuration: state.audioDuration,
@@ -795,6 +797,78 @@ let AppView = {
           ]),
         ]),
         m("section", { style: "border:1px solid black;" }, [
+          m("label.block", [
+            "Ray count:",
+            m("input", {
+              type: "number",
+              min: 1,
+              value: state.rayCount,
+              oninput: function (e: InputEvent) {
+                state.rayCount = parseInt((e.target as HTMLInputElement).value);
+              },
+            }),
+          ]),
+          m("label.block", [
+            "Output duration (s):",
+            m("input", {
+              type: "number",
+              min: 0,
+              step: 0.1,
+              value: state.audioDuration,
+              oninput: function (e: InputEvent) {
+                state.audioDuration = parseFloat(
+                  (e.target as HTMLInputElement).value,
+                );
+              },
+            }),
+          ]),
+          m("label.block", [
+            "Throttle amount: ",
+            m("input", {
+              type: "number",
+              min: 0,
+              max: 100,
+              step: 1,
+              value: state.throttle * 100,
+              onchange: function (e: InputEvent) {
+                const val = parseInt((e.target as HTMLInputElement).value);
+
+                if (val !== undefined && val >= 0 && val <= 100) {
+                  state.throttle = val / 100;
+                }
+              },
+            }),
+            "%",
+          ]),
+          m(
+            "button",
+            { disabled: state.running, onclick: state.runRaytracing },
+            "Run raytracing",
+          ),
+          m(
+            "div.progress-bar-holder",
+            m("div.progress-bar", {
+              style: `width: ${(100 * state.rayTracingProgress[0]) / state.rayTracingProgress[1]}%;`,
+            }),
+          ),
+        ]),
+        m(
+          "button.block",
+          {
+            disabled: state.audioToPlay === null,
+            onclick: state.playAudio,
+          },
+          "Play audio",
+        ),
+        m(
+          "button.block",
+          {
+            disabled: state.audioToPlay === null,
+            onclick: state.playConvolved,
+          },
+          "Play convolved audio",
+        ),
+        m("section", { style: "border:1px solid black;" }, [
           ...state.materials.map((material) =>
             m("section", [
               m(
@@ -899,60 +973,6 @@ let AppView = {
               ]),
             ])
           : null,
-        m("section", { style: "border:1px solid black;" }, [
-          m("label.block", [
-            "Ray count:",
-            m("input", {
-              type: "number",
-              min: 1,
-              value: state.rayCount,
-              oninput: function (e: InputEvent) {
-                state.rayCount = parseInt((e.target as HTMLInputElement).value);
-              },
-            }),
-          ]),
-          m("label.block", [
-            "Output duration (s):",
-            m("input", {
-              type: "number",
-              min: 0,
-              step: 0.1,
-              value: state.audioDuration,
-              oninput: function (e: InputEvent) {
-                state.audioDuration = parseFloat(
-                  (e.target as HTMLInputElement).value,
-                );
-              },
-            }),
-          ]),
-          m(
-            "button",
-            { disabled: state.running, onclick: state.runRaytracing },
-            "Run raytracing",
-          ),
-          m(
-            "div.progress-bar-holder",
-            m("div.progress-bar", {
-              style: `width: ${(100 * state.rayTracingProgress[0]) / state.rayTracingProgress[1]}%;`,
-            }),
-          ),
-        ]),
-        m(
-          "button.block",
-          {
-            disabled: state.audioToPlay === null,
-            onclick: state.playAudio,
-          },
-          "Play audio",
-        ),
-        m(
-          "button.block",
-          {
-            disabled: state.audioToPlay === null,
-            onclick: state.playConvolved,
-          },
-          "Play convolved audio",
-        ),
         m(WaveformPlot),
         m(MagnitudePlot),
       ]),

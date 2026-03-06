@@ -734,9 +734,13 @@
       throw new Error("Aborted due to null GPU device");
     }
     const maxStorageBufferSize = gpuDevice.limits.maxStorageBufferBindingSize || STANDARD_MAX_STORAGE_BUFFER_SIZE;
-    const bouncesPerPass = Math.floor(
-      maxStorageBufferSize / (2 * FLOAT32_SIZE * settings.rayCount)
+    const bouncesPerPass = Math.max(
+      1,
+      Math.floor(
+        (1 - settings.throttle) * maxStorageBufferSize / (2 * FLOAT32_SIZE * settings.rayCount)
+      )
     );
+    console.log("bouncesPerPass", bouncesPerPass);
     const maxPasses = 5;
     const outputSize = 2 * bouncesPerPass * settings.rayCount;
     if (outputSize > maxStorageBufferSize) {
@@ -304352,6 +304356,7 @@ void main() {
         receiverRadius: 0.2,
         rayPlotCount: 10,
         bouncePlotCount: 10,
+        throttle: 0,
         geometry: new NoGeometry(),
         bounceCoordinates: [],
         materials: [
@@ -304417,6 +304422,7 @@ void main() {
               geometry: state.geometry.triangles(),
               materials: state.materials,
               rayCount: state.rayCount,
+              throttle: state.throttle,
               rayPlotCount: state.rayPlotCount,
               bouncePlotCount: state.bouncePlotCount,
               audioDuration: state.audioDuration
@@ -304964,6 +304970,77 @@ void main() {
                 ])
               ]),
               (0, import_mithril2.default)("section", { style: "border:1px solid black;" }, [
+                (0, import_mithril2.default)("label.block", [
+                  "Ray count:",
+                  (0, import_mithril2.default)("input", {
+                    type: "number",
+                    min: 1,
+                    value: state.rayCount,
+                    oninput: function(e) {
+                      state.rayCount = parseInt(e.target.value);
+                    }
+                  })
+                ]),
+                (0, import_mithril2.default)("label.block", [
+                  "Output duration (s):",
+                  (0, import_mithril2.default)("input", {
+                    type: "number",
+                    min: 0,
+                    step: 0.1,
+                    value: state.audioDuration,
+                    oninput: function(e) {
+                      state.audioDuration = parseFloat(
+                        e.target.value
+                      );
+                    }
+                  })
+                ]),
+                (0, import_mithril2.default)("label.block", [
+                  "Throttle amount: ",
+                  (0, import_mithril2.default)("input", {
+                    type: "number",
+                    min: 0,
+                    max: 100,
+                    step: 1,
+                    value: state.throttle * 100,
+                    onchange: function(e) {
+                      const val = parseInt(e.target.value);
+                      if (val !== void 0 && val >= 0 && val <= 100) {
+                        state.throttle = val / 100;
+                      }
+                    }
+                  }),
+                  "%"
+                ]),
+                (0, import_mithril2.default)(
+                  "button",
+                  { disabled: state.running, onclick: state.runRaytracing },
+                  "Run raytracing"
+                ),
+                (0, import_mithril2.default)(
+                  "div.progress-bar-holder",
+                  (0, import_mithril2.default)("div.progress-bar", {
+                    style: `width: ${100 * state.rayTracingProgress[0] / state.rayTracingProgress[1]}%;`
+                  })
+                )
+              ]),
+              (0, import_mithril2.default)(
+                "button.block",
+                {
+                  disabled: state.audioToPlay === null,
+                  onclick: state.playAudio
+                },
+                "Play audio"
+              ),
+              (0, import_mithril2.default)(
+                "button.block",
+                {
+                  disabled: state.audioToPlay === null,
+                  onclick: state.playConvolved
+                },
+                "Play convolved audio"
+              ),
+              (0, import_mithril2.default)("section", { style: "border:1px solid black;" }, [
                 ...state.materials.map(
                   (material) => (0, import_mithril2.default)("section", [
                     (0, import_mithril2.default)(
@@ -305058,60 +305135,6 @@ void main() {
                   )
                 ])
               ]) : null,
-              (0, import_mithril2.default)("section", { style: "border:1px solid black;" }, [
-                (0, import_mithril2.default)("label.block", [
-                  "Ray count:",
-                  (0, import_mithril2.default)("input", {
-                    type: "number",
-                    min: 1,
-                    value: state.rayCount,
-                    oninput: function(e) {
-                      state.rayCount = parseInt(e.target.value);
-                    }
-                  })
-                ]),
-                (0, import_mithril2.default)("label.block", [
-                  "Output duration (s):",
-                  (0, import_mithril2.default)("input", {
-                    type: "number",
-                    min: 0,
-                    step: 0.1,
-                    value: state.audioDuration,
-                    oninput: function(e) {
-                      state.audioDuration = parseFloat(
-                        e.target.value
-                      );
-                    }
-                  })
-                ]),
-                (0, import_mithril2.default)(
-                  "button",
-                  { disabled: state.running, onclick: state.runRaytracing },
-                  "Run raytracing"
-                ),
-                (0, import_mithril2.default)(
-                  "div.progress-bar-holder",
-                  (0, import_mithril2.default)("div.progress-bar", {
-                    style: `width: ${100 * state.rayTracingProgress[0] / state.rayTracingProgress[1]}%;`
-                  })
-                )
-              ]),
-              (0, import_mithril2.default)(
-                "button.block",
-                {
-                  disabled: state.audioToPlay === null,
-                  onclick: state.playAudio
-                },
-                "Play audio"
-              ),
-              (0, import_mithril2.default)(
-                "button.block",
-                {
-                  disabled: state.audioToPlay === null,
-                  onclick: state.playConvolved
-                },
-                "Play convolved audio"
-              ),
               (0, import_mithril2.default)(WaveformPlot),
               (0, import_mithril2.default)(MagnitudePlot)
             ])

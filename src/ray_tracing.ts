@@ -24,6 +24,7 @@ export interface Settings {
   receiverPosition: Vec3;
   receiverRadius: number;
   rayCount: number;
+  throttle: number;
   rayPlotCount: number;
   bouncePlotCount: number;
   audioDuration: number;
@@ -579,9 +580,15 @@ export async function rayTrace(
 
   // Number of bounces per pass is limited by how large the output buffer is allowed to be.
   // Each ray outputs 2 floats (distance and intensity) per bounce.
-  const bouncesPerPass = Math.floor(
-    maxStorageBufferSize / (2 * FLOAT32_SIZE * settings.rayCount),
+  const bouncesPerPass = Math.max(
+    1,
+    Math.floor(
+      ((1 - settings.throttle) * maxStorageBufferSize) /
+        (2 * FLOAT32_SIZE * settings.rayCount),
+    ),
   );
+
+  console.log("bouncesPerPass", bouncesPerPass);
 
   // TODO: expose this as a setting.
   const maxPasses = 5;
