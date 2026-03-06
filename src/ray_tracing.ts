@@ -24,6 +24,8 @@ export interface Settings {
   receiverPosition: Vec3;
   receiverRadius: number;
   rayCount: number;
+  rayPlotCount: number;
+  bouncePlotCount: number;
   audioDuration: number;
   geometry: Triangle[];
   materials: Material[];
@@ -130,11 +132,11 @@ function specularRayIntersectionShaderCode(
   @group(0) @binding(5)
   var<storage, read_write> band_2000_and_4000: array<f32>;
 
-  // @group(0) @binding(6)
-  // var<storage, read_write> band_2000: array<Hit>;
+  @group(0) @binding(6)
+  var<storage, read_write> x_and_y: array<f32>;
 
-  // @group(0) @binding(7)
-  // var<storage, read_write> band_4000: array<Hit>;
+  @group(0) @binding(7)
+  var<storage, read_write> z_and_ray_intensity: array<f32>;
 
   @group(0) @binding(8)
   var<uniform> materials: array<Material, ${materials.length}>;
@@ -237,6 +239,7 @@ function specularRayIntersectionShaderCode(
         }
 
         // Ray-trace specular ray.
+
         let ray_cross_e2 = cross(raydirection, edge2);
 
         // NOTE: greater than 0 iff ray is incident on backface.
@@ -325,6 +328,11 @@ function specularRayIntersectionShaderCode(
         intensity_1000 *= material.r1000;
         intensity_2000 *= material.r2000;
         intensity_4000 *= material.r4000;
+
+        x_and_y[lowerIndex] = newposition.x;
+        x_and_y[upperIndex] = newposition.y;
+        z_and_ray_intensity[lowerIndex] = newposition.z;
+        z_and_ray_intensity[upperIndex] = (intensity_125 + intensity_250 + intensity_500 + intensity_1000 + intensity_2000 + intensity_4000) / 6;
       }
     }
 
@@ -432,6 +440,16 @@ class SpecularRayTracer {
           buffer: { type: "storage" },
         },
         {
+          binding: 6, // x and y
+          visibility: GPUShaderStage.COMPUTE,
+          buffer: { type: "storage" },
+        },
+        {
+          binding: 7, // z and ray intensity
+          visibility: GPUShaderStage.COMPUTE,
+          buffer: { type: "storage" },
+        },
+        {
           binding: 8, // materials
           visibility: GPUShaderStage.COMPUTE,
           buffer: { type: "uniform" },
@@ -518,10 +536,15 @@ class SpecularRayTracer {
   }
 }
 
+export type RayTraceOutput = {
+  audio: Float32Array<ArrayBuffer>;
+  bounceCoordinates: Float32Array<ArrayBuffer>[];
+};
+
 export async function rayTrace(
   settings: Settings,
   update: (bounces: number, totalBounces: number) => void,
-): Promise<Float32Array<ArrayBuffer> | null> {
+): Promise<RayTraceOutput | null> {
   console.time("Total (including setup)");
   console.log("Creating geometry");
   const rays: Ray[] = [];
@@ -588,10 +611,12 @@ export async function rayTrace(
     trianglesToFloatArray(triangles, settings.materials),
     materialsToFloatArray(settings.materials),
     [
-      new Float32Array(outputSize / 2),
-      new Float32Array(outputSize),
-      new Float32Array(outputSize),
-      new Float32Array(outputSize),
+      new Float32Array(outputSize / 2), // distance
+      new Float32Array(outputSize), // band 125 and 250
+      new Float32Array(outputSize), // band 500 and 1000
+      new Float32Array(outputSize), // band 2000a and 4000
+      new Float32Array(outputSize), // x and y
+      new Float32Array(outputSize), // z and ray intensity
     ],
     specularRayIntersectionShaderCode(
       settings.receiverPosition,
@@ -614,6 +639,20 @@ export async function rayTrace(
   const THRESHOLD = 1e-12;
   let averageValue = 0;
 
+  const gapBetweenIndicesToCount = Math.floor(
+    settings.rayCount / settings.rayPlotCount,
+  );
+
+  const plottedRayCoordinates: Float32Array<ArrayBuffer>[] = [];
+
+  for (let i = 0; i < settings.rayPlotCount; ++i) {
+    plottedRayCoordinates.push(new Float32Array(4 * settings.bouncePlotCount));
+    plottedRayCoordinates[i][0] = 1.0;
+    plottedRayCoordinates[i][2] = settings.sourcePosition[0];
+    plottedRayCoordinates[i][3] = settings.sourcePosition[1];
+    plottedRayCoordinates[i][4] = settings.sourcePosition[2];
+  }
+
   for (let i = 0; i < maxPasses; i++) {
     update(i * bouncesPerPass, 10 * bouncesPerPass);
 
@@ -623,12 +662,12 @@ export async function rayTrace(
     let thisPassAverageValue = 0;
     let thisPassMaxValue = 0;
 
-    for (let j = 0; j < outputSize / 2; j += 2) {
+    for (let j = 0; j < result[0].length; ++j) {
       const index = Math.round(SAMPLE_RATE * (result[0][j] / SPEED_OF_SOUND));
       const air_absorption = Math.exp(-result[0][j] * AIR_ABSORPTION_COEFF);
 
       const lowerIndex = j;
-      const upperIndex = outputSize / 2 + j;
+      const upperIndex = result[0].length + j;
 
       output125[index] += result[1][lowerIndex] * air_absorption;
       output250[index] += result[1][upperIndex] * air_absorption;
@@ -648,6 +687,29 @@ export async function rayTrace(
         air_absorption;
       thisPassAverageValue += Math.abs(avg);
       thisPassMaxValue = Math.max(Math.abs(avg), thisPassMaxValue);
+
+      const rayIndex = Math.floor(j / bouncesPerPass);
+      const bounceIndex = bouncesPerPass * i + j - bouncesPerPass * rayIndex;
+      if (
+        rayIndex % gapBetweenIndicesToCount === 0 &&
+        rayIndex / gapBetweenIndicesToCount < plottedRayCoordinates.length &&
+        bounceIndex < settings.bouncePlotCount
+      ) {
+        // Plus 1 so we skip the initial location.
+        const pointIndex = (bounceIndex + 1) * 4;
+
+        plottedRayCoordinates[rayIndex / gapBetweenIndicesToCount][pointIndex] =
+          result[5][upperIndex];
+        plottedRayCoordinates[rayIndex / gapBetweenIndicesToCount][
+          pointIndex + 1
+        ] = result[4][lowerIndex];
+        plottedRayCoordinates[rayIndex / gapBetweenIndicesToCount][
+          pointIndex + 2
+        ] = result[4][upperIndex];
+        plottedRayCoordinates[rayIndex / gapBetweenIndicesToCount][
+          pointIndex + 3
+        ] = result[5][lowerIndex];
+      }
     }
 
     if (i === 0) {
@@ -681,5 +743,8 @@ export async function rayTrace(
 
   console.log(outputAudio.join(","));
 
-  return outputAudio;
+  return {
+    audio: outputAudio,
+    bounceCoordinates: plottedRayCoordinates,
+  };
 }

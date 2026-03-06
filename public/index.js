@@ -429,11 +429,11 @@
   @group(0) @binding(5)
   var<storage, read_write> band_2000_and_4000: array<f32>;
 
-  // @group(0) @binding(6)
-  // var<storage, read_write> x_and_y: array<float>;
+  @group(0) @binding(6)
+  var<storage, read_write> x_and_y: array<f32>;
 
-  // @group(0) @binding(7)
-  // var<storage, read_write> z: array<float>;
+  @group(0) @binding(7)
+  var<storage, read_write> z_and_ray_intensity: array<f32>;
 
   @group(0) @binding(8)
   var<uniform> materials: array<Material, ${materials.length}>;
@@ -566,6 +566,7 @@
         }
 
         // Ray-trace specular ray.
+
         let ray_cross_e2 = cross(raydirection, edge2);
 
         // NOTE: greater than 0 iff ray is incident on backface.
@@ -679,6 +680,11 @@
         intensity_1000 *= material.r1000;
         intensity_2000 *= material.r2000;
         intensity_4000 *= material.r4000;
+
+        x_and_y[lowerIndex] = newposition.x;
+        x_and_y[upperIndex] = newposition.y;
+        z_and_ray_intensity[lowerIndex] = newposition.z;
+        z_and_ray_intensity[upperIndex] = (intensity_125 + intensity_250 + intensity_500 + intensity_1000 + intensity_2000 + intensity_4000) / 6;
       }
     }
 
@@ -756,9 +762,17 @@
       materialsToFloatArray(settings.materials),
       [
         new Float32Array(outputSize / 2),
+        // distance
         new Float32Array(outputSize),
+        // band 125 and 250
         new Float32Array(outputSize),
+        // band 500 and 1000
+        new Float32Array(outputSize),
+        // band 2000a and 4000
+        new Float32Array(outputSize),
+        // x and y
         new Float32Array(outputSize)
+        // z and ray intensity
       ],
       specularRayIntersectionShaderCode(
         settings.receiverPosition,
@@ -776,16 +790,27 @@
     let output4000 = new Float32Array(SAMPLE_RATE * settings.audioDuration);
     const THRESHOLD = 1e-12;
     let averageValue = 0;
+    const gapBetweenIndicesToCount = Math.floor(
+      settings.rayCount / settings.rayPlotCount
+    );
+    const plottedRayCoordinates = [];
+    for (let i = 0; i < settings.rayPlotCount; ++i) {
+      plottedRayCoordinates.push(new Float32Array(4 * settings.bouncePlotCount));
+      plottedRayCoordinates[i][0] = 1;
+      plottedRayCoordinates[i][2] = settings.sourcePosition[0];
+      plottedRayCoordinates[i][3] = settings.sourcePosition[1];
+      plottedRayCoordinates[i][4] = settings.sourcePosition[2];
+    }
     for (let i = 0; i < maxPasses; i++) {
       update(i * bouncesPerPass, 10 * bouncesPerPass);
       const result = await rayTracer.runPass(settings.rayCount);
       let thisPassAverageValue = 0;
       let thisPassMaxValue = 0;
-      for (let j = 0; j < outputSize / 2; j += 2) {
+      for (let j = 0; j < result[0].length; ++j) {
         const index = Math.round(SAMPLE_RATE * (result[0][j] / SPEED_OF_SOUND));
         const air_absorption = Math.exp(-result[0][j] * AIR_ABSORPTION_COEFF);
         const lowerIndex = j;
-        const upperIndex = outputSize / 2 + j;
+        const upperIndex = result[0].length + j;
         output125[index] += result[1][lowerIndex] * air_absorption;
         output250[index] += result[1][upperIndex] * air_absorption;
         output500[index] += result[2][lowerIndex] * air_absorption;
@@ -795,6 +820,15 @@
         const avg = (result[1][lowerIndex] + result[1][upperIndex] + result[2][lowerIndex] + result[2][upperIndex] + result[3][lowerIndex] + result[3][upperIndex]) * air_absorption;
         thisPassAverageValue += Math.abs(avg);
         thisPassMaxValue = Math.max(Math.abs(avg), thisPassMaxValue);
+        const rayIndex = Math.floor(j / bouncesPerPass);
+        const bounceIndex = bouncesPerPass * i + j - bouncesPerPass * rayIndex;
+        if (rayIndex % gapBetweenIndicesToCount === 0 && rayIndex / gapBetweenIndicesToCount < plottedRayCoordinates.length && bounceIndex < settings.bouncePlotCount) {
+          const pointIndex = (bounceIndex + 1) * 4;
+          plottedRayCoordinates[rayIndex / gapBetweenIndicesToCount][pointIndex] = result[5][upperIndex];
+          plottedRayCoordinates[rayIndex / gapBetweenIndicesToCount][pointIndex + 1] = result[4][lowerIndex];
+          plottedRayCoordinates[rayIndex / gapBetweenIndicesToCount][pointIndex + 2] = result[4][upperIndex];
+          plottedRayCoordinates[rayIndex / gapBetweenIndicesToCount][pointIndex + 3] = result[5][lowerIndex];
+        }
       }
       if (i === 0) {
         averageValue = thisPassAverageValue;
@@ -820,7 +854,10 @@
     console.timeEnd("Total (excluding setup)");
     console.timeEnd("Total (including setup)");
     console.log(outputAudio.join(","));
-    return outputAudio;
+    return {
+      audio: outputAudio,
+      bounceCoordinates: plottedRayCoordinates
+    };
   }
   var STANDARD_MAX_STORAGE_BUFFER_SIZE, AIR_ABSORPTION_COEFF, SpecularRayTracer;
   var init_ray_tracing = __esm({
@@ -899,6 +936,18 @@
               {
                 binding: 5,
                 // band 2000 and 4000
+                visibility: GPUShaderStage.COMPUTE,
+                buffer: { type: "storage" }
+              },
+              {
+                binding: 6,
+                // x and y
+                visibility: GPUShaderStage.COMPUTE,
+                buffer: { type: "storage" }
+              },
+              {
+                binding: 7,
+                // z and ray intensity
                 visibility: GPUShaderStage.COMPUTE,
                 buffer: { type: "storage" }
               },
@@ -304301,7 +304350,10 @@ void main() {
         sourcePosition: [0, 0, 0],
         receiverPosition: [3, 0, 0],
         receiverRadius: 0.2,
+        rayPlotCount: 10,
+        bouncePlotCount: 10,
         geometry: new NoGeometry(),
+        bounceCoordinates: [],
         materials: [
           {
             name: "carpet",
@@ -304357,7 +304409,7 @@ void main() {
         },
         runRaytracing: async function() {
           state.running = true;
-          state.audioToPlay = await rayTrace(
+          const rayTraceOutput = await rayTrace(
             {
               sourcePosition: state.sourcePosition,
               receiverPosition: state.receiverPosition,
@@ -304365,11 +304417,16 @@ void main() {
               geometry: state.geometry.triangles(),
               materials: state.materials,
               rayCount: state.rayCount,
+              rayPlotCount: state.rayPlotCount,
+              bouncePlotCount: state.bouncePlotCount,
               audioDuration: state.audioDuration
             },
             state.rayTraceUpdate
           );
+          state.audioToPlay = rayTraceOutput?.audio || null;
+          state.bounceCoordinates = rayTraceOutput?.bounceCoordinates || [];
           state.running = false;
+          ThreeView.updatePlot();
         },
         rayTraceUpdate: async function(bounces, totalBounces) {
           state.rayTracingProgress = [bounces, totalBounces];
@@ -304558,6 +304615,7 @@ void main() {
         source: null,
         receiver: null,
         camera: null,
+        rays: [],
         // Since updating the mesh takes a little time (due to re-orienting the triangles),
         // this flag is set when updating to avoid another update interfering (e.g. if the
         // user holds down the up arrow next to the room's x dimension).
@@ -304566,6 +304624,33 @@ void main() {
         // redrawn if it changes (i.e. state.geometry doesn't match).
         geometryData: [],
         selectedTriangle: -1,
+        updatePlot: async function() {
+          this.rays.forEach((ray) => {
+            this.scene?.remove(ray);
+            dispose(ray);
+          });
+          this.rays = [];
+          for (const ray of state.bounceCoordinates) {
+            for (let i = 0; i < ray.length - 4; i += 4) {
+              const points = [
+                new Vector3(ray[i + 1], ray[i + 2], ray[i + 3]),
+                new Vector3(ray[i + 5], ray[i + 6], ray[i + 7])
+              ];
+              const material = new LineBasicMaterial({
+                color: 255,
+                opacity: ray[i],
+                transparent: true
+              });
+              const geometry = new BufferGeometry().setFromPoints(points);
+              const line = new Line(geometry, material);
+              line.renderOrder = -1;
+              this.rays.push(line);
+            }
+          }
+          this.rays.forEach((ray) => {
+            this.scene?.add(ray);
+          });
+        },
         updateMesh: async function() {
           if (ThreeView.updatingMesh) {
             return;
@@ -304573,6 +304658,10 @@ void main() {
           ThreeView.updatingMesh = true;
           if (!ThreeView.scene) {
             return;
+          }
+          if (ThreeView.geometryData !== state.geometry.triangles()) {
+            state.bounceCoordinates = [];
+            ThreeView.updatePlot();
           }
           if (ThreeView.geometryData !== state.geometry.triangles() || ThreeView.selectedTriangle !== state.geometry.selectedIndex) {
             const unselectedTriangles = state.geometry.triangles().slice();
@@ -304836,6 +304925,40 @@ void main() {
                     oninput: function(e) {
                       const r = parseFloat(e.target.value);
                       state.receiverRadius = r;
+                    }
+                  })
+                ])
+              ]),
+              (0, import_mithril2.default)("section", { style: "border:1px solid black;" }, [
+                (0, import_mithril2.default)("label.v", [
+                  "Number of rays to plot:",
+                  (0, import_mithril2.default)("input", {
+                    type: "number",
+                    min: 0,
+                    max: state.rayCount,
+                    step: 1,
+                    value: state.rayPlotCount,
+                    onchange: (e) => {
+                      const val = parseInt(e.target.value);
+                      if (val !== void 0 && val > 0) {
+                        state.rayPlotCount = val;
+                      }
+                    }
+                  })
+                ]),
+                (0, import_mithril2.default)("label.v", [
+                  "Number of bounces to plot:",
+                  (0, import_mithril2.default)("input", {
+                    type: "number",
+                    min: 1,
+                    max: 1e4,
+                    step: 1,
+                    value: state.bouncePlotCount,
+                    onchange: (e) => {
+                      const val = parseInt(e.target.value);
+                      if (val !== void 0 && val > 0) {
+                        state.bouncePlotCount = val;
+                      }
                     }
                   })
                 ])

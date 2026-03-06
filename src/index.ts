@@ -21,7 +21,10 @@ let state = {
   sourcePosition: [0, 0, 0] as Vec3,
   receiverPosition: [3.0, 0.0, 0.0] as Vec3,
   receiverRadius: 0.2 as number | undefined,
+  rayPlotCount: 10,
+  bouncePlotCount: 10,
   geometry: new NoGeometry() as Geometry,
+  bounceCoordinates: [] as Float32Array<ArrayBuffer>[],
   materials: [
     {
       name: "carpet",
@@ -84,7 +87,7 @@ let state = {
 
   runRaytracing: async function () {
     state.running = true;
-    state.audioToPlay = await rayTrace(
+    const rayTraceOutput = await rayTrace(
       {
         sourcePosition: state.sourcePosition,
         receiverPosition: state.receiverPosition,
@@ -92,11 +95,16 @@ let state = {
         geometry: state.geometry.triangles(),
         materials: state.materials,
         rayCount: state.rayCount,
+        rayPlotCount: state.rayPlotCount,
+        bouncePlotCount: state.bouncePlotCount,
         audioDuration: state.audioDuration,
       },
       state.rayTraceUpdate,
     );
+    state.audioToPlay = rayTraceOutput?.audio || null;
+    state.bounceCoordinates = rayTraceOutput?.bounceCoordinates || [];
     state.running = false;
+    ThreeView.updatePlot();
   },
 
   rayTraceUpdate: async function (bounces: number, totalBounces: number) {
@@ -369,6 +377,7 @@ let ThreeView = {
   source: null as THREE.Mesh | null,
   receiver: null as THREE.Mesh | null,
   camera: null as THREE.Camera | null,
+  rays: [] as THREE.Line[],
 
   // Since updating the mesh takes a little time (due to re-orienting the triangles),
   // this flag is set when updating to avoid another update interfering (e.g. if the
@@ -379,6 +388,37 @@ let ThreeView = {
   // redrawn if it changes (i.e. state.geometry doesn't match).
   geometryData: [] as Triangle[],
   selectedTriangle: -1,
+
+  updatePlot: async function () {
+    this.rays.forEach((ray) => {
+      this.scene?.remove(ray);
+      dispose(ray);
+    });
+    this.rays = [];
+
+    for (const ray of state.bounceCoordinates) {
+      for (let i = 0; i < ray.length - 4; i += 4) {
+        const points = [
+          new THREE.Vector3(ray[i + 1], ray[i + 2], ray[i + 3]),
+          new THREE.Vector3(ray[i + 5], ray[i + 6], ray[i + 7]),
+        ];
+        const material = new THREE.LineBasicMaterial({
+          color: 0x0000ff,
+          opacity: ray[i],
+          transparent: true,
+        });
+        const geometry = new THREE.BufferGeometry().setFromPoints(points);
+        const line = new THREE.Line(geometry, material);
+        // Required to prevent issues with lines randomly disappearing.
+        line.renderOrder = -1;
+        this.rays.push(line);
+      }
+    }
+
+    this.rays.forEach((ray) => {
+      this.scene?.add(ray);
+    });
+  },
 
   updateMesh: async function () {
     // TODO BUG: this will mean that some updates are skipped, which could include
@@ -393,7 +433,13 @@ let ThreeView = {
       return;
     }
 
-    // If the geometry has changed, update it.
+    // Remove the current plotted points if the geometry has changed
+    if (ThreeView.geometryData !== state.geometry.triangles()) {
+      state.bounceCoordinates = [];
+      ThreeView.updatePlot();
+    }
+
+    // If the geometry or selection has changed, update it.
     if (
       ThreeView.geometryData !== state.geometry.triangles() ||
       ThreeView.selectedTriangle !== state.geometry.selectedIndex
@@ -710,6 +756,40 @@ let AppView = {
               oninput: function (e: InputEvent) {
                 const r = parseFloat((e.target as HTMLInputElement).value);
                 state.receiverRadius = r;
+              },
+            }),
+          ]),
+        ]),
+        m("section", { style: "border:1px solid black;" }, [
+          m("label.v", [
+            "Number of rays to plot:",
+            m("input", {
+              type: "number",
+              min: 0,
+              max: state.rayCount,
+              step: 1,
+              value: state.rayPlotCount,
+              onchange: (e: InputEvent) => {
+                const val = parseInt((e.target as HTMLInputElement).value);
+                if (val !== undefined && val > 0) {
+                  state.rayPlotCount = val;
+                }
+              },
+            }),
+          ]),
+          m("label.v", [
+            "Number of bounces to plot:",
+            m("input", {
+              type: "number",
+              min: 1,
+              max: 10000,
+              step: 1,
+              value: state.bouncePlotCount,
+              onchange: (e: InputEvent) => {
+                const val = parseInt((e.target as HTMLInputElement).value);
+                if (val !== undefined && val > 0) {
+                  state.bouncePlotCount = val;
+                }
               },
             }),
           ]),
