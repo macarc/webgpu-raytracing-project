@@ -1,5 +1,5 @@
 import { rayTrace } from "./ray_tracing";
-import { Material, SAMPLE_RATE, Triangle, Vec3 } from "./constants";
+import { isOnMobile, Material, SAMPLE_RATE, Triangle, Vec3 } from "./constants";
 import m from "mithril";
 import Plotly, { Data } from "plotly.js-dist";
 import * as THREE from "three";
@@ -23,7 +23,7 @@ let state = {
   receiverRadius: 0.2 as number | undefined,
   rayPlotCount: 10,
   bouncePlotCount: 10,
-  throttle: 0,
+  throttle: isOnMobile ? 0.8 : 0,
   geometry: new NoGeometry() as Geometry,
   bounceCoordinates: [] as Float32Array<ArrayBuffer>[],
   materials: [

@@ -37,7 +37,7 @@
     }
     return index;
   }
-  var FLOAT32_SIZE, WORKGROUP_SIZE, SAMPLE_RATE, SPEED_OF_SOUND;
+  var FLOAT32_SIZE, WORKGROUP_SIZE, SAMPLE_RATE, SPEED_OF_SOUND, mobileNames, isOnMobile;
   var init_constants = __esm({
     "src/constants.ts"() {
       "use strict";
@@ -45,6 +45,18 @@
       WORKGROUP_SIZE = 64;
       SAMPLE_RATE = 48e3;
       SPEED_OF_SOUND = 340;
+      mobileNames = [
+        /Android/i,
+        /webOS/i,
+        /iPhone/i,
+        /iPad/i,
+        /iPod/i,
+        /BlackBerry/i,
+        /Windows Phone/i
+      ];
+      isOnMobile = mobileNames.some((name2) => {
+        return navigator.userAgent.match(name2);
+      });
     }
   });
 
@@ -304357,7 +304369,7 @@ void main() {
         receiverRadius: 0.2,
         rayPlotCount: 10,
         bouncePlotCount: 10,
-        throttle: 0,
+        throttle: isOnMobile ? 0.8 : 0,
         geometry: new NoGeometry(),
         bounceCoordinates: [],
         materials: [

@@ -16,6 +16,9 @@ export async function getGPUDevice(): Promise<GPUDevice | null> {
     return null;
   }
 
+  // BUG: it seems that the limits are downgraded here
+  // (e.g. on my Mac, the adapter limit for maxStorageBufferBindingSize is much bigger than the device limit)
+  
   // Get the GPU adapter, from which a GPU device may be requested.
   const adapter = await navigator.gpu.requestAdapter({
     powerPreference: "high-performance",

@@ -42,3 +42,18 @@ export function materialNameToIndex(
   }
   return index;
 }
+
+const mobileNames = [
+    /Android/i,
+    /webOS/i,
+    /iPhone/i,
+    /iPad/i,
+    /iPod/i,
+    /BlackBerry/i,
+    /Windows Phone/i
+];
+
+// https://stackoverflow.com/a/11381730
+export const isOnMobile = mobileNames.some((name) => {
+    return navigator.userAgent.match(name);
+});
