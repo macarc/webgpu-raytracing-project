@@ -304190,9 +304190,9 @@ void main() {
         }
         view() {
           return (0, import_mithril.default)("section", [
-            (0, import_mithril.default)("label.v", [
+            (0, import_mithril.default)("label", [
               "Room dimensions:",
-              (0, import_mithril.default)("input.v", {
+              (0, import_mithril.default)("input", {
                 type: "number",
                 value: this.config.xDim,
                 oninput: (e) => {
@@ -304200,7 +304200,7 @@ void main() {
                   this.updateGeometry();
                 }
               }),
-              (0, import_mithril.default)("input.v", {
+              (0, import_mithril.default)("input", {
                 type: "number",
                 value: this.config.yDim,
                 oninput: (e) => {
@@ -304208,7 +304208,7 @@ void main() {
                   this.updateGeometry();
                 }
               }),
-              (0, import_mithril.default)("input.v", {
+              (0, import_mithril.default)("input", {
                 type: "number",
                 value: this.config.zDim,
                 oninput: (e) => {
@@ -304269,9 +304269,9 @@ void main() {
         }
         view() {
           return (0, import_mithril.default)("section", [
-            (0, import_mithril.default)("label.v", [
+            (0, import_mithril.default)("label", [
               "Scale:",
-              (0, import_mithril.default)("input.v", {
+              (0, import_mithril.default)("input", {
                 type: "number",
                 min: 0,
                 step: 0.1,
@@ -304319,7 +304319,7 @@ void main() {
         }
         view() {
           return (0, import_mithril.default)("section", [
-            (0, import_mithril.default)("label.v", [
+            (0, import_mithril.default)("label", [
               "Minimum number of triangles:",
               (0, import_mithril.default)("input", {
                 type: "number",
@@ -304558,17 +304558,20 @@ void main() {
           }
         },
         createMaterial: function() {
-          state.materials.push({
-            name: "material" + state.materials.length,
-            a125: 0,
-            a250: 0,
-            a500: 0,
-            a1000: 0,
-            a2000: 0,
-            a4000: 0,
-            // TODO: scatter
-            scatter: 0.2
-          });
+          const materialName = prompt("Enter material name:");
+          if (materialName) {
+            state.materials.push({
+              name: materialName,
+              a125: 0,
+              a250: 0,
+              a500: 0,
+              a1000: 0,
+              a2000: 0,
+              a4000: 0,
+              // TODO: scatter
+              scatter: 0.2
+            });
+          }
         }
       };
       function ScatterPlot(id, layout, getData) {
@@ -304823,7 +304826,6 @@ void main() {
             ThreeView.camera,
             renderer.domElement
           );
-          console.log(vnode.dom.clientWidth, vnode.dom.clientHeight);
           renderer.setSize(vnode.dom.clientWidth, vnode.dom.clientHeight);
           renderer.setClearColor("white");
           const animate = () => {
@@ -304968,72 +304970,94 @@ void main() {
       }
       function materialsMenu() {
         return [
-          (0, import_mithril2.default)("table.materials", [
-            (0, import_mithril2.default)("tr", [
-              (0, import_mithril2.default)("th", "Material"),
-              (0, import_mithril2.default)("th", "125Hz"),
-              (0, import_mithril2.default)("th", "250Hz"),
-              (0, import_mithril2.default)("th", "500Hz"),
-              (0, import_mithril2.default)("th", "1kHz"),
-              (0, import_mithril2.default)("th", "2kHz"),
-              (0, import_mithril2.default)("th", "4kHz")
+          (0, import_mithril2.default)("section", [
+            (0, import_mithril2.default)("table.materials", [
+              (0, import_mithril2.default)("tr", [
+                (0, import_mithril2.default)("th", "Material"),
+                (0, import_mithril2.default)("th", "125Hz"),
+                (0, import_mithril2.default)("th", "250Hz"),
+                (0, import_mithril2.default)("th", "500Hz"),
+                (0, import_mithril2.default)("th", "1kHz"),
+                (0, import_mithril2.default)("th", "2kHz"),
+                (0, import_mithril2.default)("th", "4kHz")
+              ]),
+              ...state.materials.map(
+                (material) => (0, import_mithril2.default)("tr", [
+                  (0, import_mithril2.default)("td.material-name", material.name),
+                  (0, import_mithril2.default)(
+                    "td",
+                    (0, import_mithril2.default)("input", {
+                      type: "number",
+                      min: 0,
+                      max: 1,
+                      step: 0.01,
+                      value: material.a125,
+                      onchange: (e) => state.setMaterialBand(e, material, "a125")
+                    })
+                  ),
+                  (0, import_mithril2.default)(
+                    "td",
+                    (0, import_mithril2.default)("input", {
+                      type: "number",
+                      min: 0,
+                      max: 1,
+                      step: 0.01,
+                      value: material.a250,
+                      onchange: (e) => state.setMaterialBand(e, material, "a250")
+                    })
+                  ),
+                  (0, import_mithril2.default)(
+                    "td",
+                    (0, import_mithril2.default)("input", {
+                      type: "number",
+                      min: 0,
+                      max: 1,
+                      step: 0.01,
+                      value: material.a500,
+                      onchange: (e) => state.setMaterialBand(e, material, "a500")
+                    })
+                  ),
+                  (0, import_mithril2.default)(
+                    "td",
+                    (0, import_mithril2.default)("input", {
+                      type: "number",
+                      min: 0,
+                      max: 1,
+                      step: 0.01,
+                      value: material.a1000,
+                      onchange: (e) => state.setMaterialBand(e, material, "a1000")
+                    })
+                  ),
+                  (0, import_mithril2.default)(
+                    "td",
+                    (0, import_mithril2.default)("input", {
+                      type: "number",
+                      min: 0,
+                      max: 1,
+                      step: 0.01,
+                      value: material.a2000,
+                      onchange: (e) => state.setMaterialBand(e, material, "a2000")
+                    })
+                  ),
+                  (0, import_mithril2.default)(
+                    "td",
+                    (0, import_mithril2.default)("input", {
+                      type: "number",
+                      min: 0,
+                      max: 1,
+                      step: 0.01,
+                      value: material.a4000,
+                      onchange: (e) => state.setMaterialBand(e, material, "a4000")
+                    })
+                  )
+                ])
+              )
             ]),
-            ...state.materials.map((material) => (0, import_mithril2.default)("tr", [
-              (0, import_mithril2.default)("td.material-name", material.name),
-              (0, import_mithril2.default)("td", (0, import_mithril2.default)("input", {
-                type: "number",
-                min: 0,
-                max: 1,
-                step: 0.01,
-                value: material.a125,
-                onchange: (e) => state.setMaterialBand(e, material, "a125")
-              })),
-              (0, import_mithril2.default)("td", (0, import_mithril2.default)("input", {
-                type: "number",
-                min: 0,
-                max: 1,
-                step: 0.01,
-                value: material.a250,
-                onchange: (e) => state.setMaterialBand(e, material, "a250")
-              })),
-              (0, import_mithril2.default)("td", (0, import_mithril2.default)("input", {
-                type: "number",
-                min: 0,
-                max: 1,
-                step: 0.01,
-                value: material.a500,
-                onchange: (e) => state.setMaterialBand(e, material, "a500")
-              })),
-              (0, import_mithril2.default)("td", (0, import_mithril2.default)("input", {
-                type: "number",
-                min: 0,
-                max: 1,
-                step: 0.01,
-                value: material.a1000,
-                onchange: (e) => state.setMaterialBand(e, material, "a1000")
-              })),
-              (0, import_mithril2.default)("td", (0, import_mithril2.default)("input", {
-                type: "number",
-                min: 0,
-                max: 1,
-                step: 0.01,
-                value: material.a2000,
-                onchange: (e) => state.setMaterialBand(e, material, "a2000")
-              })),
-              (0, import_mithril2.default)("td", (0, import_mithril2.default)("input", {
-                type: "number",
-                min: 0,
-                max: 1,
-                step: 0.01,
-                value: material.a4000,
-                onchange: (e) => state.setMaterialBand(e, material, "a4000")
-              }))
-            ]))
+            (0, import_mithril2.default)("button", { onclick: state.createMaterial }, "Create material")
           ]),
-          (0, import_mithril2.default)("button", { onclick: state.createMaterial }, "Create material"),
           state.geometry.selectedTriangle() ? (0, import_mithril2.default)("section", [
             (0, import_mithril2.default)("label", [
-              "Material:",
+              "Selected triangle material:",
               ...state.materials.map(
                 (material) => (0, import_mithril2.default)("label", [
                   (0, import_mithril2.default)("input", {

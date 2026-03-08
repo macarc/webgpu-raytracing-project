@@ -276,17 +276,20 @@ let state = {
   },
 
   createMaterial: function () {
-    state.materials.push({
-      name: "material" + state.materials.length,
-      a125: 0,
-      a250: 0,
-      a500: 0,
-      a1000: 0,
-      a2000: 0,
-      a4000: 0,
-      // TODO: scatter
-      scatter: 0.2,
-    });
+    const materialName = prompt("Enter material name:");
+    if (materialName) {
+      state.materials.push({
+        name: materialName,
+        a125: 0,
+        a250: 0,
+        a500: 0,
+        a1000: 0,
+        a2000: 0,
+        a4000: 0,
+        // TODO: scatter
+        scatter: 0.2,
+      });
+    }
   },
 };
 
@@ -774,80 +777,102 @@ function geometryMenu() {
 
 function materialsMenu() {
   return [
-    m("table.materials", [
-      m("tr", [
-        m("th", "Material"),
-        m("th", "125Hz"),
-        m("th", "250Hz"),
-        m("th", "500Hz"),
-        m("th", "1kHz"),
-        m("th", "2kHz"),
-        m("th", "4kHz"),
-      ]),
+    m("section", [
+      m("table.materials", [
+        m("tr", [
+          m("th", "Material"),
+          m("th", "125Hz"),
+          m("th", "250Hz"),
+          m("th", "500Hz"),
+          m("th", "1kHz"),
+          m("th", "2kHz"),
+          m("th", "4kHz"),
+        ]),
 
-      ...state.materials.map(material => m("tr", [
-        m('td.material-name', material.name),
-m("td", m("input", {
-            type: "number",
-            min: 0,
-            max: 1,
-            step: 0.01,
-            value: material.a125,
-            onchange: (e: InputEvent) =>
-              state.setMaterialBand(e, material, "a125"),
-          })),
-          m('td', m("input", {
-            type: "number",
-            min: 0,
-            max: 1,
-            step: 0.01,
-            value: material.a250,
-            onchange: (e: InputEvent) =>
-              state.setMaterialBand(e, material, "a250"),
-          })),
-          m('td', m("input", {
-            type: "number",
-            min: 0,
-            max: 1,
-            step: 0.01,
-            value: material.a500,
-            onchange: (e: InputEvent) =>
-              state.setMaterialBand(e, material, "a500"),
-          })),
-          m('td', m("input", {
-            type: "number",
-            min: 0,
-            max: 1,
-            step: 0.01,
-            value: material.a1000,
-            onchange: (e: InputEvent) =>
-              state.setMaterialBand(e, material, "a1000"),
-          })),
-          m('td', m("input", {
-            type: "number",
-            min: 0,
-            max: 1,
-            step: 0.01,
-            value: material.a2000,
-            onchange: (e: InputEvent) =>
-              state.setMaterialBand(e, material, "a2000"),
-          })),
-          m('td', m("input", {
-            type: "number",
-            min: 0,
-            max: 1,
-            step: 0.01,
-            value: material.a4000,
-            onchange: (e: InputEvent) =>
-              state.setMaterialBand(e, material, "a4000"),
-          }))
-      ]))
+        ...state.materials.map((material) =>
+          m("tr", [
+            m("td.material-name", material.name),
+            m(
+              "td",
+              m("input", {
+                type: "number",
+                min: 0,
+                max: 1,
+                step: 0.01,
+                value: material.a125,
+                onchange: (e: InputEvent) =>
+                  state.setMaterialBand(e, material, "a125"),
+              }),
+            ),
+            m(
+              "td",
+              m("input", {
+                type: "number",
+                min: 0,
+                max: 1,
+                step: 0.01,
+                value: material.a250,
+                onchange: (e: InputEvent) =>
+                  state.setMaterialBand(e, material, "a250"),
+              }),
+            ),
+            m(
+              "td",
+              m("input", {
+                type: "number",
+                min: 0,
+                max: 1,
+                step: 0.01,
+                value: material.a500,
+                onchange: (e: InputEvent) =>
+                  state.setMaterialBand(e, material, "a500"),
+              }),
+            ),
+            m(
+              "td",
+              m("input", {
+                type: "number",
+                min: 0,
+                max: 1,
+                step: 0.01,
+                value: material.a1000,
+                onchange: (e: InputEvent) =>
+                  state.setMaterialBand(e, material, "a1000"),
+              }),
+            ),
+            m(
+              "td",
+              m("input", {
+                type: "number",
+                min: 0,
+                max: 1,
+                step: 0.01,
+                value: material.a2000,
+                onchange: (e: InputEvent) =>
+                  state.setMaterialBand(e, material, "a2000"),
+              }),
+            ),
+            m(
+              "td",
+              m("input", {
+                type: "number",
+                min: 0,
+                max: 1,
+                step: 0.01,
+                value: material.a4000,
+                onchange: (e: InputEvent) =>
+                  state.setMaterialBand(e, material, "a4000"),
+              }),
+            ),
+          ]),
+        ),
+      ]),
+      m("button", { onclick: state.createMaterial }, "Create material"),
     ]),
-    m("button", { onclick: state.createMaterial }, "Create material"),
     state.geometry.selectedTriangle()
       ? m("section", [
           m("label", [
-            "Material:",
+            "Selected triangle material:",
             ...state.materials.map((material) =>
               m("label", [
                 m("input", {

@@ -66,33 +66,33 @@ export class BoxRoomGeometry extends Geometry {
   view(): m.Children {
     return m("section", [
       m("label", [
-      "Room dimensions:",
-      m("input", {
-        type: "number",
-        value: this.config.xDim,
-        oninput: (e: InputEvent) => {
-          this.config.xDim = parseFloat((e.target as HTMLInputElement).value);
-          this.updateGeometry();
-        },
-      }),
-      m("input", {
-        type: "number",
-        value: this.config.yDim,
-        oninput: (e: InputEvent) => {
-          this.config.yDim = parseFloat((e.target as HTMLInputElement).value);
-          this.updateGeometry();
-        },
-      }),
-      m("input", {
-        type: "number",
-        value: this.config.zDim,
-        oninput: (e: InputEvent) => {
-          this.config.zDim = parseFloat((e.target as HTMLInputElement).value);
-          this.updateGeometry();
-        },
-      }),
-    ])
-  ]);
+        "Room dimensions:",
+        m("input", {
+          type: "number",
+          value: this.config.xDim,
+          oninput: (e: InputEvent) => {
+            this.config.xDim = parseFloat((e.target as HTMLInputElement).value);
+            this.updateGeometry();
+          },
+        }),
+        m("input", {
+          type: "number",
+          value: this.config.yDim,
+          oninput: (e: InputEvent) => {
+            this.config.yDim = parseFloat((e.target as HTMLInputElement).value);
+            this.updateGeometry();
+          },
+        }),
+        m("input", {
+          type: "number",
+          value: this.config.zDim,
+          oninput: (e: InputEvent) => {
+            this.config.zDim = parseFloat((e.target as HTMLInputElement).value);
+            this.updateGeometry();
+          },
+        }),
+      ]),
+    ]);
   }
 
   private async updateGeometry() {
