@@ -77,8 +77,8 @@
     }
     const device = await adapter.requestDevice();
     device.lost.then((info) => {
-      console.error(`WebGPU device was lost: ${info.message}`);
       if (info.reason !== "destroyed") {
+        console.error(`WebGPU device was lost: ${info.message}`);
         console.log("Can restart if we want");
       }
     });
@@ -156,6 +156,7 @@
       stagingBuffer.unmap();
       return new Float32Array(arrayDataOutput);
     });
+    device.destroy();
     return dataOutput;
   }
   var init_webgpu = __esm({
@@ -481,6 +482,12 @@
   }
   // END-SOURCE
 
+
+  // From the spec:
+  // Implementations may assume that overflow, infinities, and NaNs are not present during shader execution.
+  // Therefore we define infinity to be the largest positive finite instead.
+  const INFINITY: f32 = 0x1.fffffep+127f;
+  
   @compute @workgroup_size(${WORKGROUP_SIZE})
   fn main(
     @builtin(global_invocation_id)
@@ -528,10 +535,9 @@
       let lowerIndex = rayIndex * ${bounceCount} + n;
       let upperIndex = arrayLength(&distances) + lowerIndex;
 
-      // TODO: infinity
-      var rayTriangleDistance = 1e10;
+      var rayTriangleDistance = INFINITY;
       var closestTriangleIndex = triangleCount;
-      var receiverRayTriangleDistance = 1e10; // TODO: infinity.
+      var receiverRayTriangleDistance = INFINITY;
 
       let vecToReceiver = receiverPosition - rayposition;
       let directionToReceiver = normalize(vecToReceiver);
@@ -723,6 +729,7 @@
     );
   }
   async function rayTrace(settings, update) {
+    update(0, 1);
     console.time("Total (including setup)");
     console.log("Creating geometry");
     const rays = [];
@@ -741,7 +748,6 @@
         direction: normalize(ray)
       });
     }
-    console.log(rays);
     const gpuDevice = await getGPUDevice();
     if (!gpuDevice) {
       throw new Error("Aborted due to null GPU device");
@@ -798,7 +804,6 @@
         bouncesPerPass
       )
     );
-    console.time("Total (excluding setup)");
     let output125 = new Float32Array(SAMPLE_RATE * settings.audioDuration);
     let output250 = new Float32Array(SAMPLE_RATE * settings.audioDuration);
     let output500 = new Float32Array(SAMPLE_RATE * settings.audioDuration);
@@ -818,8 +823,9 @@
       plottedRayCoordinates[i][3] = settings.sourcePosition[1];
       plottedRayCoordinates[i][4] = settings.sourcePosition[2];
     }
+    console.time("Total (excluding setup)");
     for (let i = 0; i < maxPasses; i++) {
-      update(i * bouncesPerPass, 10 * bouncesPerPass);
+      update((i + 1) * bouncesPerPass, maxPasses * bouncesPerPass);
       const result = await rayTracer.runPass(settings.rayCount);
       let thisPassAverageValue = 0;
       let thisPassMaxValue = 0;
@@ -855,12 +861,11 @@
           averageValue = thisPassAverageValue;
         } else if (thisPassMaxValue < THRESHOLD * averageValue) {
           console.log("below threshold on pass", i);
+          update((i + 1) * bouncesPerPass, (i + 1) * bouncesPerPass);
           break;
         }
       }
     }
-    console.log(plottedRayCoordinates);
-    update(maxPasses, maxPasses);
     const outputAudio = combineFilteredAudio(
       output125,
       output250,
@@ -872,6 +877,7 @@
     console.timeEnd("Total (excluding setup)");
     console.timeEnd("Total (including setup)");
     console.log(outputAudio.join(","));
+    gpuDevice.destroy();
     return {
       audio: outputAudio,
       bounceCoordinates: plottedRayCoordinates
@@ -303723,12 +303729,14 @@ void main() {
 
   @group(0) @binding(0)
   var<storage, read> triangles: array<Triangle>;
-
-  // TODO: these shouldn't really be floats.
+  
   @group(0) @binding(1)
   var<storage, read_write> output: array<f32>;
 
-  const INFINITY: f32 = 1e10;
+  // From the spec:
+  // Implementations may assume that overflow, infinities, and NaNs are not present during shader execution.
+  // Therefore we define infinity to be the largest positive finite instead.
+  const INFINITY: f32 = 0x1.fffffep+127f;
 
   fn distanceTo(origin: vec3f, ray: vec3f, triangle: Triangle) -> f32 {
     let smallestPositiveNormal = 1.17549435082228750797e-38f;
@@ -304181,32 +304189,34 @@ void main() {
           return this.geometry;
         }
         view() {
-          return (0, import_mithril.default)("label.v", [
-            "Room dimensions:",
-            (0, import_mithril.default)("input.v", {
-              type: "number",
-              value: this.config.xDim,
-              oninput: (e) => {
-                this.config.xDim = parseFloat(e.target.value);
-                this.updateGeometry();
-              }
-            }),
-            (0, import_mithril.default)("input.v", {
-              type: "number",
-              value: this.config.yDim,
-              oninput: (e) => {
-                this.config.yDim = parseFloat(e.target.value);
-                this.updateGeometry();
-              }
-            }),
-            (0, import_mithril.default)("input.v", {
-              type: "number",
-              value: this.config.zDim,
-              oninput: (e) => {
-                this.config.zDim = parseFloat(e.target.value);
-                this.updateGeometry();
-              }
-            })
+          return (0, import_mithril.default)("section", [
+            (0, import_mithril.default)("label.v", [
+              "Room dimensions:",
+              (0, import_mithril.default)("input.v", {
+                type: "number",
+                value: this.config.xDim,
+                oninput: (e) => {
+                  this.config.xDim = parseFloat(e.target.value);
+                  this.updateGeometry();
+                }
+              }),
+              (0, import_mithril.default)("input.v", {
+                type: "number",
+                value: this.config.yDim,
+                oninput: (e) => {
+                  this.config.yDim = parseFloat(e.target.value);
+                  this.updateGeometry();
+                }
+              }),
+              (0, import_mithril.default)("input.v", {
+                type: "number",
+                value: this.config.zDim,
+                oninput: (e) => {
+                  this.config.zDim = parseFloat(e.target.value);
+                  this.updateGeometry();
+                }
+              })
+            ])
           ]);
         }
         async updateGeometry() {
@@ -304258,7 +304268,7 @@ void main() {
           this.updateScaledGeometry();
         }
         view() {
-          return [
+          return (0, import_mithril.default)("section", [
             (0, import_mithril.default)("label.v", [
               "Scale:",
               (0, import_mithril.default)("input.v", {
@@ -304275,7 +304285,7 @@ void main() {
             (0, import_mithril.default)("button", { onclick: () => this.rotate("x") }, "Rotate X"),
             (0, import_mithril.default)("button", { onclick: () => this.rotate("y") }, "Rotate Y"),
             (0, import_mithril.default)("button", { onclick: () => this.rotate("z") }, "Rotate Z")
-          ];
+          ]);
         }
         updateScaledGeometry() {
           if (this.scale > 0) {
@@ -304308,7 +304318,7 @@ void main() {
           this.geometry[index].material = material;
         }
         view() {
-          return [
+          return (0, import_mithril.default)("section", [
             (0, import_mithril.default)("label.v", [
               "Minimum number of triangles:",
               (0, import_mithril.default)("input", {
@@ -304322,7 +304332,7 @@ void main() {
               })
             ]),
             (0, import_mithril.default)("span", ` Actual triangle count: ${this.actualTriangleCount}`)
-          ];
+          ]);
         }
         setMinTriangleCount(count) {
           if (count) {
@@ -304372,6 +304382,7 @@ void main() {
         throttle: isOnMobile ? 0.8 : 0,
         geometry: new NoGeometry(),
         bounceCoordinates: [],
+        menu: "geometry",
         materials: [
           {
             name: "carpet",
@@ -304424,6 +304435,9 @@ void main() {
         setTestGeometry: async function() {
           state.geometry = new LoadedGeometry("res/Modern Bathroom.3dm");
           await state.geometry.initialise();
+        },
+        setMenu: function(menu) {
+          state.menu = menu;
         },
         runRaytracing: async function() {
           state.running = true;
@@ -304720,7 +304734,10 @@ void main() {
                 )
               );
             } else {
-              selectedGeometry.setAttribute("position", new BufferAttribute(new Float32Array(), 3));
+              selectedGeometry.setAttribute(
+                "position",
+                new BufferAttribute(new Float32Array(), 3)
+              );
             }
             const selectedMaterial = new MeshBasicMaterial({ color: "green" });
             selectedMaterial.transparent = true;
@@ -304806,6 +304823,7 @@ void main() {
             ThreeView.camera,
             renderer.domElement
           );
+          console.log(vnode.dom.clientWidth, vnode.dom.clientHeight);
           renderer.setSize(vnode.dom.clientWidth, vnode.dom.clientHeight);
           renderer.setClearColor("white");
           const animate = () => {
@@ -304858,300 +304876,333 @@ void main() {
         },
         view: function() {
           return (0, import_mithril2.default)("canvas.three", {
-            onclick: this.onclick,
-            style: "position: fixed; top: 0; left: 0; width: 50vw; height: 100vh;"
+            onclick: this.onclick
           });
         }
       };
+      function geometryMenu() {
+        return [
+          (0, import_mithril2.default)("section", [
+            (0, import_mithril2.default)("button", { onclick: state.setBoxGeometry }, "Load box room"),
+            (0, import_mithril2.default)("button", { onclick: state.setRoundGeometry }, "Load sphere"),
+            (0, import_mithril2.default)("button", { onclick: state.setLoadGeometry }, "Load geometry"),
+            (0, import_mithril2.default)("button", { onclick: state.setTestGeometry }, "Load test geometry")
+          ]),
+          state.geometry.view(),
+          (0, import_mithril2.default)("section", [
+            (0, import_mithril2.default)("label", [
+              "Source position:",
+              (0, import_mithril2.default)("input", {
+                type: "number",
+                value: state.sourcePosition[0],
+                oninput: function(e) {
+                  state.sourcePosition[0] = parseFloat(
+                    e.target.value
+                  );
+                }
+              }),
+              (0, import_mithril2.default)("input", {
+                type: "number",
+                value: state.sourcePosition[1],
+                oninput: function(e) {
+                  state.sourcePosition[1] = parseFloat(
+                    e.target.value
+                  );
+                }
+              }),
+              (0, import_mithril2.default)("input", {
+                type: "number",
+                value: state.sourcePosition[2],
+                oninput: function(e) {
+                  state.sourcePosition[2] = parseFloat(
+                    e.target.value
+                  );
+                }
+              })
+            ]),
+            (0, import_mithril2.default)("label", [
+              "Receiver position:",
+              (0, import_mithril2.default)("input", {
+                type: "number",
+                value: state.receiverPosition[0],
+                oninput: function(e) {
+                  state.receiverPosition[0] = parseFloat(
+                    e.target.value
+                  );
+                }
+              }),
+              (0, import_mithril2.default)("input", {
+                type: "number",
+                value: state.receiverPosition[1],
+                oninput: function(e) {
+                  state.receiverPosition[1] = parseFloat(
+                    e.target.value
+                  );
+                }
+              }),
+              (0, import_mithril2.default)("input", {
+                type: "number",
+                value: state.receiverPosition[2],
+                oninput: function(e) {
+                  state.receiverPosition[2] = parseFloat(
+                    e.target.value
+                  );
+                }
+              })
+            ]),
+            (0, import_mithril2.default)("label", [
+              "Receiver radius (m):",
+              (0, import_mithril2.default)("input", {
+                type: "number",
+                min: 0,
+                step: 0.05,
+                value: state.receiverRadius,
+                oninput: function(e) {
+                  const r = parseFloat(e.target.value);
+                  state.receiverRadius = r;
+                }
+              })
+            ])
+          ])
+        ];
+      }
+      function materialsMenu() {
+        return [
+          (0, import_mithril2.default)("table.materials", [
+            (0, import_mithril2.default)("tr", [
+              (0, import_mithril2.default)("th", "Material"),
+              (0, import_mithril2.default)("th", "125Hz"),
+              (0, import_mithril2.default)("th", "250Hz"),
+              (0, import_mithril2.default)("th", "500Hz"),
+              (0, import_mithril2.default)("th", "1kHz"),
+              (0, import_mithril2.default)("th", "2kHz"),
+              (0, import_mithril2.default)("th", "4kHz")
+            ]),
+            ...state.materials.map((material) => (0, import_mithril2.default)("tr", [
+              (0, import_mithril2.default)("td.material-name", material.name),
+              (0, import_mithril2.default)("td", (0, import_mithril2.default)("input", {
+                type: "number",
+                min: 0,
+                max: 1,
+                step: 0.01,
+                value: material.a125,
+                onchange: (e) => state.setMaterialBand(e, material, "a125")
+              })),
+              (0, import_mithril2.default)("td", (0, import_mithril2.default)("input", {
+                type: "number",
+                min: 0,
+                max: 1,
+                step: 0.01,
+                value: material.a250,
+                onchange: (e) => state.setMaterialBand(e, material, "a250")
+              })),
+              (0, import_mithril2.default)("td", (0, import_mithril2.default)("input", {
+                type: "number",
+                min: 0,
+                max: 1,
+                step: 0.01,
+                value: material.a500,
+                onchange: (e) => state.setMaterialBand(e, material, "a500")
+              })),
+              (0, import_mithril2.default)("td", (0, import_mithril2.default)("input", {
+                type: "number",
+                min: 0,
+                max: 1,
+                step: 0.01,
+                value: material.a1000,
+                onchange: (e) => state.setMaterialBand(e, material, "a1000")
+              })),
+              (0, import_mithril2.default)("td", (0, import_mithril2.default)("input", {
+                type: "number",
+                min: 0,
+                max: 1,
+                step: 0.01,
+                value: material.a2000,
+                onchange: (e) => state.setMaterialBand(e, material, "a2000")
+              })),
+              (0, import_mithril2.default)("td", (0, import_mithril2.default)("input", {
+                type: "number",
+                min: 0,
+                max: 1,
+                step: 0.01,
+                value: material.a4000,
+                onchange: (e) => state.setMaterialBand(e, material, "a4000")
+              }))
+            ]))
+          ]),
+          (0, import_mithril2.default)("button", { onclick: state.createMaterial }, "Create material"),
+          state.geometry.selectedTriangle() ? (0, import_mithril2.default)("section", [
+            (0, import_mithril2.default)("label", [
+              "Material:",
+              ...state.materials.map(
+                (material) => (0, import_mithril2.default)("label", [
+                  (0, import_mithril2.default)("input", {
+                    type: "radio",
+                    name: "select-material",
+                    value: material.name,
+                    checked: state.geometry.selectedTriangle()?.material === material.name,
+                    onchange: (e) => state.setSelectedMaterial(e)
+                  }),
+                  material.name
+                ])
+              )
+            ])
+          ]) : null
+        ];
+      }
+      function runsMenu() {
+        return [
+          (0, import_mithril2.default)("section", [
+            (0, import_mithril2.default)("label", [
+              "Ray count:",
+              (0, import_mithril2.default)("input", {
+                type: "number",
+                min: 1,
+                value: state.rayCount,
+                oninput: function(e) {
+                  state.rayCount = parseInt(e.target.value);
+                }
+              })
+            ]),
+            (0, import_mithril2.default)("label", [
+              "Output duration (s):",
+              (0, import_mithril2.default)("input", {
+                type: "number",
+                min: 0,
+                step: 0.1,
+                value: state.audioDuration,
+                oninput: function(e) {
+                  state.audioDuration = parseFloat(
+                    e.target.value
+                  );
+                }
+              })
+            ]),
+            (0, import_mithril2.default)("label", [
+              "Throttle amount (%):",
+              (0, import_mithril2.default)("input", {
+                type: "number",
+                min: 0,
+                max: 100,
+                step: 1,
+                value: state.throttle * 100,
+                onchange: function(e) {
+                  const val = parseInt(e.target.value);
+                  if (val !== void 0 && val >= 0 && val <= 100) {
+                    state.throttle = val / 100;
+                  }
+                }
+              })
+            ]),
+            (0, import_mithril2.default)("label", [
+              "Number of rays to plot:",
+              (0, import_mithril2.default)("input", {
+                type: "number",
+                min: 0,
+                max: state.rayCount,
+                step: 1,
+                value: state.rayPlotCount,
+                onchange: (e) => {
+                  const val = parseInt(e.target.value);
+                  if (val !== void 0 && val > 0) {
+                    state.rayPlotCount = val;
+                  }
+                }
+              })
+            ]),
+            (0, import_mithril2.default)("label", [
+              "Number of bounces to plot:",
+              (0, import_mithril2.default)("input", {
+                type: "number",
+                min: 1,
+                max: 1e4,
+                step: 1,
+                value: state.bouncePlotCount,
+                onchange: (e) => {
+                  const val = parseInt(e.target.value);
+                  if (val !== void 0 && val > 0) {
+                    state.bouncePlotCount = val;
+                  }
+                }
+              })
+            ])
+          ]),
+          (0, import_mithril2.default)("section", [
+            (0, import_mithril2.default)(
+              "button",
+              { disabled: state.running, onclick: state.runRaytracing },
+              "Run raytracing"
+            ),
+            (0, import_mithril2.default)(
+              "div.progress-bar-holder",
+              (0, import_mithril2.default)("div.progress-bar", {
+                style: `width: ${100 * state.rayTracingProgress[0] / state.rayTracingProgress[1]}%;`
+              })
+            ),
+            " ",
+            state.rayTracingProgress[0],
+            " bounces"
+          ]),
+          (0, import_mithril2.default)("section", [
+            (0, import_mithril2.default)(
+              "button",
+              {
+                disabled: state.audioToPlay === null,
+                onclick: state.playAudio
+              },
+              "Play audio"
+            ),
+            (0, import_mithril2.default)(
+              "button",
+              {
+                disabled: state.audioToPlay === null,
+                onclick: state.playConvolved
+              },
+              "Play convolved audio"
+            )
+          ]),
+          (0, import_mithril2.default)(WaveformPlot),
+          (0, import_mithril2.default)(MagnitudePlot)
+        ];
+      }
       var AppView = {
         view: function() {
-          return (0, import_mithril2.default)("div", [
+          return (0, import_mithril2.default)("div.root-container", [
             (0, import_mithril2.default)(ThreeView),
             (0, import_mithril2.default)("div.sidebar", [
-              (0, import_mithril2.default)("section", { style: "border:1px solid black;" }, [
-                (0, import_mithril2.default)("button", { onclick: state.setBoxGeometry }, "Load box room"),
-                (0, import_mithril2.default)("button", { onclick: state.setRoundGeometry }, "Load sphere"),
-                (0, import_mithril2.default)("button", { onclick: state.setLoadGeometry }, "Load geometry"),
-                (0, import_mithril2.default)("button", { onclick: state.setTestGeometry }, "Load test geometry"),
-                state.geometry.view()
-              ]),
-              (0, import_mithril2.default)("section", { style: "border:1px solid black;" }, [
-                (0, import_mithril2.default)("label.v", [
-                  "Source position:",
-                  (0, import_mithril2.default)("input.v", {
-                    type: "number",
-                    value: state.sourcePosition[0],
-                    oninput: function(e) {
-                      state.sourcePosition[0] = parseFloat(
-                        e.target.value
-                      );
-                    }
-                  }),
-                  (0, import_mithril2.default)("input.v", {
-                    type: "number",
-                    value: state.sourcePosition[1],
-                    oninput: function(e) {
-                      state.sourcePosition[1] = parseFloat(
-                        e.target.value
-                      );
-                    }
-                  }),
-                  (0, import_mithril2.default)("input.v", {
-                    type: "number",
-                    value: state.sourcePosition[2],
-                    oninput: function(e) {
-                      state.sourcePosition[2] = parseFloat(
-                        e.target.value
-                      );
-                    }
-                  })
-                ]),
-                (0, import_mithril2.default)("label.v", [
-                  "Receiver position:",
-                  (0, import_mithril2.default)("input.v", {
-                    type: "number",
-                    value: state.receiverPosition[0],
-                    oninput: function(e) {
-                      state.receiverPosition[0] = parseFloat(
-                        e.target.value
-                      );
-                    }
-                  }),
-                  (0, import_mithril2.default)("input.v", {
-                    type: "number",
-                    value: state.receiverPosition[1],
-                    oninput: function(e) {
-                      state.receiverPosition[1] = parseFloat(
-                        e.target.value
-                      );
-                    }
-                  }),
-                  (0, import_mithril2.default)("input.v", {
-                    type: "number",
-                    value: state.receiverPosition[2],
-                    oninput: function(e) {
-                      state.receiverPosition[2] = parseFloat(
-                        e.target.value
-                      );
-                    }
-                  })
-                ]),
-                (0, import_mithril2.default)("label", [
-                  "Receiver radius:",
-                  (0, import_mithril2.default)("input", {
-                    type: "number",
-                    min: 0,
-                    step: 0.05,
-                    value: state.receiverRadius,
-                    oninput: function(e) {
-                      const r = parseFloat(e.target.value);
-                      state.receiverRadius = r;
-                    }
-                  })
-                ])
-              ]),
-              (0, import_mithril2.default)("section", { style: "border:1px solid black;" }, [
-                (0, import_mithril2.default)("label.v", [
-                  "Number of rays to plot:",
-                  (0, import_mithril2.default)("input", {
-                    type: "number",
-                    min: 0,
-                    max: state.rayCount,
-                    step: 1,
-                    value: state.rayPlotCount,
-                    onchange: (e) => {
-                      const val = parseInt(e.target.value);
-                      if (val !== void 0 && val > 0) {
-                        state.rayPlotCount = val;
-                      }
-                    }
-                  })
-                ]),
-                (0, import_mithril2.default)("label.v", [
-                  "Number of bounces to plot:",
-                  (0, import_mithril2.default)("input", {
-                    type: "number",
-                    min: 1,
-                    max: 1e4,
-                    step: 1,
-                    value: state.bouncePlotCount,
-                    onchange: (e) => {
-                      const val = parseInt(e.target.value);
-                      if (val !== void 0 && val > 0) {
-                        state.bouncePlotCount = val;
-                      }
-                    }
-                  })
-                ])
-              ]),
-              (0, import_mithril2.default)("section", { style: "border:1px solid black;" }, [
-                (0, import_mithril2.default)("label.block", [
-                  "Ray count:",
-                  (0, import_mithril2.default)("input", {
-                    type: "number",
-                    min: 1,
-                    value: state.rayCount,
-                    oninput: function(e) {
-                      state.rayCount = parseInt(e.target.value);
-                    }
-                  })
-                ]),
-                (0, import_mithril2.default)("label.block", [
-                  "Output duration (s):",
-                  (0, import_mithril2.default)("input", {
-                    type: "number",
-                    min: 0,
-                    step: 0.1,
-                    value: state.audioDuration,
-                    oninput: function(e) {
-                      state.audioDuration = parseFloat(
-                        e.target.value
-                      );
-                    }
-                  })
-                ]),
-                (0, import_mithril2.default)("label.block", [
-                  "Throttle amount: ",
-                  (0, import_mithril2.default)("input", {
-                    type: "number",
-                    min: 0,
-                    max: 100,
-                    step: 1,
-                    value: state.throttle * 100,
-                    onchange: function(e) {
-                      const val = parseInt(e.target.value);
-                      if (val !== void 0 && val >= 0 && val <= 100) {
-                        state.throttle = val / 100;
-                      }
-                    }
-                  }),
-                  "%"
-                ]),
+              (0, import_mithril2.default)("div.topbar", [
                 (0, import_mithril2.default)(
-                  "button",
-                  { disabled: state.running, onclick: state.runRaytracing },
-                  "Run raytracing"
+                  "div.tab",
+                  {
+                    class: state.menu === "geometry" ? "selected" : "",
+                    onclick: () => state.setMenu("geometry")
+                  },
+                  "Geometry"
                 ),
+                (0, import_mithril2.default)("div.tab-gap"),
                 (0, import_mithril2.default)(
-                  "div.progress-bar-holder",
-                  (0, import_mithril2.default)("div.progress-bar", {
-                    style: `width: ${100 * state.rayTracingProgress[0] / state.rayTracingProgress[1]}%;`
-                  })
+                  "div.tab",
+                  {
+                    class: state.menu === "materials" ? "selected" : "",
+                    onclick: () => state.setMenu("materials")
+                  },
+                  "Materials"
+                ),
+                (0, import_mithril2.default)("div.tab-gap"),
+                (0, import_mithril2.default)(
+                  "div.tab",
+                  {
+                    class: state.menu === "runs" ? "selected" : "",
+                    onclick: () => state.setMenu("runs")
+                  },
+                  "Runs"
                 )
               ]),
-              (0, import_mithril2.default)(
-                "button.block",
-                {
-                  disabled: state.audioToPlay === null,
-                  onclick: state.playAudio
-                },
-                "Play audio"
-              ),
-              (0, import_mithril2.default)(
-                "button.block",
-                {
-                  disabled: state.audioToPlay === null,
-                  onclick: state.playConvolved
-                },
-                "Play convolved audio"
-              ),
-              (0, import_mithril2.default)("section", { style: "border:1px solid black;" }, [
-                ...state.materials.map(
-                  (material) => (0, import_mithril2.default)("section", [
-                    (0, import_mithril2.default)(
-                      "p",
-                      material.name[0].toLocaleUpperCase(),
-                      material.name.slice(1)
-                    ),
-                    (0, import_mithril2.default)("label", [
-                      "125Hz:",
-                      (0, import_mithril2.default)("input", {
-                        type: "number",
-                        min: 0,
-                        max: 1,
-                        step: 0.01,
-                        value: material.a125,
-                        onchange: (e) => state.setMaterialBand(e, material, "a125")
-                      })
-                    ]),
-                    (0, import_mithril2.default)("label", [
-                      "250Hz:",
-                      (0, import_mithril2.default)("input", {
-                        type: "number",
-                        min: 0,
-                        max: 1,
-                        step: 0.01,
-                        value: material.a250,
-                        onchange: (e) => state.setMaterialBand(e, material, "a250")
-                      })
-                    ]),
-                    (0, import_mithril2.default)("label", [
-                      "500Hz:",
-                      (0, import_mithril2.default)("input", {
-                        type: "number",
-                        min: 0,
-                        max: 1,
-                        step: 0.01,
-                        value: material.a500,
-                        onchange: (e) => state.setMaterialBand(e, material, "a500")
-                      })
-                    ]),
-                    (0, import_mithril2.default)("label", [
-                      "1kHz:",
-                      (0, import_mithril2.default)("input", {
-                        type: "number",
-                        min: 0,
-                        max: 1,
-                        step: 0.01,
-                        value: material.a1000,
-                        onchange: (e) => state.setMaterialBand(e, material, "a1000")
-                      })
-                    ]),
-                    (0, import_mithril2.default)("label", [
-                      "2kHz:",
-                      (0, import_mithril2.default)("input", {
-                        type: "number",
-                        min: 0,
-                        max: 1,
-                        step: 0.01,
-                        value: material.a2000,
-                        onchange: (e) => state.setMaterialBand(e, material, "a2000")
-                      })
-                    ]),
-                    (0, import_mithril2.default)("label", [
-                      "4kHz:",
-                      (0, import_mithril2.default)("input", {
-                        type: "number",
-                        min: 0,
-                        max: 1,
-                        step: 0.01,
-                        value: material.a4000,
-                        onchange: (e) => state.setMaterialBand(e, material, "a4000")
-                      })
-                    ])
-                  ])
-                ),
-                (0, import_mithril2.default)("button", { onclick: state.createMaterial }, "Create material")
-              ]),
-              state.geometry.selectedTriangle() ? (0, import_mithril2.default)("section", { style: "border:1px solid black;" }, [
-                (0, import_mithril2.default)("label.block", [
-                  "Material:",
-                  ...state.materials.map(
-                    (material) => (0, import_mithril2.default)("label.v", [
-                      (0, import_mithril2.default)("input", {
-                        type: "radio",
-                        name: "select-material",
-                        value: material.name,
-                        checked: state.geometry.selectedTriangle()?.material === material.name,
-                        onchange: (e) => state.setSelectedMaterial(e)
-                      }),
-                      material.name
-                    ])
-                  )
-                ])
-              ]) : null,
-              (0, import_mithril2.default)(WaveformPlot),
-              (0, import_mithril2.default)(MagnitudePlot)
+              (0, import_mithril2.default)("section.menu-container", [
+                state.menu === "geometry" ? geometryMenu() : null,
+                state.menu === "materials" ? materialsMenu() : null,
+                state.menu === "runs" ? runsMenu() : null
+              ])
             ])
           ]);
         }

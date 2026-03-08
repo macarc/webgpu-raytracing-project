@@ -15,6 +15,8 @@ import {
 } from "./geometry";
 import { dispose } from "./geometry_helpers";
 
+type Menu = "geometry" | "materials" | "runs";
+
 let state = {
   rayCount: 20000,
   audioDuration: 10,
@@ -26,6 +28,7 @@ let state = {
   throttle: isOnMobile ? 0.8 : 0,
   geometry: new NoGeometry() as Geometry,
   bounceCoordinates: [] as Float32Array<ArrayBuffer>[],
+  menu: "geometry" as Menu,
   materials: [
     {
       name: "carpet",
@@ -84,6 +87,10 @@ let state = {
     // state.geometry = new LoadedGeometry("res/auditorium1_scale.glb");
     state.geometry = new LoadedGeometry("res/Modern Bathroom.3dm");
     await state.geometry.initialise();
+  },
+
+  setMenu: function (menu: Menu) {
+    state.menu = menu;
   },
 
   runRaytracing: async function () {
@@ -492,7 +499,10 @@ let ThreeView = {
           ),
         );
       } else {
-        selectedGeometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(), 3));
+        selectedGeometry.setAttribute(
+          "position",
+          new THREE.BufferAttribute(new Float32Array(), 3),
+        );
       }
       const selectedMaterial = new THREE.MeshBasicMaterial({ color: "green" });
       selectedMaterial.transparent = true;
@@ -671,312 +681,348 @@ let ThreeView = {
   view: function () {
     return m("canvas.three", {
       onclick: this.onclick,
-      style: "position: fixed; top: 0; left: 0; width: 50vw; height: 100vh;",
     });
   },
 };
 
+function geometryMenu() {
+  return [
+    m("section", [
+      m("button", { onclick: state.setBoxGeometry }, "Load box room"),
+      m("button", { onclick: state.setRoundGeometry }, "Load sphere"),
+      m("button", { onclick: state.setLoadGeometry }, "Load geometry"),
+      m("button", { onclick: state.setTestGeometry }, "Load test geometry"),
+    ]),
+    state.geometry.view(),
+    m("section", [
+      m("label", [
+        "Source position:",
+        m("input", {
+          type: "number",
+          value: state.sourcePosition[0],
+          oninput: function (e: InputEvent) {
+            state.sourcePosition[0] = parseFloat(
+              (e.target as HTMLInputElement).value,
+            );
+          },
+        }),
+        m("input", {
+          type: "number",
+          value: state.sourcePosition[1],
+          oninput: function (e: InputEvent) {
+            state.sourcePosition[1] = parseFloat(
+              (e.target as HTMLInputElement).value,
+            );
+          },
+        }),
+        m("input", {
+          type: "number",
+          value: state.sourcePosition[2],
+          oninput: function (e: InputEvent) {
+            state.sourcePosition[2] = parseFloat(
+              (e.target as HTMLInputElement).value,
+            );
+          },
+        }),
+      ]),
+      m("label", [
+        "Receiver position:",
+        m("input", {
+          type: "number",
+          value: state.receiverPosition[0],
+          oninput: function (e: InputEvent) {
+            state.receiverPosition[0] = parseFloat(
+              (e.target as HTMLInputElement).value,
+            );
+          },
+        }),
+        m("input", {
+          type: "number",
+          value: state.receiverPosition[1],
+          oninput: function (e: InputEvent) {
+            state.receiverPosition[1] = parseFloat(
+              (e.target as HTMLInputElement).value,
+            );
+          },
+        }),
+        m("input", {
+          type: "number",
+          value: state.receiverPosition[2],
+          oninput: function (e: InputEvent) {
+            state.receiverPosition[2] = parseFloat(
+              (e.target as HTMLInputElement).value,
+            );
+          },
+        }),
+      ]),
+      m("label", [
+        "Receiver radius (m):",
+        m("input", {
+          type: "number",
+          min: 0,
+          step: 0.05,
+          value: state.receiverRadius,
+          oninput: function (e: InputEvent) {
+            const r = parseFloat((e.target as HTMLInputElement).value);
+            state.receiverRadius = r;
+          },
+        }),
+      ]),
+    ]),
+  ];
+}
+
+function materialsMenu() {
+  return [
+    m("table.materials", [
+      m("tr", [
+        m("th", "Material"),
+        m("th", "125Hz"),
+        m("th", "250Hz"),
+        m("th", "500Hz"),
+        m("th", "1kHz"),
+        m("th", "2kHz"),
+        m("th", "4kHz"),
+      ]),
+
+      ...state.materials.map(material => m("tr", [
+        m('td.material-name', material.name),
+m("td", m("input", {
+            type: "number",
+            min: 0,
+            max: 1,
+            step: 0.01,
+            value: material.a125,
+            onchange: (e: InputEvent) =>
+              state.setMaterialBand(e, material, "a125"),
+          })),
+          m('td', m("input", {
+            type: "number",
+            min: 0,
+            max: 1,
+            step: 0.01,
+            value: material.a250,
+            onchange: (e: InputEvent) =>
+              state.setMaterialBand(e, material, "a250"),
+          })),
+          m('td', m("input", {
+            type: "number",
+            min: 0,
+            max: 1,
+            step: 0.01,
+            value: material.a500,
+            onchange: (e: InputEvent) =>
+              state.setMaterialBand(e, material, "a500"),
+          })),
+          m('td', m("input", {
+            type: "number",
+            min: 0,
+            max: 1,
+            step: 0.01,
+            value: material.a1000,
+            onchange: (e: InputEvent) =>
+              state.setMaterialBand(e, material, "a1000"),
+          })),
+          m('td', m("input", {
+            type: "number",
+            min: 0,
+            max: 1,
+            step: 0.01,
+            value: material.a2000,
+            onchange: (e: InputEvent) =>
+              state.setMaterialBand(e, material, "a2000"),
+          })),
+          m('td', m("input", {
+            type: "number",
+            min: 0,
+            max: 1,
+            step: 0.01,
+            value: material.a4000,
+            onchange: (e: InputEvent) =>
+              state.setMaterialBand(e, material, "a4000"),
+          }))
+      ]))
+    ]),
+    m("button", { onclick: state.createMaterial }, "Create material"),
+    state.geometry.selectedTriangle()
+      ? m("section", [
+          m("label", [
+            "Material:",
+            ...state.materials.map((material) =>
+              m("label", [
+                m("input", {
+                  type: "radio",
+                  name: "select-material",
+                  value: material.name,
+                  checked:
+                    state.geometry.selectedTriangle()?.material ===
+                    material.name,
+                  onchange: (e: InputEvent) => state.setSelectedMaterial(e),
+                }),
+                material.name,
+              ]),
+            ),
+          ]),
+        ])
+      : null,
+  ];
+}
+
+function runsMenu() {
+  return [
+    m("section", [
+      m("label", [
+        "Ray count:",
+        m("input", {
+          type: "number",
+          min: 1,
+          value: state.rayCount,
+          oninput: function (e: InputEvent) {
+            state.rayCount = parseInt((e.target as HTMLInputElement).value);
+          },
+        }),
+      ]),
+      m("label", [
+        "Output duration (s):",
+        m("input", {
+          type: "number",
+          min: 0,
+          step: 0.1,
+          value: state.audioDuration,
+          oninput: function (e: InputEvent) {
+            state.audioDuration = parseFloat(
+              (e.target as HTMLInputElement).value,
+            );
+          },
+        }),
+      ]),
+      m("label", [
+        "Throttle amount (%):",
+        m("input", {
+          type: "number",
+          min: 0,
+          max: 100,
+          step: 1,
+          value: state.throttle * 100,
+          onchange: function (e: InputEvent) {
+            const val = parseInt((e.target as HTMLInputElement).value);
+
+            if (val !== undefined && val >= 0 && val <= 100) {
+              state.throttle = val / 100;
+            }
+          },
+        }),
+      ]),
+      m("label", [
+        "Number of rays to plot:",
+        m("input", {
+          type: "number",
+          min: 0,
+          max: state.rayCount,
+          step: 1,
+          value: state.rayPlotCount,
+          onchange: (e: InputEvent) => {
+            const val = parseInt((e.target as HTMLInputElement).value);
+            if (val !== undefined && val > 0) {
+              state.rayPlotCount = val;
+            }
+          },
+        }),
+      ]),
+      m("label", [
+        "Number of bounces to plot:",
+        m("input", {
+          type: "number",
+          min: 1,
+          max: 10000,
+          step: 1,
+          value: state.bouncePlotCount,
+          onchange: (e: InputEvent) => {
+            const val = parseInt((e.target as HTMLInputElement).value);
+            if (val !== undefined && val > 0) {
+              state.bouncePlotCount = val;
+            }
+          },
+        }),
+      ]),
+    ]),
+    m("section", [
+      m(
+        "button",
+        { disabled: state.running, onclick: state.runRaytracing },
+        "Run raytracing",
+      ),
+      m(
+        "div.progress-bar-holder",
+        m("div.progress-bar", {
+          style: `width: ${(100 * state.rayTracingProgress[0]) / state.rayTracingProgress[1]}%;`,
+        }),
+      ),
+      " ",
+      state.rayTracingProgress[0],
+      " bounces",
+    ]),
+    m("section", [
+      m(
+        "button",
+        {
+          disabled: state.audioToPlay === null,
+          onclick: state.playAudio,
+        },
+        "Play audio",
+      ),
+      m(
+        "button",
+        {
+          disabled: state.audioToPlay === null,
+          onclick: state.playConvolved,
+        },
+        "Play convolved audio",
+      ),
+    ]),
+    m(WaveformPlot),
+    m(MagnitudePlot),
+  ];
+}
+
 let AppView = {
   view: function () {
-    return m("div", [
+    return m("div.root-container", [
       m(ThreeView),
       m("div.sidebar", [
-        m("section", { style: "border:1px solid black;" }, [
-          m("button", { onclick: state.setBoxGeometry }, "Load box room"),
-          m("button", { onclick: state.setRoundGeometry }, "Load sphere"),
-          m("button", { onclick: state.setLoadGeometry }, "Load geometry"),
-          m("button", { onclick: state.setTestGeometry }, "Load test geometry"),
-
-          state.geometry.view(),
-        ]),
-        m("section", { style: "border:1px solid black;" }, [
-          m("label.v", [
-            "Source position:",
-            m("input.v", {
-              type: "number",
-              value: state.sourcePosition[0],
-              oninput: function (e: InputEvent) {
-                state.sourcePosition[0] = parseFloat(
-                  (e.target as HTMLInputElement).value,
-                );
-              },
-            }),
-            m("input.v", {
-              type: "number",
-              value: state.sourcePosition[1],
-              oninput: function (e: InputEvent) {
-                state.sourcePosition[1] = parseFloat(
-                  (e.target as HTMLInputElement).value,
-                );
-              },
-            }),
-            m("input.v", {
-              type: "number",
-              value: state.sourcePosition[2],
-              oninput: function (e: InputEvent) {
-                state.sourcePosition[2] = parseFloat(
-                  (e.target as HTMLInputElement).value,
-                );
-              },
-            }),
-          ]),
-          m("label.v", [
-            "Receiver position:",
-            m("input.v", {
-              type: "number",
-              value: state.receiverPosition[0],
-              oninput: function (e: InputEvent) {
-                state.receiverPosition[0] = parseFloat(
-                  (e.target as HTMLInputElement).value,
-                );
-              },
-            }),
-            m("input.v", {
-              type: "number",
-              value: state.receiverPosition[1],
-              oninput: function (e: InputEvent) {
-                state.receiverPosition[1] = parseFloat(
-                  (e.target as HTMLInputElement).value,
-                );
-              },
-            }),
-            m("input.v", {
-              type: "number",
-              value: state.receiverPosition[2],
-              oninput: function (e: InputEvent) {
-                state.receiverPosition[2] = parseFloat(
-                  (e.target as HTMLInputElement).value,
-                );
-              },
-            }),
-          ]),
-          m("label", [
-            "Receiver radius:",
-            m("input", {
-              type: "number",
-              min: 0,
-              step: 0.05,
-              value: state.receiverRadius,
-              oninput: function (e: InputEvent) {
-                const r = parseFloat((e.target as HTMLInputElement).value);
-                state.receiverRadius = r;
-              },
-            }),
-          ]),
-        ]),
-        m("section", { style: "border:1px solid black;" }, [
-          m("label.v", [
-            "Number of rays to plot:",
-            m("input", {
-              type: "number",
-              min: 0,
-              max: state.rayCount,
-              step: 1,
-              value: state.rayPlotCount,
-              onchange: (e: InputEvent) => {
-                const val = parseInt((e.target as HTMLInputElement).value);
-                if (val !== undefined && val > 0) {
-                  state.rayPlotCount = val;
-                }
-              },
-            }),
-          ]),
-          m("label.v", [
-            "Number of bounces to plot:",
-            m("input", {
-              type: "number",
-              min: 1,
-              max: 10000,
-              step: 1,
-              value: state.bouncePlotCount,
-              onchange: (e: InputEvent) => {
-                const val = parseInt((e.target as HTMLInputElement).value);
-                if (val !== undefined && val > 0) {
-                  state.bouncePlotCount = val;
-                }
-              },
-            }),
-          ]),
-        ]),
-        m("section", { style: "border:1px solid black;" }, [
-          m("label.block", [
-            "Ray count:",
-            m("input", {
-              type: "number",
-              min: 1,
-              value: state.rayCount,
-              oninput: function (e: InputEvent) {
-                state.rayCount = parseInt((e.target as HTMLInputElement).value);
-              },
-            }),
-          ]),
-          m("label.block", [
-            "Output duration (s):",
-            m("input", {
-              type: "number",
-              min: 0,
-              step: 0.1,
-              value: state.audioDuration,
-              oninput: function (e: InputEvent) {
-                state.audioDuration = parseFloat(
-                  (e.target as HTMLInputElement).value,
-                );
-              },
-            }),
-          ]),
-          m("label.block", [
-            "Throttle amount: ",
-            m("input", {
-              type: "number",
-              min: 0,
-              max: 100,
-              step: 1,
-              value: state.throttle * 100,
-              onchange: function (e: InputEvent) {
-                const val = parseInt((e.target as HTMLInputElement).value);
-
-                if (val !== undefined && val >= 0 && val <= 100) {
-                  state.throttle = val / 100;
-                }
-              },
-            }),
-            "%",
-          ]),
+        m("div.topbar", [
           m(
-            "button",
-            { disabled: state.running, onclick: state.runRaytracing },
-            "Run raytracing",
+            "div.tab",
+            {
+              class: state.menu === "geometry" ? "selected" : "",
+              onclick: () => state.setMenu("geometry"),
+            },
+            "Geometry",
           ),
+          m("div.tab-gap"),
           m(
-            "div.progress-bar-holder",
-            m("div.progress-bar", {
-              style: `width: ${(100 * state.rayTracingProgress[0]) / state.rayTracingProgress[1]}%;`,
-            }),
+            "div.tab",
+            {
+              class: state.menu === "materials" ? "selected" : "",
+              onclick: () => state.setMenu("materials"),
+            },
+            "Materials",
+          ),
+          m("div.tab-gap"),
+          m(
+            "div.tab",
+            {
+              class: state.menu === "runs" ? "selected" : "",
+              onclick: () => state.setMenu("runs"),
+            },
+            "Runs",
           ),
         ]),
-        m(
-          "button.block",
-          {
-            disabled: state.audioToPlay === null,
-            onclick: state.playAudio,
-          },
-          "Play audio",
-        ),
-        m(
-          "button.block",
-          {
-            disabled: state.audioToPlay === null,
-            onclick: state.playConvolved,
-          },
-          "Play convolved audio",
-        ),
-        m("section", { style: "border:1px solid black;" }, [
-          ...state.materials.map((material) =>
-            m("section", [
-              m(
-                "p",
-                material.name[0].toLocaleUpperCase(),
-                material.name.slice(1),
-              ),
-              m("label", [
-                "125Hz:",
-                m("input", {
-                  type: "number",
-                  min: 0,
-                  max: 1,
-                  step: 0.01,
-                  value: material.a125,
-                  onchange: (e: InputEvent) =>
-                    state.setMaterialBand(e, material, "a125"),
-                }),
-              ]),
-              m("label", [
-                "250Hz:",
-                m("input", {
-                  type: "number",
-                  min: 0,
-                  max: 1,
-                  step: 0.01,
-                  value: material.a250,
-                  onchange: (e: InputEvent) =>
-                    state.setMaterialBand(e, material, "a250"),
-                }),
-              ]),
-              m("label", [
-                "500Hz:",
-                m("input", {
-                  type: "number",
-                  min: 0,
-                  max: 1,
-                  step: 0.01,
-                  value: material.a500,
-                  onchange: (e: InputEvent) =>
-                    state.setMaterialBand(e, material, "a500"),
-                }),
-              ]),
-              m("label", [
-                "1kHz:",
-                m("input", {
-                  type: "number",
-                  min: 0,
-                  max: 1,
-                  step: 0.01,
-                  value: material.a1000,
-                  onchange: (e: InputEvent) =>
-                    state.setMaterialBand(e, material, "a1000"),
-                }),
-              ]),
-              m("label", [
-                "2kHz:",
-                m("input", {
-                  type: "number",
-                  min: 0,
-                  max: 1,
-                  step: 0.01,
-                  value: material.a2000,
-                  onchange: (e: InputEvent) =>
-                    state.setMaterialBand(e, material, "a2000"),
-                }),
-              ]),
-              m("label", [
-                "4kHz:",
-                m("input", {
-                  type: "number",
-                  min: 0,
-                  max: 1,
-                  step: 0.01,
-                  value: material.a4000,
-                  onchange: (e: InputEvent) =>
-                    state.setMaterialBand(e, material, "a4000"),
-                }),
-              ]),
-            ]),
-          ),
-          m("button", { onclick: state.createMaterial }, "Create material"),
+        m("section.menu-container", [
+          state.menu === "geometry" ? geometryMenu() : null,
+          state.menu === "materials" ? materialsMenu() : null,
+          state.menu === "runs" ? runsMenu() : null,
         ]),
-        state.geometry.selectedTriangle()
-          ? m("section", { style: "border:1px solid black;" }, [
-              m("label.block", [
-                "Material:",
-                ...state.materials.map((material) =>
-                  m("label.v", [
-                    m("input", {
-                      type: "radio",
-                      name: "select-material",
-                      value: material.name,
-                      checked:
-                        state.geometry.selectedTriangle()?.material ===
-                        material.name,
-                      onchange: (e: InputEvent) => state.setSelectedMaterial(e),
-                    }),
-                    material.name,
-                  ]),
-                ),
-              ]),
-            ])
-          : null,
-        m(WaveformPlot),
-        m(MagnitudePlot),
       ]),
     ]);
   },

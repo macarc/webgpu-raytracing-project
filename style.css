@@ -1,0 +1,177 @@
+
+* {
+    font-family: "Inter", sans-serif;
+}
+
+html, body, div.root {
+    margin: 0;
+    padding: 0;
+}
+
+div.root-container {
+    margin: 0;
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    width: 100vw;
+    height: 100vh;
+}
+
+canvas.three {
+    flex: 0;
+    margin: 0;
+    width: 50vw;
+    height: 100%;
+}
+
+@media (orientation: portrait) {
+    div.root-container {
+    flex-direction: column;
+    }
+
+    canvas.three {
+    width: 100%;
+    height: 50vh;
+    }
+}
+
+div.sidebar {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+div.topbar {
+    flex: 0;
+    display: flex;
+    flex-direction: row;
+    margin: 0;
+}
+
+div.tab-gap {
+    width: 1rem;
+    border: 2px solid rgba(0,0,0,0);
+    border-bottom: 2px solid black;
+}
+
+div.tab {
+    flex-grow: 1;
+    text-align: center;
+    padding: 0.2rem 2rem;
+    border-radius: 0.3rem 0.3rem 0rem 0rem;
+    user-select: none;
+    cursor: pointer;
+    margin: 0;
+}
+
+div.tab {
+    border: 2px solid rgba(0,0,0,0);
+    border-bottom: 2px solid black;
+    background: #eee;
+}
+
+div.tab.selected {
+    background: none;
+    border: 2px solid black;
+    border-bottom: 2px solid rgba(0,0,0,0);
+}
+
+section.menu-container {
+    margin: 0;
+    border: 2px solid rgba(0,0,0,0);
+    border-left: 2px solid black;
+    height: 100%;
+    overflow-y: scroll;
+    padding: 0.5rem;
+}
+
+section.menu-container > section {
+    padding: 0.5rem 0;
+}
+
+section.menu-container > section:not(:first-child) {
+    border-top: 1px solid black;
+}
+
+button {
+    font-size: 1rem;
+    background: lightseagreen;
+    border: 2px solid rgba(0,0,0,0);
+    border-bottom-color: seagreen;
+    border-left-color: seagreen;
+    cursor: pointer;
+    color: white;
+    border-radius: 0.2rem;
+    padding: 0.2rem 0.6rem;
+}
+
+button:active {
+    border-color: rgba(0,0,0,0);
+}
+
+button:disabled {
+    background: lightslategrey;
+    border-bottom-color: slategrey;
+    border-left-color: slategrey;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+* > button:not(:last-child) {
+    margin-right: 1rem;
+}
+
+input[type="number"] {
+    width: 4rem;
+}
+
+.block {
+    display: block;
+}
+
+label {
+    display: block;
+}
+
+section.menu-container input:first-child {
+    margin-left: 1rem;
+}
+
+table.materials {
+    width: 100%;
+    border: 1px solid black;
+    border-collapse: collapse;
+    margin-bottom: 0.5rem;
+}
+
+th {
+    border: 1px solid black;
+}
+
+td.material-name {
+    text-align: center;
+    text-transform: capitalize;
+}
+
+td {
+    border: 1px solid black;
+}
+
+.progress-bar-holder {
+    display: inline-block;
+    border: 1px solid black;
+    width: 10rem;
+    height: 1rem;
+    vertical-align: text-bottom;
+}
+
+.progress-bar {
+    width: 0;
+    height: 100%;
+    background: seagreen;
+}
+
+.plot {
+    display: inline-block;
+    width: calc(50% - 0.5rem - 2px);
+    margin: 0;
+}

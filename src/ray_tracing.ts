@@ -546,6 +546,8 @@ export async function rayTrace(
   settings: Settings,
   update: (bounces: number, totalBounces: number) => void,
 ): Promise<RayTraceOutput | null> {
+  update(0, 1);
+
   console.time("Total (including setup)");
   console.log("Creating geometry");
   const rays: Ray[] = [];
@@ -567,8 +569,6 @@ export async function rayTrace(
       direction: normalize(ray),
     });
   }
-
-  console.log(rays);
 
   const gpuDevice = await getGPUDevice();
 
@@ -635,8 +635,6 @@ export async function rayTrace(
     ),
   );
 
-  console.time("Total (excluding setup)");
-
   // TODO BUG: don't cut this off arbitrarily.
   let output125 = new Float32Array(SAMPLE_RATE * settings.audioDuration);
   let output250 = new Float32Array(SAMPLE_RATE * settings.audioDuration);
@@ -662,8 +660,10 @@ export async function rayTrace(
     plottedRayCoordinates[i][4] = settings.sourcePosition[2];
   }
 
+  console.time("Total (excluding setup)");
+
   for (let i = 0; i < maxPasses; i++) {
-    update(i * bouncesPerPass, 10 * bouncesPerPass);
+    update((i + 1) * bouncesPerPass, maxPasses * bouncesPerPass);
 
     // Run the shader and get the result.
     const result = await rayTracer.runPass(settings.rayCount);
@@ -731,14 +731,11 @@ export async function rayTrace(
         averageValue = thisPassAverageValue;
       } else if (thisPassMaxValue < THRESHOLD * averageValue) {
         console.log("below threshold on pass", i);
+        update((i + 1) * bouncesPerPass, (i + 1) * bouncesPerPass);
         break;
       }
     }
   }
-
-  console.log(plottedRayCoordinates);
-
-  update(maxPasses, maxPasses);
 
   const outputAudio = combineFilteredAudio(
     output125,

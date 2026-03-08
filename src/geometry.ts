@@ -64,9 +64,10 @@ export class BoxRoomGeometry extends Geometry {
   }
 
   view(): m.Children {
-    return m("label.v", [
+    return m("section", [
+      m("label", [
       "Room dimensions:",
-      m("input.v", {
+      m("input", {
         type: "number",
         value: this.config.xDim,
         oninput: (e: InputEvent) => {
@@ -74,7 +75,7 @@ export class BoxRoomGeometry extends Geometry {
           this.updateGeometry();
         },
       }),
-      m("input.v", {
+      m("input", {
         type: "number",
         value: this.config.yDim,
         oninput: (e: InputEvent) => {
@@ -82,7 +83,7 @@ export class BoxRoomGeometry extends Geometry {
           this.updateGeometry();
         },
       }),
-      m("input.v", {
+      m("input", {
         type: "number",
         value: this.config.zDim,
         oninput: (e: InputEvent) => {
@@ -90,7 +91,8 @@ export class BoxRoomGeometry extends Geometry {
           this.updateGeometry();
         },
       }),
-    ]);
+    ])
+  ]);
   }
 
   private async updateGeometry() {
@@ -160,10 +162,10 @@ export class LoadedGeometry extends Geometry {
   }
 
   view(): m.Children {
-    return [
-      m("label.v", [
+    return m("section", [
+      m("label", [
         "Scale:",
-        m("input.v", {
+        m("input", {
           type: "number",
           min: 0,
           step: 0.1,
@@ -177,7 +179,7 @@ export class LoadedGeometry extends Geometry {
       m("button", { onclick: () => this.rotate("x") }, "Rotate X"),
       m("button", { onclick: () => this.rotate("y") }, "Rotate Y"),
       m("button", { onclick: () => this.rotate("z") }, "Rotate Z"),
-    ];
+    ]);
   }
 
   private updateScaledGeometry() {
@@ -217,8 +219,8 @@ export class RoundGeometry extends Geometry {
   }
 
   view(): m.Children {
-    return [
-      m("label.v", [
+    return m("section", [
+      m("label", [
         "Minimum number of triangles:",
         m("input", {
           type: "number",
@@ -232,7 +234,7 @@ export class RoundGeometry extends Geometry {
         }),
       ]),
       m("span", ` Actual triangle count: ${this.actualTriangleCount}`),
-    ];
+    ]);
   }
 
   private setMinTriangleCount(count: number | undefined) {
