@@ -658,9 +658,9 @@ export async function rayTrace(
   for (let i = 0; i < settings.rayPlotCount; ++i) {
     plottedRayCoordinates.push(new Float32Array(4 * settings.bouncePlotCount));
     plottedRayCoordinates[i][0] = 1.0;
-    plottedRayCoordinates[i][2] = settings.sourcePosition[0];
-    plottedRayCoordinates[i][3] = settings.sourcePosition[1];
-    plottedRayCoordinates[i][4] = settings.sourcePosition[2];
+    plottedRayCoordinates[i][1] = settings.sourcePosition[0];
+    plottedRayCoordinates[i][2] = settings.sourcePosition[1];
+    plottedRayCoordinates[i][3] = settings.sourcePosition[2];
   }
 
   console.time("Total (excluding setup)");
