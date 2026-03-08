@@ -8,8 +8,12 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
+    "serve": "python server.py",
     "build": "esbuild src/index.ts --sourcemap --bundle --outfile=public/index.js",
-    "build-watch": "esbuild src/index.ts --sourcemap --watch --bundle --outfile=public/index.js"
+    "build-watch": "esbuild src/index.ts --sourcemap --watch --bundle --outfile=public/index.js",
+    "typecheck": "tsc",
+    "typecheck-watch": "tsc --watch",
+    "format": "prettier --write ."
   },
   "devDependencies": {
     "@types/mithril": "^2.2.7",
