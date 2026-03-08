@@ -11,12 +11,14 @@ const shaderCode = /* wgsl */ `
 
   @group(0) @binding(0)
   var<storage, read> triangles: array<Triangle>;
-
-  // TODO: these shouldn't really be floats.
+  
   @group(0) @binding(1)
   var<storage, read_write> output: array<f32>;
 
-  const INFINITY: f32 = 1e10;
+  // From the spec:
+  // Implementations may assume that overflow, infinities, and NaNs are not present during shader execution.
+  // Therefore we define infinity to be the largest positive finite instead.
+  const INFINITY: f32 = 0x1.fffffep+127f;
 
   fn distanceTo(origin: vec3f, ray: vec3f, triangle: Triangle) -> f32 {
     let smallestPositiveNormal = 1.17549435082228750797e-38f;

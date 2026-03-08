@@ -1058,7 +1058,7 @@ let AppView = {
 
 document.addEventListener("DOMContentLoaded", async () => {
   await state.initialise();
-  
+
   const root = document.querySelector("#root");
   if (root) {
     m.mount(root, AppView);

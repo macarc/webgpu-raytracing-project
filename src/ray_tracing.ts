@@ -142,7 +142,11 @@ function specularRayIntersectionShaderCode(
   @group(0) @binding(8)
   var<uniform> materials: array<Material, ${materials.length}>;
 
-
+  // From the spec:
+  // Implementations may assume that overflow, infinities, and NaNs are not present during shader execution.
+  // Therefore we define infinity to be the largest positive finite instead.
+  const INFINITY: f32 = 0x1.fffffep+127f;
+  
   @compute @workgroup_size(${WORKGROUP_SIZE})
   fn main(
     @builtin(global_invocation_id)
@@ -190,10 +194,9 @@ function specularRayIntersectionShaderCode(
       let lowerIndex = rayIndex * ${bounceCount} + n;
       let upperIndex = arrayLength(&distances) + lowerIndex;
 
-      // TODO: infinity
-      var rayTriangleDistance = 1e10;
+      var rayTriangleDistance = INFINITY;
       var closestTriangleIndex = triangleCount;
-      var receiverRayTriangleDistance = 1e10; // TODO: infinity.
+      var receiverRayTriangleDistance = INFINITY;
 
       let vecToReceiver = receiverPosition - rayposition;
       let directionToReceiver = normalize(vecToReceiver);
@@ -750,6 +753,9 @@ export async function rayTrace(
   console.timeEnd("Total (including setup)");
 
   console.log(outputAudio.join(","));
+
+  // Free all resources on the GPU.
+  gpuDevice.destroy();
 
   return {
     audio: outputAudio,

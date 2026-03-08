@@ -18,7 +18,7 @@ export async function getGPUDevice(): Promise<GPUDevice | null> {
 
   // BUG: it seems that the limits are downgraded here
   // (e.g. on my Mac, the adapter limit for maxStorageBufferBindingSize is much bigger than the device limit)
-  
+
   // Get the GPU adapter, from which a GPU device may be requested.
   const adapter = await navigator.gpu.requestAdapter({
     powerPreference: "high-performance",
@@ -33,10 +33,9 @@ export async function getGPUDevice(): Promise<GPUDevice | null> {
 
   // Handle disconnect from the GPU device.
   device.lost.then((info) => {
-    console.error(`WebGPU device was lost: ${info.message}`);
-
     // Reason will be 'destroyed' if we intentionally destroy the device.
     if (info.reason !== "destroyed") {
+      console.error(`WebGPU device was lost: ${info.message}`);
       // TODO: try again.
       console.log("Can restart if we want");
     }
@@ -166,6 +165,9 @@ export async function runShader(
       stagingBuffer.unmap();
       return new Float32Array(arrayDataOutput);
     });
+
+  // Free all resources on the GPU.
+  device.destroy();
 
   // Convert to the correct type, and display the output.
   return dataOutput;
