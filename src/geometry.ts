@@ -24,22 +24,6 @@ export abstract class Geometry {
   }
 }
 
-export class NoGeometry extends Geometry {
-  async initialise(): Promise<void> {
-    return;
-  }
-
-  triangles(): Triangle[] {
-    return [];
-  }
-
-  view(): m.Children {
-    return [];
-  }
-
-  setTriangleMaterial(index: number, material: string) {}
-}
-
 export class BoxRoomGeometry extends Geometry {
   geometry: Triangle[] = [];
   config: BoxRoomConfig = {

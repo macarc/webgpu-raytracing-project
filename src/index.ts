@@ -10,12 +10,11 @@ import {
   BoxRoomGeometry,
   Geometry,
   LoadedGeometry,
-  NoGeometry,
   RoundGeometry,
 } from "./geometry";
 import { dispose } from "./geometry_helpers";
 
-type Menu = "geometry" | "materials" | "runs";
+type Menu = "geometry" | "materials" | "raytracing";
 
 let state = {
   rayCount: 20000,
@@ -26,7 +25,7 @@ let state = {
   rayPlotCount: 10,
   bouncePlotCount: 10,
   throttle: isOnMobile ? 0.8 : 0,
-  geometry: new NoGeometry() as Geometry,
+  geometry: new BoxRoomGeometry() as Geometry,
   bounceCoordinates: [] as Float32Array<ArrayBuffer>[],
   menu: "geometry" as Menu,
   materials: [
@@ -67,6 +66,10 @@ let state = {
   running: false,
   rayTracingProgress: [0, 0] as [number, number],
   source: null as AudioBufferSourceNode | null,
+
+  initialise: async function () {
+    await state.geometry.initialise();
+  },
 
   setBoxGeometry: async function () {
     state.geometry = new BoxRoomGeometry();
@@ -893,7 +896,7 @@ function materialsMenu() {
   ];
 }
 
-function runsMenu() {
+function raytracingMenu() {
   return [
     m("section", [
       m("label", [
@@ -1037,23 +1040,25 @@ let AppView = {
           m(
             "div.tab",
             {
-              class: state.menu === "runs" ? "selected" : "",
-              onclick: () => state.setMenu("runs"),
+              class: state.menu === "raytracing" ? "selected" : "",
+              onclick: () => state.setMenu("raytracing"),
             },
-            "Runs",
+            "Raytracing",
           ),
         ]),
         m("section.menu-container", [
           state.menu === "geometry" ? geometryMenu() : null,
           state.menu === "materials" ? materialsMenu() : null,
-          state.menu === "runs" ? runsMenu() : null,
+          state.menu === "raytracing" ? raytracingMenu() : null,
         ]),
       ]),
     ]);
   },
 };
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
+  await state.initialise();
+  
   const root = document.querySelector("#root");
   if (root) {
     m.mount(root, AppView);

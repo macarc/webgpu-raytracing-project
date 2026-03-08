@@ -304143,7 +304143,7 @@ void main() {
   function pathToFormat3D(path) {
     return path.toLowerCase().endsWith(".3dm") ? "3dm" : "gltf";
   }
-  var import_mithril, Geometry, NoGeometry, BoxRoomGeometry, LoadedGeometry, RoundGeometry;
+  var import_mithril, Geometry, BoxRoomGeometry, LoadedGeometry, RoundGeometry;
   var init_geometry = __esm({
     "src/geometry.ts"() {
       "use strict";
@@ -304154,19 +304154,6 @@ void main() {
         selectedIndex = -1;
         selectedTriangle() {
           return this.triangles()[this.selectedIndex] || null;
-        }
-      };
-      NoGeometry = class extends Geometry {
-        async initialise() {
-          return;
-        }
-        triangles() {
-          return [];
-        }
-        view() {
-          return [];
-        }
-        setTriangleMaterial(index, material) {
         }
       };
       BoxRoomGeometry = class extends Geometry {
@@ -304380,7 +304367,7 @@ void main() {
         rayPlotCount: 10,
         bouncePlotCount: 10,
         throttle: isOnMobile ? 0.8 : 0,
-        geometry: new NoGeometry(),
+        geometry: new BoxRoomGeometry(),
         bounceCoordinates: [],
         menu: "geometry",
         materials: [
@@ -304420,6 +304407,9 @@ void main() {
         running: false,
         rayTracingProgress: [0, 0],
         source: null,
+        initialise: async function() {
+          await state.geometry.initialise();
+        },
         setBoxGeometry: async function() {
           state.geometry = new BoxRoomGeometry();
           await state.geometry.initialise();
@@ -305074,7 +305064,7 @@ void main() {
           ]) : null
         ];
       }
-      function runsMenu() {
+      function raytracingMenu() {
         return [
           (0, import_mithril2.default)("section", [
             (0, import_mithril2.default)("label", [
@@ -305216,22 +305206,23 @@ void main() {
                 (0, import_mithril2.default)(
                   "div.tab",
                   {
-                    class: state.menu === "runs" ? "selected" : "",
-                    onclick: () => state.setMenu("runs")
+                    class: state.menu === "raytracing" ? "selected" : "",
+                    onclick: () => state.setMenu("raytracing")
                   },
-                  "Runs"
+                  "Raytracing"
                 )
               ]),
               (0, import_mithril2.default)("section.menu-container", [
                 state.menu === "geometry" ? geometryMenu() : null,
                 state.menu === "materials" ? materialsMenu() : null,
-                state.menu === "runs" ? runsMenu() : null
+                state.menu === "raytracing" ? raytracingMenu() : null
               ])
             ])
           ]);
         }
       };
-      document.addEventListener("DOMContentLoaded", () => {
+      document.addEventListener("DOMContentLoaded", async () => {
+        await state.initialise();
         const root = document.querySelector("#root");
         if (root) {
           import_mithril2.default.mount(root, AppView);
