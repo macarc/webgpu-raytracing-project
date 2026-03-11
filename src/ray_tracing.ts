@@ -29,6 +29,7 @@ export type Settings = {
   receivers: Receiver[];
   rayCount: number;
   throttle: number;
+  maxBounces: number;
   rayPlotCount: number;
   bouncePlotCount: number;
   audioDuration: number;
@@ -612,9 +613,6 @@ export async function rayTrace(
 
   console.log("bouncesPerPass", bouncesPerPass);
 
-  // TODO: expose this as a setting.
-  const maxPasses = 10;
-
   const outputSize =
     2 * bouncesPerPass * settings.rayCount * settings.receivers.length;
 
@@ -695,6 +693,9 @@ export async function rayTrace(
   }
 
   console.time("Total (excluding setup)");
+
+  // Math.ceil so that it is obvious to the user that the maximum has been hit.
+  const maxPasses = Math.ceil(settings.maxBounces / bouncesPerPass)
 
   // TODO BUG: number of bounces to plot does not line up with actual number plotted.
 

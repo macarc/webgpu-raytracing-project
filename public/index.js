@@ -774,7 +774,6 @@
       )
     );
     console.log("bouncesPerPass", bouncesPerPass);
-    const maxPasses = 10;
     const outputSize = 2 * bouncesPerPass * settings.rayCount * settings.receivers.length;
     if (outputSize > maxStorageBufferSize) {
       console.log("Output buffer is too large, will not work");
@@ -849,6 +848,7 @@
       plottedRayCoordinates[i][3] = settings.sourcePosition[2];
     }
     console.time("Total (excluding setup)");
+    const maxPasses = Math.ceil(settings.maxBounces / bouncesPerPass);
     for (let i = 0; i < maxPasses; i++) {
       update((i + 1) * bouncesPerPass, maxPasses * bouncesPerPass);
       const result = await rayTracer.runPass(settings.rayCount);
@@ -304382,6 +304382,7 @@ void main() {
       var state = {
         rayCount: 2e4,
         audioDuration: 10,
+        maxBounces: 1e4,
         sourcePosition: [0, 0, 0],
         receivers: [
           { position: [3, -1, 0], radius: 0.2 },
@@ -304463,6 +304464,7 @@ void main() {
               materials: state.materials,
               rayCount: state.rayCount,
               throttle: state.throttle,
+              maxBounces: state.maxBounces,
               rayPlotCount: state.rayPlotCount,
               bouncePlotCount: state.bouncePlotCount,
               audioDuration: state.audioDuration
@@ -305217,6 +305219,21 @@ void main() {
                   const val = parseInt(e.target.value);
                   if (val !== void 0 && val >= 0 && val <= 100) {
                     state.throttle = val / 100;
+                  }
+                }
+              })
+            ]),
+            (0, import_mithril2.default)("label", [
+              "Maximum number of bounces:",
+              (0, import_mithril2.default)("input", {
+                type: "number",
+                min: 0,
+                step: 100,
+                value: state.maxBounces,
+                onchange: function(e) {
+                  const val = parseInt(e.target.value);
+                  if (val !== void 0 && val >= 0) {
+                    state.maxBounces = val;
                   }
                 }
               })

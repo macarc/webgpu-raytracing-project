@@ -19,6 +19,7 @@ type Menu = "geometry" | "materials" | "raytracing";
 let state = {
   rayCount: 20000,
   audioDuration: 10,
+  maxBounces: 10000,
   sourcePosition: [0, 0, 0] as Vec3,
   receivers: [
     { position: [3.0, -1.0, 0.0], radius: 0.2 },
@@ -109,6 +110,7 @@ let state = {
         materials: state.materials,
         rayCount: state.rayCount,
         throttle: state.throttle,
+        maxBounces: state.maxBounces,
         rayPlotCount: state.rayPlotCount,
         bouncePlotCount: state.bouncePlotCount,
         audioDuration: state.audioDuration,
@@ -1052,6 +1054,22 @@ function raytracingMenu() {
             }
           },
         }),
+      ]),
+      m("label", [
+        "Maximum number of bounces:",
+        m("input", {
+          type: "number",
+          min: 0,
+          step: 100,
+          value: state.maxBounces,
+          onchange: function (e: InputEvent) {
+            const val = parseInt((e.target as HTMLInputElement).value);
+
+            if (val !== undefined && val >= 0) {
+              state.maxBounces = val;
+            }
+          }
+        })
       ]),
       m("label", [
         "Number of rays to plot:",
