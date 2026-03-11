@@ -374,7 +374,7 @@
     const magnitude = Math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2);
     return [v[0] / magnitude, v[1] / magnitude, v[2] / magnitude];
   }
-  function specularRayIntersectionShaderCode(receiverPosition, receiverRadius, materials, bounceCount) {
+  function specularRayIntersectionShaderCode(receivers, materials, bounceCount) {
     return (
       /* wgsl */
       `
@@ -529,19 +529,27 @@
 
     var lastsurfacenormal = vec3(initialRay.nx, initialRay.ny, initialRay.nz);
 
-    let receiverPosition = vec3f(${receiverPosition.join(",")});
+    var receiverPositions: array<vec3f, ${receivers.length}>;
+    ${receivers.map((receiver, i) => "receiverPositions[" + i + "] = vec3f(" + receiver.position.join(",") + ");").join("")}
+
+    var receiverRadii: array<f32, ${receivers.length}>;
+    ${receivers.map((receiver, i) => "receiverRadii[" + i + "] = " + receiver.radius + ";").join("")}
 
     for (var n: u32 = 0; n < ${bounceCount}; n++) {
-      let lowerIndex = rayIndex * ${bounceCount} + n;
+      var vecToReceivers: array<vec3f, ${receivers.length}>;
+      var directionToReceivers: array<vec3f, ${receivers.length}>;
+      var distanceToReceivers: array<f32, ${receivers.length}>;
+      ${receivers.map((_, i) => "vecToReceivers[" + i + "] = receiverPositions[" + i + "] - rayposition;").join("")}
+      ${receivers.map((_, i) => "directionToReceivers[" + i + "] = normalize(vecToReceivers[" + i + "]);").join("")}
+      ${receivers.map((_, i) => "distanceToReceivers[" + i + "] = length(vecToReceivers[" + i + "]);").join("")}
+
+      let lowerIndex = rayIndex * ${bounceCount * receivers.length} + n * ${receivers.length};
       let upperIndex = arrayLength(&distances) + lowerIndex;
 
       var rayTriangleDistance = INFINITY;
       var closestTriangleIndex = triangleCount;
-      var receiverRayTriangleDistance = INFINITY;
-
-      let vecToReceiver = receiverPosition - rayposition;
-      let directionToReceiver = normalize(vecToReceiver);
-      let distanceToReceiver = length(vecToReceiver);
+      var receiverRayTriangleDistances: array<f32, ${receivers.length}>;
+      ${receivers.map((_, i) => "receiverRayTriangleDistances[" + i + "] = INFINITY;").join("")}
 
       // Loop over each triangle, checking:
       // - if the ray from the current location to the receiver intercepts with the triangle.
@@ -556,10 +564,10 @@
 
         let offset_cross_e1 = cross(offset, edge1);
 
-        // Ray-trace to receiver.
-        {
+        // Ray-trace to receivers.
+        for (var j = 0; j < ${receivers.length}; j++) {
           // TODO: negative?
-          let ray_cross_e2 = cross(directionToReceiver, edge2);
+          let ray_cross_e2 = cross(directionToReceivers[j], edge2);
 
           // NOTE: greater than 0 iff ray is incident on backface.
           let dir = -dot(edge1, ray_cross_e2);  // directionToReceiver.(e1 x e2)
@@ -568,7 +576,7 @@
           let inv_det = 1.0 / det;
 
           let u = inv_det * dot(offset, ray_cross_e2);
-          let v = inv_det * dot(directionToReceiver, offset_cross_e1);
+          let v = inv_det * dot(directionToReceivers[j], offset_cross_e1);
 
           let t = inv_det * dot(edge2, offset_cross_e1);
 
@@ -579,7 +587,7 @@
             // Ray intercepts the triangle in the positive direction.
             && t >= eps && dir >= 0
           ) {
-            receiverRayTriangleDistance = min(receiverRayTriangleDistance, t);
+            receiverRayTriangleDistances[j] = min(receiverRayTriangleDistances[j], t);
           }
         }
 
@@ -616,42 +624,47 @@
         }
       }
 
-      band_125_and_250[lowerIndex] = 0;
-      band_125_and_250[upperIndex] = 0;
-      band_500_and_1000[lowerIndex] = 0;
-      band_500_and_1000[upperIndex] = 0;
-      band_2000_and_4000[lowerIndex] = 0;
-      band_2000_and_4000[upperIndex] = 0;
+      for (var j: u32 = 0; j < ${receivers.length}; j++) {
+        band_125_and_250[lowerIndex + j] = 0;
+        band_125_and_250[upperIndex + j] = 0;
+        band_500_and_1000[lowerIndex + j] = 0;
+        band_500_and_1000[upperIndex + j] = 0;
+        band_2000_and_4000[lowerIndex + j] = 0;
+        band_2000_and_4000[upperIndex + j] = 0;
+      }
 
       // This should always be true - it should always intersect a triangle.
       if (closestTriangleIndex < triangleCount) {
         let triangle = triangleBuffer[closestTriangleIndex];
         let material = materials[u32(triangle.material)];
 
-        // If the ray to the receiver did not hit a triangle before hitting the receiver,
-        // add the contribution to the output.
-        if (receiverRayTriangleDistance >= distanceToReceiver) {
-          let cosNormalAngleToReceiver = dot(directionToReceiver, -lastsurfacenormal);
+        // TODO: unroll this loop (and all the other receivers loops).
+        for (var j: u32 = 0; j < ${receivers.length}; j++) {
+          // If the ray to the receiver did not hit a triangle before hitting the receiver,
+          // add the contribution to the output.
+          if (receiverRayTriangleDistances[j] >= distanceToReceivers[j]) {
+            let cosNormalAngleToReceiver = dot(directionToReceivers[j], -lastsurfacenormal);
 
-          // Only count if the ray is not intersecting the last surface.
-          if (cosNormalAngleToReceiver >= 0) {
-            let rayTriangleDistance = raydistancetravelled + distanceToReceiver;
-            let rayVecToClosestReceiverPoint = dot(vecToReceiver, raydirection) * raydirection;
-            let distanceFromRayToReceiver = length(vecToReceiver - rayVecToClosestReceiverPoint);
-            let additionDueToRay = f32(distanceFromRayToReceiver <= ${receiverRadius});
-              
-            // let totalIntensity = additionDueToRay + cosNormalAngleToReceiver;
-            let totalIntensity = (1 - material.scatter) * additionDueToRay + material.scatter * cosNormalAngleToReceiver;
-            // let totalIntensity = additionDueToRay;
+            // Only count if the ray is not intersecting the last surface.
+            if (cosNormalAngleToReceiver >= 0) {
+              let rayTriangleDistance = raydistancetravelled + distanceToReceivers[j];
+              let rayVecToClosestReceiverPoint = dot(vecToReceivers[j], raydirection) * raydirection;
+              let distanceFromRayToReceiver = length(vecToReceivers[j] - rayVecToClosestReceiverPoint);
+              let additionDueToRay = f32(distanceFromRayToReceiver <= receiverRadii[j]);
+                
+              // let totalIntensity = additionDueToRay + cosNormalAngleToReceiver;
+              let totalIntensity = (1 - material.scatter) * additionDueToRay + material.scatter * cosNormalAngleToReceiver;
+              // let totalIntensity = additionDueToRay;
 
-            distances[lowerIndex] = rayTriangleDistance;
+              distances[lowerIndex + j] = rayTriangleDistance;
 
-            band_125_and_250[lowerIndex] = intensity_125 * totalIntensity;
-            band_125_and_250[upperIndex] = intensity_250 * totalIntensity;
-            band_500_and_1000[lowerIndex] = intensity_500 * totalIntensity;
-            band_500_and_1000[upperIndex] = intensity_1000 * totalIntensity;
-            band_2000_and_4000[lowerIndex] = intensity_2000 * totalIntensity;
-            band_2000_and_4000[upperIndex] = intensity_4000 * totalIntensity;
+              band_125_and_250[lowerIndex + j] = intensity_125 * totalIntensity;
+              band_125_and_250[upperIndex + j] = intensity_250 * totalIntensity;
+              band_500_and_1000[lowerIndex + j] = intensity_500 * totalIntensity;
+              band_500_and_1000[upperIndex + j] = intensity_1000 * totalIntensity;
+              band_2000_and_4000[lowerIndex + j] = intensity_2000 * totalIntensity;
+              band_2000_and_4000[upperIndex + j] = intensity_4000 * totalIntensity;
+            }
           }
         }
 
@@ -699,6 +712,7 @@
         intensity_2000 *= material.r2000;
         intensity_4000 *= material.r4000;
 
+        // NOTE: if there is more than 1 receiver, then this is wasteful.
         x_and_y[lowerIndex] = newposition.x;
         x_and_y[upperIndex] = newposition.y;
         z_and_ray_intensity[lowerIndex] = newposition.z;
@@ -756,12 +770,12 @@
     const bouncesPerPass = Math.max(
       1,
       Math.floor(
-        (1 - settings.throttle) * maxStorageBufferSize / (2 * FLOAT32_SIZE * settings.rayCount)
+        (1 - settings.throttle) * maxStorageBufferSize / (2 * FLOAT32_SIZE * settings.rayCount * settings.receivers.length)
       )
     );
     console.log("bouncesPerPass", bouncesPerPass);
-    const maxPasses = 5;
-    const outputSize = 2 * bouncesPerPass * settings.rayCount;
+    const maxPasses = 10;
+    const outputSize = 2 * bouncesPerPass * settings.rayCount * settings.receivers.length;
     if (outputSize > maxStorageBufferSize) {
       console.log("Output buffer is too large, will not work");
     }
@@ -798,18 +812,29 @@
         // z and ray intensity
       ],
       specularRayIntersectionShaderCode(
-        settings.receiverPosition,
-        settings.receiverRadius,
+        settings.receivers,
         settings.materials,
         bouncesPerPass
       )
     );
-    let output125 = new Float32Array(SAMPLE_RATE * settings.audioDuration);
-    let output250 = new Float32Array(SAMPLE_RATE * settings.audioDuration);
-    let output500 = new Float32Array(SAMPLE_RATE * settings.audioDuration);
-    let output1000 = new Float32Array(SAMPLE_RATE * settings.audioDuration);
-    let output2000 = new Float32Array(SAMPLE_RATE * settings.audioDuration);
-    let output4000 = new Float32Array(SAMPLE_RATE * settings.audioDuration);
+    const receiversCount = settings.receivers.length;
+    const outputs = [];
+    for (let i = 0; i < receiversCount; ++i) {
+      outputs.push([
+        new Float32Array(SAMPLE_RATE * settings.audioDuration),
+        // 125Hz
+        new Float32Array(SAMPLE_RATE * settings.audioDuration),
+        // 250Hz
+        new Float32Array(SAMPLE_RATE * settings.audioDuration),
+        // 500Hz
+        new Float32Array(SAMPLE_RATE * settings.audioDuration),
+        // 1kHz
+        new Float32Array(SAMPLE_RATE * settings.audioDuration),
+        // 2kHz
+        new Float32Array(SAMPLE_RATE * settings.audioDuration)
+        // 4kHz
+      ]);
+    }
     const THRESHOLD = 1e-12;
     let averageValue = 0;
     const gapBetweenIndicesToCount = Math.floor(
@@ -829,28 +854,31 @@
       const result = await rayTracer.runPass(settings.rayCount);
       let thisPassAverageValue = 0;
       let thisPassMaxValue = 0;
-      for (let j = 0; j < result[0].length; ++j) {
-        const index = Math.round(SAMPLE_RATE * (result[0][j] / SPEED_OF_SOUND));
-        const air_absorption = Math.exp(-result[0][j] * AIR_ABSORPTION_COEFF);
-        const lowerIndex = j;
-        const upperIndex = result[0].length + j;
-        output125[index] += result[1][lowerIndex] * air_absorption;
-        output250[index] += result[1][upperIndex] * air_absorption;
-        output500[index] += result[2][lowerIndex] * air_absorption;
-        output1000[index] += result[2][upperIndex] * air_absorption;
-        output2000[index] += result[3][lowerIndex] * air_absorption;
-        output4000[index] += result[3][upperIndex] * air_absorption;
-        const avg = (result[1][lowerIndex] + result[1][upperIndex] + result[2][lowerIndex] + result[2][upperIndex] + result[3][lowerIndex] + result[3][upperIndex]) * air_absorption;
-        thisPassAverageValue += Math.abs(avg);
-        thisPassMaxValue = Math.max(Math.abs(avg), thisPassMaxValue);
-        const rayIndex = Math.floor(j / bouncesPerPass);
-        const bounceIndex = bouncesPerPass * i + j - bouncesPerPass * rayIndex;
-        if (rayIndex % gapBetweenIndicesToCount === 0 && rayIndex / gapBetweenIndicesToCount < plottedRayCoordinates.length && bounceIndex < settings.bouncePlotCount) {
-          const pointIndex = (bounceIndex + 1) * 4;
-          plottedRayCoordinates[rayIndex / gapBetweenIndicesToCount][pointIndex] = result[5][upperIndex];
-          plottedRayCoordinates[rayIndex / gapBetweenIndicesToCount][pointIndex + 1] = result[4][lowerIndex];
-          plottedRayCoordinates[rayIndex / gapBetweenIndicesToCount][pointIndex + 2] = result[4][upperIndex];
-          plottedRayCoordinates[rayIndex / gapBetweenIndicesToCount][pointIndex + 3] = result[5][lowerIndex];
+      for (let k = 0; k < receiversCount; ++k) {
+        const output = outputs[k];
+        for (let j = k; j < result[0].length; j += receiversCount) {
+          const index = Math.round(SAMPLE_RATE * (result[0][j] / SPEED_OF_SOUND));
+          const air_absorption = Math.exp(-result[0][j] * AIR_ABSORPTION_COEFF);
+          const lowerIndex = j;
+          const upperIndex = result[0].length + j;
+          output[0][index] += result[1][lowerIndex] * air_absorption;
+          output[1][index] += result[1][upperIndex] * air_absorption;
+          output[2][index] += result[2][lowerIndex] * air_absorption;
+          output[3][index] += result[2][upperIndex] * air_absorption;
+          output[4][index] += result[3][lowerIndex] * air_absorption;
+          output[5][index] += result[3][upperIndex] * air_absorption;
+          const avg = (result[1][lowerIndex] + result[1][upperIndex] + result[2][lowerIndex] + result[2][upperIndex] + result[3][lowerIndex] + result[3][upperIndex]) * air_absorption;
+          thisPassAverageValue += Math.abs(avg);
+          thisPassMaxValue = Math.max(Math.abs(avg), thisPassMaxValue);
+          const rayIndex = Math.floor(j / (bouncesPerPass * receiversCount));
+          const bounceIndex = bouncesPerPass * i + (j - bouncesPerPass * receiversCount * rayIndex) / receiversCount;
+          if (k === 0 && rayIndex % gapBetweenIndicesToCount === 0 && rayIndex / gapBetweenIndicesToCount < plottedRayCoordinates.length && bounceIndex < settings.bouncePlotCount) {
+            const pointIndex = (bounceIndex + 1) * 4;
+            plottedRayCoordinates[rayIndex / gapBetweenIndicesToCount][pointIndex] = result[5][upperIndex];
+            plottedRayCoordinates[rayIndex / gapBetweenIndicesToCount][pointIndex + 1] = result[4][lowerIndex];
+            plottedRayCoordinates[rayIndex / gapBetweenIndicesToCount][pointIndex + 2] = result[4][upperIndex];
+            plottedRayCoordinates[rayIndex / gapBetweenIndicesToCount][pointIndex + 3] = result[5][lowerIndex];
+          }
         }
       }
       if (i === 0) {
@@ -866,14 +894,7 @@
         }
       }
     }
-    const outputAudio = combineFilteredAudio(
-      output125,
-      output250,
-      output500,
-      output1000,
-      output2000,
-      output4000
-    );
+    const outputAudio = outputs.map((output) => combineFilteredAudio(...output));
     console.timeEnd("Total (excluding setup)");
     console.timeEnd("Total (including setup)");
     console.log(outputAudio.join(","));
@@ -304362,8 +304383,10 @@ void main() {
         rayCount: 2e4,
         audioDuration: 10,
         sourcePosition: [0, 0, 0],
-        receiverPosition: [3, 0, 0],
-        receiverRadius: 0.2,
+        receivers: [
+          { position: [3, -1, 0], radius: 0.2 },
+          { position: [3, 1, 0], radius: 0.2 }
+        ],
         rayPlotCount: 10,
         bouncePlotCount: 10,
         throttle: isOnMobile ? 0.8 : 0,
@@ -304402,7 +304425,8 @@ void main() {
             scatter: 0.1
           }
         ],
-        audioToPlay: null,
+        raytracedAudio: [],
+        selectedChannels: [0],
         ctx: null,
         running: false,
         rayTracingProgress: [0, 0],
@@ -304434,8 +304458,7 @@ void main() {
           const rayTraceOutput = await rayTrace(
             {
               sourcePosition: state.sourcePosition,
-              receiverPosition: state.receiverPosition,
-              receiverRadius: state.receiverRadius || 0,
+              receivers: state.receivers,
               geometry: state.geometry.triangles(),
               materials: state.materials,
               rayCount: state.rayCount,
@@ -304446,41 +304469,71 @@ void main() {
             },
             state.rayTraceUpdate
           );
-          state.audioToPlay = rayTraceOutput?.audio || null;
+          state.raytracedAudio = rayTraceOutput?.audio || [];
           state.bounceCoordinates = rayTraceOutput?.bounceCoordinates || [];
           state.running = false;
           ThreeView.updatePlot();
+        },
+        audioChannelsToPlay: function() {
+          const channels = [];
+          for (const chan of state.selectedChannels) {
+            if (chan < state.raytracedAudio.length) {
+              channels.push(state.raytracedAudio[chan]);
+            }
+          }
+          return channels;
         },
         rayTraceUpdate: async function(bounces, totalBounces) {
           state.rayTracingProgress = [bounces, totalBounces];
           import_mithril2.default.redraw();
         },
         playAudio: function() {
-          if (!state.audioToPlay) {
-            return;
-          }
+          const audioChannels = state.audioChannelsToPlay();
           if (!state.ctx) {
             state.ctx = new AudioContext({
               sampleRate: SAMPLE_RATE
             });
           }
           state.source?.stop();
-          const sourceBuffer = state.ctx.createBuffer(
-            1,
-            state.audioToPlay.length,
-            SAMPLE_RATE
-          );
-          const channel0 = sourceBuffer.getChannelData(0);
-          for (let i = 0; i < state.audioToPlay.length; ++i) {
-            channel0[i] = state.audioToPlay[i];
+          if (audioChannels.length === 1) {
+            console.log("Playing mono audio");
+            const sourceBuffer = state.ctx.createBuffer(
+              1,
+              audioChannels[0].length,
+              SAMPLE_RATE
+            );
+            const channel0 = sourceBuffer.getChannelData(0);
+            for (let i = 0; i < audioChannels[0].length; ++i) {
+              channel0[i] = audioChannels[0][i];
+            }
+            state.source = state.ctx.createBufferSource();
+            state.source.buffer = sourceBuffer;
+            state.source.connect(state.ctx.destination);
+            state.source.start(0);
+          } else if (audioChannels.length === 2) {
+            console.log("Playing stereo");
+            const sourceBuffer = state.ctx.createBuffer(
+              2,
+              audioChannels[0].length,
+              SAMPLE_RATE
+            );
+            const channel0 = sourceBuffer.getChannelData(0);
+            const channel1 = sourceBuffer.getChannelData(1);
+            for (let i = 0; i < audioChannels[0].length; ++i) {
+              channel0[i] = audioChannels[0][i];
+              channel1[i] = audioChannels[1][i];
+            }
+            state.source = state.ctx.createBufferSource();
+            state.source.buffer = sourceBuffer;
+            state.source.connect(state.ctx.destination);
+            state.source.start(0);
+          } else {
+            console.log("Cannot play audio with ", audioChannels.length, "channels");
           }
-          state.source = state.ctx.createBufferSource();
-          state.source.buffer = sourceBuffer;
-          state.source.connect(state.ctx.destination);
-          state.source.start(0);
         },
         playConvolved: async function() {
-          if (!state.audioToPlay) {
+          const audioChannels = state.audioChannelsToPlay();
+          if (audioChannels.length === 0) {
             return;
           }
           if (!state.ctx) {
@@ -304491,35 +304544,73 @@ void main() {
           state.source?.stop();
           const inputAudio = await fetch("res/speechdirectsound_48.wav");
           const inputAudioArrayBuffer = await inputAudio.arrayBuffer();
-          const inputBuffer = await state.ctx.decodeAudioData(inputAudioArrayBuffer);
-          const fftMinSize = Math.max(inputBuffer.length, state.audioToPlay.length);
+          let inputBuffer = await state.ctx.decodeAudioData(inputAudioArrayBuffer);
+          const fftMinSize = Math.max(inputBuffer.length, audioChannels.length);
           const fftSize = Math.pow(2, Math.ceil(Math.log(fftMinSize) / Math.log(2)));
           const f = new import_fft.default(fftSize);
           const Y = f.createComplexArray();
           const irFFT = f.createComplexArray();
-          const paddedInputData = Array.from(
-            pad(inputBuffer.getChannelData(0), fftSize)
-          );
-          const paddedIrData = Array.from(pad(state.audioToPlay, fftSize));
-          f.realTransform(Y, paddedInputData);
-          f.realTransform(irFFT, paddedIrData);
-          for (let i = 0; i <= fftSize / 2; i += 2) {
-            const r1 = Y[i];
-            const i1 = Y[i + 1];
-            const r2 = irFFT[i];
-            const i2 = irFFT[i + 1];
-            Y[i] = r1 * r2 - i1 * i2;
-            Y[i + 1] = r1 * i2 + r2 * i1;
+          let numChannels = audioChannels.length;
+          const ir = audioChannels.slice();
+          if (numChannels < inputBuffer.numberOfChannels) {
+            if (numChannels === 1) {
+              for (let i = 1; i < numChannels; ++i) {
+                ir.push(ir[0]);
+              }
+            } else {
+              console.log(
+                `Cannot convolve input audio (${inputBuffer.numberOfChannels} channels) with IR (${numChannels})`
+              );
+              return;
+            }
           }
-          f.completeSpectrum(Y);
-          const output = f.createComplexArray();
-          f.inverseTransform(output, Y);
-          const sourceBuffer = await state.ctx.createBuffer(1, fftSize, SAMPLE_RATE);
-          const outputChannel = sourceBuffer.getChannelData(0);
+          if (numChannels > inputBuffer.numberOfChannels) {
+            if (inputBuffer.numberOfChannels === 1) {
+              const newInputBuffer = state.ctx.createBuffer(
+                numChannels,
+                inputBuffer.length,
+                inputBuffer.sampleRate
+              );
+              for (let i = 0; i < numChannels; ++i) {
+                newInputBuffer.copyToChannel(inputBuffer.getChannelData(0), i);
+              }
+              inputBuffer = newInputBuffer;
+            } else {
+              console.log(
+                `Cannot convolve input audio (${inputBuffer.numberOfChannels} channels) with IR (${numChannels})`
+              );
+              return;
+            }
+          }
+          const sourceBuffer = await state.ctx.createBuffer(
+            numChannels,
+            fftSize,
+            SAMPLE_RATE
+          );
           let maxValue = -Infinity;
-          for (let i = 0; i < fftSize; ++i) {
-            outputChannel[i] = output[i * 2];
-            maxValue = Math.max(Math.abs(outputChannel[i]), maxValue);
+          for (let i = 0; i < numChannels; ++i) {
+            const paddedInputData = Array.from(
+              pad(inputBuffer.getChannelData(i), fftSize)
+            );
+            const paddedIrData = Array.from(pad(ir[i], fftSize));
+            f.realTransform(Y, paddedInputData);
+            f.realTransform(irFFT, paddedIrData);
+            for (let i2 = 0; i2 <= fftSize / 2; i2 += 2) {
+              const r1 = Y[i2];
+              const i1 = Y[i2 + 1];
+              const r2 = irFFT[i2];
+              const i22 = irFFT[i2 + 1];
+              Y[i2] = r1 * r2 - i1 * i22;
+              Y[i2 + 1] = r1 * i22 + r2 * i1;
+            }
+            f.completeSpectrum(Y);
+            const output = f.createComplexArray();
+            f.inverseTransform(output, Y);
+            const outputChannel = sourceBuffer.getChannelData(i);
+            for (let j = 0; j < fftSize; ++j) {
+              outputChannel[j] = output[j * 2];
+              maxValue = Math.max(Math.abs(outputChannel[j]), maxValue);
+            }
           }
           state.source = state.ctx.createBufferSource();
           state.source.buffer = sourceBuffer;
@@ -304562,6 +304653,15 @@ void main() {
               scatter: 0.2
             });
           }
+        },
+        addReceiver: function() {
+          state.receivers.push({
+            position: [0, 0, 0],
+            radius: 0.2
+          });
+        },
+        deleteReceiver: function() {
+          state.receivers.pop();
         }
       };
       function ScatterPlot(id, layout, getData) {
@@ -304572,7 +304672,7 @@ void main() {
           r: 20
         };
         const PlotComponent = {
-          lastAudio: null,
+          lastAudio: [],
           lastData: [
             {
               x: [],
@@ -304581,18 +304681,21 @@ void main() {
             }
           ],
           data: function() {
-            if (state.audioToPlay === null || state.audioToPlay === PlotComponent.lastAudio) {
+            const audioToPlot = state.audioChannelsToPlay();
+            if (audioToPlot.length === PlotComponent.lastAudio.length && audioToPlot.every((chan, i) => chan === PlotComponent.lastAudio[i])) {
               return PlotComponent.lastData;
             }
-            const { x, y } = getData(state.audioToPlay);
-            PlotComponent.lastAudio = state.audioToPlay;
-            PlotComponent.lastData = [
-              {
+            PlotComponent.lastData = [];
+            PlotComponent.lastAudio = [];
+            for (let i = 0; i < audioToPlot.length; ++i) {
+              const { x, y } = getData(audioToPlot[i] || []);
+              PlotComponent.lastAudio.push(audioToPlot[i]);
+              PlotComponent.lastData.push({
                 x,
                 y,
                 type: "scatter"
-              }
-            ];
+              });
+            }
             return PlotComponent.lastData;
           },
           oncreate: function() {
@@ -304639,7 +304742,7 @@ void main() {
         wireframeMesh: null,
         selectedMesh: null,
         source: null,
-        receiver: null,
+        receivers: [],
         camera: null,
         rays: [],
         // Since updating the mesh takes a little time (due to re-orienting the triangles),
@@ -304769,12 +304872,25 @@ void main() {
             ThreeView.source.position.set(...state.sourcePosition);
             ThreeView.source.visible = state.geometry.triangles().length > 0;
           }
-          if (ThreeView.receiver) {
-            const r = state.receiverRadius || 0;
-            ThreeView.receiver.scale.set(r, r, r);
-            ThreeView.receiver.position.set(...state.receiverPosition);
-            ThreeView.receiver.visible = state.geometry.triangles().length > 0;
-          }
+          ThreeView.receivers.map((receiver) => {
+            ThreeView.scene?.remove(receiver);
+            dispose(receiver);
+          });
+          ThreeView.receivers = state.receivers.map((receiver) => {
+            const receiverMaterial = new MeshBasicMaterial({
+              color: "blue"
+            });
+            const mesh = new Mesh(
+              new SphereGeometry(1),
+              receiverMaterial
+            );
+            const r = receiver.radius || 0;
+            mesh.scale.set(r, r, r);
+            mesh.position.set(...receiver.position);
+            mesh.visible = state.geometry.triangles().length > 0;
+            ThreeView.scene?.add(mesh);
+            return mesh;
+          });
           ThreeView.updatingMesh = false;
         },
         oncreate: async function(vnode) {
@@ -304799,15 +304915,6 @@ void main() {
           );
           scene.add(source);
           ThreeView.source = source;
-          const receiverMaterial = new MeshBasicMaterial({
-            color: "blue"
-          });
-          const receiver = new Mesh(
-            new SphereGeometry(1),
-            receiverMaterial
-          );
-          scene.add(receiver);
-          ThreeView.receiver = receiver;
           await ThreeView.updateMesh();
           ThreeView.camera.position.x = 20;
           ThreeView.camera.position.y = -25;
@@ -304911,51 +305018,57 @@ void main() {
                   );
                 }
               })
-            ]),
-            (0, import_mithril2.default)("label", [
-              "Receiver position:",
-              (0, import_mithril2.default)("input", {
-                type: "number",
-                value: state.receiverPosition[0],
-                oninput: function(e) {
-                  state.receiverPosition[0] = parseFloat(
-                    e.target.value
-                  );
-                }
-              }),
-              (0, import_mithril2.default)("input", {
-                type: "number",
-                value: state.receiverPosition[1],
-                oninput: function(e) {
-                  state.receiverPosition[1] = parseFloat(
-                    e.target.value
-                  );
-                }
-              }),
-              (0, import_mithril2.default)("input", {
-                type: "number",
-                value: state.receiverPosition[2],
-                oninput: function(e) {
-                  state.receiverPosition[2] = parseFloat(
-                    e.target.value
-                  );
-                }
-              })
-            ]),
-            (0, import_mithril2.default)("label", [
-              "Receiver radius (m):",
-              (0, import_mithril2.default)("input", {
-                type: "number",
-                min: 0,
-                step: 0.05,
-                value: state.receiverRadius,
-                oninput: function(e) {
-                  const r = parseFloat(e.target.value);
-                  state.receiverRadius = r;
-                }
-              })
             ])
-          ])
+          ]),
+          state.receivers.map(
+            (receiver, i) => (0, import_mithril2.default)("section", [
+              (0, import_mithril2.default)("label", [
+                `Receiver ${i} position:`,
+                (0, import_mithril2.default)("input", {
+                  type: "number",
+                  value: receiver.position[0],
+                  oninput: function(e) {
+                    receiver.position[0] = parseFloat(
+                      e.target.value
+                    );
+                  }
+                }),
+                (0, import_mithril2.default)("input", {
+                  type: "number",
+                  value: receiver.position[1],
+                  oninput: function(e) {
+                    receiver.position[1] = parseFloat(
+                      e.target.value
+                    );
+                  }
+                }),
+                (0, import_mithril2.default)("input", {
+                  type: "number",
+                  value: receiver.position[2],
+                  oninput: function(e) {
+                    receiver.position[2] = parseFloat(
+                      e.target.value
+                    );
+                  }
+                })
+              ]),
+              (0, import_mithril2.default)("label", [
+                `Receiver ${i} radius (m):`,
+                (0, import_mithril2.default)("input", {
+                  type: "number",
+                  min: 0,
+                  step: 0.05,
+                  value: receiver.radius,
+                  oninput: function(e) {
+                    const r = parseFloat(e.target.value);
+                    receiver.radius = r;
+                  }
+                })
+              ])
+            ])
+          ),
+          (0, import_mithril2.default)("button", { onclick: () => state.addReceiver() }, "Add receiver"),
+          (0, import_mithril2.default)("button", { onclick: () => state.deleteReceiver() }, "Delete receiver")
         ];
       }
       function materialsMenu() {
@@ -305158,10 +305271,34 @@ void main() {
             " bounces"
           ]),
           (0, import_mithril2.default)("section", [
+            state.raytracedAudio.length > 0 ? (0, import_mithril2.default)(
+              "select",
+              {
+                style: "display: block",
+                onchange: (event) => {
+                  const selectElement = event.target;
+                  const channelsToPlay = [];
+                  for (const option of selectElement.options) {
+                    if (option.selected) {
+                      channelsToPlay.push(parseInt(option.value));
+                    }
+                  }
+                  state.selectedChannels = channelsToPlay;
+                },
+                multiple: true
+              },
+              state.raytracedAudio.map(
+                (_, i) => (0, import_mithril2.default)(
+                  "option",
+                  { value: i, selected: state.selectedChannels.includes(i) },
+                  `Channel ${i}`
+                )
+              )
+            ) : null,
             (0, import_mithril2.default)(
               "button",
               {
-                disabled: state.audioToPlay === null,
+                disabled: state.raytracedAudio.length === 0,
                 onclick: state.playAudio
               },
               "Play audio"
@@ -305169,7 +305306,7 @@ void main() {
             (0, import_mithril2.default)(
               "button",
               {
-                disabled: state.audioToPlay === null,
+                disabled: state.raytracedAudio.length === 0,
                 onclick: state.playConvolved
               },
               "Play convolved audio"

@@ -1,4 +1,4 @@
-import { rayTrace } from "./ray_tracing";
+import { rayTrace, Receiver } from "./ray_tracing";
 import { isOnMobile, Material, SAMPLE_RATE, Triangle, Vec3 } from "./constants";
 import m from "mithril";
 import Plotly, { Data } from "plotly.js-dist";
@@ -20,8 +20,10 @@ let state = {
   rayCount: 20000,
   audioDuration: 10,
   sourcePosition: [0, 0, 0] as Vec3,
-  receiverPosition: [3.0, 0.0, 0.0] as Vec3,
-  receiverRadius: 0.2 as number | undefined,
+  receivers: [
+    { position: [3.0, -1.0, 0.0], radius: 0.2 },
+    { position: [3.0, 1.0, 0.0], radius: 0.2 },
+  ] as Receiver[],
   rayPlotCount: 10,
   bouncePlotCount: 10,
   throttle: isOnMobile ? 0.8 : 0,
@@ -61,7 +63,8 @@ let state = {
     },
   ] as Material[],
 
-  audioToPlay: null as Float32Array | null,
+  raytracedAudio: [] as Float32Array[],
+  selectedChannels: [0],
   ctx: null as AudioContext | null,
   running: false,
   rayTracingProgress: [0, 0] as [number, number],
@@ -101,8 +104,7 @@ let state = {
     const rayTraceOutput = await rayTrace(
       {
         sourcePosition: state.sourcePosition,
-        receiverPosition: state.receiverPosition,
-        receiverRadius: state.receiverRadius || 0,
+        receivers: state.receivers,
         geometry: state.geometry.triangles(),
         materials: state.materials,
         rayCount: state.rayCount,
@@ -113,10 +115,20 @@ let state = {
       },
       state.rayTraceUpdate,
     );
-    state.audioToPlay = rayTraceOutput?.audio || null;
+    state.raytracedAudio = rayTraceOutput?.audio || [];
     state.bounceCoordinates = rayTraceOutput?.bounceCoordinates || [];
     state.running = false;
     ThreeView.updatePlot();
+  },
+
+  audioChannelsToPlay: function () {
+    const channels = [];
+    for (const chan of state.selectedChannels) {
+      if (chan < state.raytracedAudio.length) {
+        channels.push(state.raytracedAudio[chan]);
+      }
+    }
+    return channels;
   },
 
   rayTraceUpdate: async function (bounces: number, totalBounces: number) {
@@ -125,10 +137,7 @@ let state = {
   },
 
   playAudio: function () {
-    // If no ray-tracing has happened, ignore.
-    if (!state.audioToPlay) {
-      return;
-    }
+    const audioChannels = state.audioChannelsToPlay();
 
     // Create an AudioContext if one does not exist.
     if (!state.ctx) {
@@ -140,29 +149,60 @@ let state = {
     // Stop the audio if it is already playing.
     state.source?.stop();
 
-    // Create the buffer to play.
-    const sourceBuffer = state.ctx.createBuffer(
-      1,
-      state.audioToPlay.length,
-      SAMPLE_RATE,
-    );
-    const channel0 = sourceBuffer.getChannelData(0);
-    for (let i = 0; i < state.audioToPlay.length; ++i) {
-      channel0[i] = state.audioToPlay[i];
+    if (audioChannels.length === 1) {
+      console.log("Playing mono audio");
+
+      // Create the buffer to play.
+      const sourceBuffer = state.ctx.createBuffer(
+        1,
+        audioChannels[0].length,
+        SAMPLE_RATE,
+      );
+      const channel0 = sourceBuffer.getChannelData(0);
+      for (let i = 0; i < audioChannels[0].length; ++i) {
+        channel0[i] = audioChannels[0][i];
+      }
+
+      // Create the audio buffer source to play.
+      state.source = state.ctx.createBufferSource();
+      state.source.buffer = sourceBuffer;
+
+      // Start playing the audio buffer source.
+      state.source.connect(state.ctx.destination);
+      state.source.start(0);
+    } else if (audioChannels.length === 2) {
+      console.log("Playing stereo");
+
+      // Create the buffer to play.
+      const sourceBuffer = state.ctx.createBuffer(
+        2,
+        audioChannels[0].length,
+        SAMPLE_RATE,
+      );
+      const channel0 = sourceBuffer.getChannelData(0);
+      const channel1 = sourceBuffer.getChannelData(1);
+      for (let i = 0; i < audioChannels[0].length; ++i) {
+        channel0[i] = audioChannels[0][i];
+        channel1[i] = audioChannels[1][i];
+      }
+
+      // Create the audio buffer source to play.
+      state.source = state.ctx.createBufferSource();
+      state.source.buffer = sourceBuffer;
+
+      // Start playing the audio buffer source.
+      state.source.connect(state.ctx.destination);
+      state.source.start(0);
+    } else {
+      console.log("Cannot play audio with ", audioChannels.length, "channels");
     }
-
-    // Create the audio buffer source to play.
-    state.source = state.ctx.createBufferSource();
-    state.source.buffer = sourceBuffer;
-
-    // Start playing the audio buffer source.
-    state.source.connect(state.ctx.destination);
-    state.source.start(0);
   },
 
   playConvolved: async function () {
+    const audioChannels = state.audioChannelsToPlay();
+
     // If no ray-tracing has happened, ignore.
-    if (!state.audioToPlay) {
+    if (audioChannels.length === 0) {
       return;
     }
 
@@ -181,10 +221,10 @@ let state = {
     const inputAudioArrayBuffer = await inputAudio.arrayBuffer();
 
     // TODO BUG: match sample rate.
-    const inputBuffer = await state.ctx.decodeAudioData(inputAudioArrayBuffer);
+    let inputBuffer = await state.ctx.decodeAudioData(inputAudioArrayBuffer);
 
     // Get the FFT size (a power of two).
-    const fftMinSize = Math.max(inputBuffer.length, state.audioToPlay.length);
+    const fftMinSize = Math.max(inputBuffer.length, audioChannels.length);
     // https://stackoverflow.com/a/466256
     const fftSize = Math.pow(2, Math.ceil(Math.log(fftMinSize) / Math.log(2)));
 
@@ -194,48 +234,92 @@ let state = {
     const Y = f.createComplexArray();
     const irFFT = f.createComplexArray();
 
-    // Zero-pad data up to fftSize.
-    const paddedInputData = Array.from(
-      pad(inputBuffer.getChannelData(0), fftSize),
-    );
-    const paddedIrData = Array.from(pad(state.audioToPlay, fftSize));
+    let numChannels = audioChannels.length;
 
-    // DFT.
-    // Y/irFFT contain interleaved (real, imaginary) samples.
-    f.realTransform(Y, paddedInputData);
-    f.realTransform(irFFT, paddedIrData);
+    const ir = audioChannels.slice();
 
-    // Multiply (complex interleaved) irFFT by Y.
-    // Only need to multiply up to fftSize/2 since the other half is
-    // empty and populated by completeSpectrum() below.
-    for (let i = 0; i <= fftSize / 2; i += 2) {
-      const r1 = Y[i];
-      const i1 = Y[i + 1];
-      const r2 = irFFT[i];
-      const i2 = irFFT[i + 1];
-
-      Y[i] = r1 * r2 - i1 * i2;
-      Y[i + 1] = r1 * i2 + r2 * i1;
+    if (numChannels < inputBuffer.numberOfChannels) {
+      if (numChannels === 1) {
+        for (let i = 1; i < numChannels; ++i) {
+          ir.push(ir[0]);
+        }
+      } else {
+        console.log(
+          `Cannot convolve input audio (${inputBuffer.numberOfChannels} channels) with IR (${numChannels})`,
+        );
+        return;
+      }
     }
 
-    // Complete Y using Hermitian symmetry (for real audio).
-    f.completeSpectrum(Y);
-
-    // Inverse transform audio.
-    const output = f.createComplexArray();
-    f.inverseTransform(output, Y);
+    if (numChannels > inputBuffer.numberOfChannels) {
+      if (inputBuffer.numberOfChannels === 1) {
+        const newInputBuffer = state.ctx.createBuffer(
+          numChannels,
+          inputBuffer.length,
+          inputBuffer.sampleRate,
+        );
+        for (let i = 0; i < numChannels; ++i) {
+          newInputBuffer.copyToChannel(inputBuffer.getChannelData(0), i);
+        }
+        inputBuffer = newInputBuffer;
+      } else {
+        console.log(
+          `Cannot convolve input audio (${inputBuffer.numberOfChannels} channels) with IR (${numChannels})`,
+        );
+        return;
+      }
+    }
 
     // Create output audio buffer.
-    const sourceBuffer = await state.ctx.createBuffer(1, fftSize, SAMPLE_RATE);
-    const outputChannel = sourceBuffer.getChannelData(0);
+    const sourceBuffer = await state.ctx.createBuffer(
+      numChannels,
+      fftSize,
+      SAMPLE_RATE,
+    );
 
     let maxValue = -Infinity;
 
-    // Store every second sample (skipping imaginary samples).
-    for (let i = 0; i < fftSize; ++i) {
-      outputChannel[i] = output[i * 2];
+    for (let i = 0; i < numChannels; ++i) {
+      // Zero-pad data up to fftSize.
+      const paddedInputData = Array.from(
+        pad(inputBuffer.getChannelData(i), fftSize),
+      );
+      const paddedIrData = Array.from(pad(ir[i], fftSize));
 
-      maxValue = Math.max(Math.abs(outputChannel[i]), maxValue);
+      // DFT.
+      // Y/irFFT contain interleaved (real, imaginary) samples.
+      f.realTransform(Y, paddedInputData);
+      f.realTransform(irFFT, paddedIrData);
+
+      // Multiply (complex interleaved) irFFT by Y.
+      // Only need to multiply up to fftSize/2 since the other half is
+      // empty and populated by completeSpectrum() below.
+      for (let i = 0; i <= fftSize / 2; i += 2) {
+        const r1 = Y[i];
+        const i1 = Y[i + 1];
+        const r2 = irFFT[i];
+        const i2 = irFFT[i + 1];
+
+        Y[i] = r1 * r2 - i1 * i2;
+        Y[i + 1] = r1 * i2 + r2 * i1;
+      }
+
+      // Complete Y using Hermitian symmetry (for real audio).
+      f.completeSpectrum(Y);
+
+      // Inverse transform audio.
+      const output = f.createComplexArray();
+      f.inverseTransform(output, Y);
+
+      // Get output channel.
+      const outputChannel = sourceBuffer.getChannelData(i);
+
+      // Store every second sample (skipping imaginary samples).
+      for (let j = 0; j < fftSize; ++j) {
+        outputChannel[j] = output[j * 2];
+
+        maxValue = Math.max(Math.abs(outputChannel[j]), maxValue);
+      }
     }
 
     // Create the audio buffer source to play.
@@ -294,6 +378,17 @@ let state = {
       });
     }
   },
+
+  addReceiver: function () {
+    state.receivers.push({
+      position: [0, 0, 0],
+      radius: 0.2,
+    });
+  },
+
+  deleteReceiver: function () {
+    state.receivers.pop();
+  },
 };
 
 function ScatterPlot(
@@ -308,7 +403,7 @@ function ScatterPlot(
     r: 20,
   };
   const PlotComponent = {
-    lastAudio: null as Float32Array | null,
+    lastAudio: [] as Float32Array[],
     lastData: [
       {
         x: [],
@@ -318,23 +413,27 @@ function ScatterPlot(
     ] as Data[],
 
     data: function (): Data[] {
+      const audioToPlot = state.audioChannelsToPlay();
       if (
-        state.audioToPlay === null ||
-        state.audioToPlay === PlotComponent.lastAudio
+        audioToPlot.length === PlotComponent.lastAudio.length &&
+        audioToPlot.every((chan, i) => chan === PlotComponent.lastAudio[i])
       ) {
         return PlotComponent.lastData;
       }
 
-      const { x, y } = getData(state.audioToPlay);
+      PlotComponent.lastData = [];
+      PlotComponent.lastAudio = [];
 
-      PlotComponent.lastAudio = state.audioToPlay;
-      PlotComponent.lastData = [
-        {
+      for (let i = 0; i < audioToPlot.length; ++i) {
+        const { x, y } = getData(audioToPlot[i] || []);
+
+        PlotComponent.lastAudio.push(audioToPlot[i]);
+        PlotComponent.lastData.push({
           x,
           y,
           type: "scatter",
-        },
-      ];
+        });
+      }
 
       return PlotComponent.lastData;
     },
@@ -390,7 +489,7 @@ let ThreeView = {
   wireframeMesh: null as THREE.Mesh | null,
   selectedMesh: null as THREE.Mesh | null,
   source: null as THREE.Mesh | null,
-  receiver: null as THREE.Mesh | null,
+  receivers: [] as THREE.Mesh[],
   camera: null as THREE.Camera | null,
   rays: [] as THREE.Line[],
 
@@ -556,12 +655,28 @@ let ThreeView = {
       ThreeView.source.position.set(...state.sourcePosition);
       ThreeView.source.visible = state.geometry.triangles().length > 0;
     }
-    if (ThreeView.receiver) {
-      const r = state.receiverRadius || 0;
-      ThreeView.receiver.scale.set(r, r, r);
-      ThreeView.receiver.position.set(...state.receiverPosition);
-      ThreeView.receiver.visible = state.geometry.triangles().length > 0;
-    }
+
+    ThreeView.receivers.map((receiver) => {
+      ThreeView.scene?.remove(receiver);
+      dispose(receiver);
+    });
+
+    ThreeView.receivers = state.receivers.map((receiver) => {
+      const receiverMaterial = new THREE.MeshBasicMaterial({
+        color: "blue",
+      });
+      const mesh = new THREE.Mesh(
+        new THREE.SphereGeometry(1.0),
+        receiverMaterial,
+      );
+
+      const r = receiver.radius || 0;
+      mesh.scale.set(r, r, r);
+      mesh.position.set(...receiver.position);
+      mesh.visible = state.geometry.triangles().length > 0;
+      ThreeView.scene?.add(mesh);
+      return mesh;
+    });
 
     ThreeView.updatingMesh = false;
   },
@@ -592,16 +707,6 @@ let ThreeView = {
     );
     scene.add(source);
     ThreeView.source = source;
-
-    const receiverMaterial = new THREE.MeshBasicMaterial({
-      color: "blue",
-    });
-    const receiver = new THREE.Mesh(
-      new THREE.SphereGeometry(1.0),
-      receiverMaterial,
-    );
-    scene.add(receiver);
-    ThreeView.receiver = receiver;
 
     await ThreeView.updateMesh();
 
@@ -731,50 +836,57 @@ function geometryMenu() {
           },
         }),
       ]),
-      m("label", [
-        "Receiver position:",
-        m("input", {
-          type: "number",
-          value: state.receiverPosition[0],
-          oninput: function (e: InputEvent) {
-            state.receiverPosition[0] = parseFloat(
-              (e.target as HTMLInputElement).value,
-            );
-          },
-        }),
-        m("input", {
-          type: "number",
-          value: state.receiverPosition[1],
-          oninput: function (e: InputEvent) {
-            state.receiverPosition[1] = parseFloat(
-              (e.target as HTMLInputElement).value,
-            );
-          },
-        }),
-        m("input", {
-          type: "number",
-          value: state.receiverPosition[2],
-          oninput: function (e: InputEvent) {
-            state.receiverPosition[2] = parseFloat(
-              (e.target as HTMLInputElement).value,
-            );
-          },
-        }),
-      ]),
-      m("label", [
-        "Receiver radius (m):",
-        m("input", {
-          type: "number",
-          min: 0,
-          step: 0.05,
-          value: state.receiverRadius,
-          oninput: function (e: InputEvent) {
-            const r = parseFloat((e.target as HTMLInputElement).value);
-            state.receiverRadius = r;
-          },
-        }),
-      ]),
     ]),
+
+    state.receivers.map((receiver, i) =>
+      m("section", [
+        m("label", [
+          `Receiver ${i} position:`,
+          m("input", {
+            type: "number",
+            value: receiver.position[0],
+            oninput: function (e: InputEvent) {
+              receiver.position[0] = parseFloat(
+                (e.target as HTMLInputElement).value,
+              );
+            },
+          }),
+          m("input", {
+            type: "number",
+            value: receiver.position[1],
+            oninput: function (e: InputEvent) {
+              receiver.position[1] = parseFloat(
+                (e.target as HTMLInputElement).value,
+              );
+            },
+          }),
+          m("input", {
+            type: "number",
+            value: receiver.position[2],
+            oninput: function (e: InputEvent) {
+              receiver.position[2] = parseFloat(
+                (e.target as HTMLInputElement).value,
+              );
+            },
+          }),
+        ]),
+        m("label", [
+          `Receiver ${i} radius (m):`,
+          m("input", {
+            type: "number",
+            min: 0,
+            step: 0.05,
+            value: receiver.radius,
+            oninput: function (e: InputEvent) {
+              const r = parseFloat((e.target as HTMLInputElement).value);
+              receiver.radius = r;
+            },
+          }),
+        ]),
+      ]),
+    ),
+    m("button", { onclick: () => state.addReceiver() }, "Add receiver"),
+    m("button", { onclick: () => state.deleteReceiver() }, "Delete receiver"),
   ];
 }
 
@@ -991,10 +1103,36 @@ function raytracingMenu() {
       " bounces",
     ]),
     m("section", [
+      state.raytracedAudio.length > 0
+        ? m(
+            "select",
+            {
+              style: "display: block",
+              onchange: (event: InputEvent) => {
+                const selectElement = event.target as HTMLSelectElement;
+                const channelsToPlay = [];
+                for (const option of selectElement.options) {
+                  if (option.selected) {
+                    channelsToPlay.push(parseInt(option.value));
+                  }
+                }
+                state.selectedChannels = channelsToPlay;
+              },
+              multiple: true,
+            },
+            state.raytracedAudio.map((_, i) =>
+              m(
+                "option",
+                { value: i, selected: state.selectedChannels.includes(i) },
+                `Channel ${i}`,
+              ),
+            ),
+          )
+        : null,
       m(
         "button",
         {
-          disabled: state.audioToPlay === null,
+          disabled: state.raytracedAudio.length === 0,
           onclick: state.playAudio,
         },
         "Play audio",
@@ -1002,7 +1140,7 @@ function raytracingMenu() {
       m(
         "button",
         {
-          disabled: state.audioToPlay === null,
+          disabled: state.raytracedAudio.length === 0,
           onclick: state.playConvolved,
         },
         "Play convolved audio",

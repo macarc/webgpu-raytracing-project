@@ -136,6 +136,10 @@ section.menu-container input:first-child {
   margin-left: 1rem;
 }
 
+select {
+    margin-bottom: 1rem;
+}
+
 table.materials {
   width: 100%;
   border: 1px solid black;

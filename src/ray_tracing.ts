@@ -19,10 +19,14 @@ const STANDARD_MAX_UNIFORM_BUFFER_SIZE = 65536;
 // TODO: frequency dependent.
 const AIR_ABSORPTION_COEFF = 0.0013;
 
-export interface Settings {
+export type Receiver = {
+  position: Vec3;
+  radius: number;
+};
+
+export type Settings = {
   sourcePosition: Vec3;
-  receiverPosition: Vec3;
-  receiverRadius: number;
+  receivers: Receiver[];
   rayCount: number;
   throttle: number;
   rayPlotCount: number;
@@ -63,8 +67,7 @@ function normalize(v: Vec3): Vec3 {
 }
 
 function specularRayIntersectionShaderCode(
-  receiverPosition: Vec3,
-  receiverRadius: number,
+  receivers: Receiver[],
   materials: Material[],
   bounceCount: number,
 ) {
@@ -188,19 +191,27 @@ function specularRayIntersectionShaderCode(
 
     var lastsurfacenormal = vec3(initialRay.nx, initialRay.ny, initialRay.nz);
 
-    let receiverPosition = vec3f(${receiverPosition.join(",")});
+    var receiverPositions: array<vec3f, ${receivers.length}>;
+    ${receivers.map((receiver, i) => "receiverPositions[" + i + "] = vec3f(" + receiver.position.join(",") + ");").join("")}
+
+    var receiverRadii: array<f32, ${receivers.length}>;
+    ${receivers.map((receiver, i) => "receiverRadii[" + i + "] = " + receiver.radius + ";").join("")}
 
     for (var n: u32 = 0; n < ${bounceCount}; n++) {
-      let lowerIndex = rayIndex * ${bounceCount} + n;
+      var vecToReceivers: array<vec3f, ${receivers.length}>;
+      var directionToReceivers: array<vec3f, ${receivers.length}>;
+      var distanceToReceivers: array<f32, ${receivers.length}>;
+      ${receivers.map((_, i) => "vecToReceivers[" + i + "] = receiverPositions[" + i + "] - rayposition;").join("")}
+      ${receivers.map((_, i) => "directionToReceivers[" + i + "] = normalize(vecToReceivers[" + i + "]);").join("")}
+      ${receivers.map((_, i) => "distanceToReceivers[" + i + "] = length(vecToReceivers[" + i + "]);").join("")}
+
+      let lowerIndex = rayIndex * ${bounceCount * receivers.length} + n * ${receivers.length};
       let upperIndex = arrayLength(&distances) + lowerIndex;
 
       var rayTriangleDistance = INFINITY;
       var closestTriangleIndex = triangleCount;
-      var receiverRayTriangleDistance = INFINITY;
-
-      let vecToReceiver = receiverPosition - rayposition;
-      let directionToReceiver = normalize(vecToReceiver);
-      let distanceToReceiver = length(vecToReceiver);
+      var receiverRayTriangleDistances: array<f32, ${receivers.length}>;
+      ${receivers.map((_, i) => "receiverRayTriangleDistances[" + i + "] = INFINITY;").join("")}
 
       // Loop over each triangle, checking:
       // - if the ray from the current location to the receiver intercepts with the triangle.
@@ -215,10 +226,10 @@ function specularRayIntersectionShaderCode(
 
         let offset_cross_e1 = cross(offset, edge1);
 
-        // Ray-trace to receiver.
-        {
+        // Ray-trace to receivers.
+        for (var j = 0; j < ${receivers.length}; j++) {
           // TODO: negative?
-          let ray_cross_e2 = cross(directionToReceiver, edge2);
+          let ray_cross_e2 = cross(directionToReceivers[j], edge2);
 
           // NOTE: greater than 0 iff ray is incident on backface.
           let dir = -dot(edge1, ray_cross_e2);  // directionToReceiver.(e1 x e2)
@@ -227,7 +238,7 @@ function specularRayIntersectionShaderCode(
           let inv_det = 1.0 / det;
 
           let u = inv_det * dot(offset, ray_cross_e2);
-          let v = inv_det * dot(directionToReceiver, offset_cross_e1);
+          let v = inv_det * dot(directionToReceivers[j], offset_cross_e1);
 
           let t = inv_det * dot(edge2, offset_cross_e1);
 
@@ -238,7 +249,7 @@ function specularRayIntersectionShaderCode(
             // Ray intercepts the triangle in the positive direction.
             && t >= eps && dir >= 0
           ) {
-            receiverRayTriangleDistance = min(receiverRayTriangleDistance, t);
+            receiverRayTriangleDistances[j] = min(receiverRayTriangleDistances[j], t);
           }
         }
 
@@ -275,42 +286,47 @@ function specularRayIntersectionShaderCode(
         }
       }
 
-      band_125_and_250[lowerIndex] = 0;
-      band_125_and_250[upperIndex] = 0;
-      band_500_and_1000[lowerIndex] = 0;
-      band_500_and_1000[upperIndex] = 0;
-      band_2000_and_4000[lowerIndex] = 0;
-      band_2000_and_4000[upperIndex] = 0;
+      for (var j: u32 = 0; j < ${receivers.length}; j++) {
+        band_125_and_250[lowerIndex + j] = 0;
+        band_125_and_250[upperIndex + j] = 0;
+        band_500_and_1000[lowerIndex + j] = 0;
+        band_500_and_1000[upperIndex + j] = 0;
+        band_2000_and_4000[lowerIndex + j] = 0;
+        band_2000_and_4000[upperIndex + j] = 0;
+      }
 
       // This should always be true - it should always intersect a triangle.
       if (closestTriangleIndex < triangleCount) {
         let triangle = triangleBuffer[closestTriangleIndex];
         let material = materials[u32(triangle.material)];
 
-        // If the ray to the receiver did not hit a triangle before hitting the receiver,
-        // add the contribution to the output.
-        if (receiverRayTriangleDistance >= distanceToReceiver) {
-          let cosNormalAngleToReceiver = dot(directionToReceiver, -lastsurfacenormal);
+        // TODO: unroll this loop (and all the other receivers loops).
+        for (var j: u32 = 0; j < ${receivers.length}; j++) {
+          // If the ray to the receiver did not hit a triangle before hitting the receiver,
+          // add the contribution to the output.
+          if (receiverRayTriangleDistances[j] >= distanceToReceivers[j]) {
+            let cosNormalAngleToReceiver = dot(directionToReceivers[j], -lastsurfacenormal);
 
-          // Only count if the ray is not intersecting the last surface.
-          if (cosNormalAngleToReceiver >= 0) {
-            let rayTriangleDistance = raydistancetravelled + distanceToReceiver;
-            let rayVecToClosestReceiverPoint = dot(vecToReceiver, raydirection) * raydirection;
-            let distanceFromRayToReceiver = length(vecToReceiver - rayVecToClosestReceiverPoint);
-            let additionDueToRay = f32(distanceFromRayToReceiver <= ${receiverRadius});
-              
-            // let totalIntensity = additionDueToRay + cosNormalAngleToReceiver;
-            let totalIntensity = (1 - material.scatter) * additionDueToRay + material.scatter * cosNormalAngleToReceiver;
-            // let totalIntensity = additionDueToRay;
+            // Only count if the ray is not intersecting the last surface.
+            if (cosNormalAngleToReceiver >= 0) {
+              let rayTriangleDistance = raydistancetravelled + distanceToReceivers[j];
+              let rayVecToClosestReceiverPoint = dot(vecToReceivers[j], raydirection) * raydirection;
+              let distanceFromRayToReceiver = length(vecToReceivers[j] - rayVecToClosestReceiverPoint);
+              let additionDueToRay = f32(distanceFromRayToReceiver <= receiverRadii[j]);
+                
+              // let totalIntensity = additionDueToRay + cosNormalAngleToReceiver;
+              let totalIntensity = (1 - material.scatter) * additionDueToRay + material.scatter * cosNormalAngleToReceiver;
+              // let totalIntensity = additionDueToRay;
 
-            distances[lowerIndex] = rayTriangleDistance;
+              distances[lowerIndex + j] = rayTriangleDistance;
 
-            band_125_and_250[lowerIndex] = intensity_125 * totalIntensity;
-            band_125_and_250[upperIndex] = intensity_250 * totalIntensity;
-            band_500_and_1000[lowerIndex] = intensity_500 * totalIntensity;
-            band_500_and_1000[upperIndex] = intensity_1000 * totalIntensity;
-            band_2000_and_4000[lowerIndex] = intensity_2000 * totalIntensity;
-            band_2000_and_4000[upperIndex] = intensity_4000 * totalIntensity;
+              band_125_and_250[lowerIndex + j] = intensity_125 * totalIntensity;
+              band_125_and_250[upperIndex + j] = intensity_250 * totalIntensity;
+              band_500_and_1000[lowerIndex + j] = intensity_500 * totalIntensity;
+              band_500_and_1000[upperIndex + j] = intensity_1000 * totalIntensity;
+              band_2000_and_4000[lowerIndex + j] = intensity_2000 * totalIntensity;
+              band_2000_and_4000[upperIndex + j] = intensity_4000 * totalIntensity;
+            }
           }
         }
 
@@ -333,6 +349,7 @@ function specularRayIntersectionShaderCode(
         intensity_2000 *= material.r2000;
         intensity_4000 *= material.r4000;
 
+        // NOTE: if there is more than 1 receiver, then this is wasteful.
         x_and_y[lowerIndex] = newposition.x;
         x_and_y[upperIndex] = newposition.y;
         z_and_ray_intensity[lowerIndex] = newposition.z;
@@ -541,7 +558,7 @@ class SpecularRayTracer {
 }
 
 export type RayTraceOutput = {
-  audio: Float32Array<ArrayBuffer>;
+  audio: Float32Array<ArrayBuffer>[];
   bounceCoordinates: Float32Array<ArrayBuffer>[];
 };
 
@@ -589,16 +606,17 @@ export async function rayTrace(
     1,
     Math.floor(
       ((1 - settings.throttle) * maxStorageBufferSize) /
-        (2 * FLOAT32_SIZE * settings.rayCount),
+        (2 * FLOAT32_SIZE * settings.rayCount * settings.receivers.length),
     ),
   );
 
   console.log("bouncesPerPass", bouncesPerPass);
 
   // TODO: expose this as a setting.
-  const maxPasses = 5;
+  const maxPasses = 10;
 
-  const outputSize = 2 * bouncesPerPass * settings.rayCount;
+  const outputSize =
+    2 * bouncesPerPass * settings.rayCount * settings.receivers.length;
 
   if (outputSize > maxStorageBufferSize) {
     console.log("Output buffer is too large, will not work");
@@ -631,20 +649,33 @@ export async function rayTrace(
       new Float32Array(outputSize), // z and ray intensity
     ],
     specularRayIntersectionShaderCode(
-      settings.receiverPosition,
-      settings.receiverRadius,
+      settings.receivers,
       settings.materials,
       bouncesPerPass,
     ),
   );
 
-  // TODO BUG: don't cut this off arbitrarily.
-  let output125 = new Float32Array(SAMPLE_RATE * settings.audioDuration);
-  let output250 = new Float32Array(SAMPLE_RATE * settings.audioDuration);
-  let output500 = new Float32Array(SAMPLE_RATE * settings.audioDuration);
-  let output1000 = new Float32Array(SAMPLE_RATE * settings.audioDuration);
-  let output2000 = new Float32Array(SAMPLE_RATE * settings.audioDuration);
-  let output4000 = new Float32Array(SAMPLE_RATE * settings.audioDuration);
+  const receiversCount = settings.receivers.length;
+
+  const outputs: [
+    Float32Array<ArrayBuffer>,
+    Float32Array<ArrayBuffer>,
+    Float32Array<ArrayBuffer>,
+    Float32Array<ArrayBuffer>,
+    Float32Array<ArrayBuffer>,
+    Float32Array<ArrayBuffer>,
+  ][] = [];
+
+  for (let i = 0; i < receiversCount; ++i) {
+    outputs.push([
+      new Float32Array(SAMPLE_RATE * settings.audioDuration), // 125Hz
+      new Float32Array(SAMPLE_RATE * settings.audioDuration), // 250Hz
+      new Float32Array(SAMPLE_RATE * settings.audioDuration), // 500Hz
+      new Float32Array(SAMPLE_RATE * settings.audioDuration), // 1kHz
+      new Float32Array(SAMPLE_RATE * settings.audioDuration), // 2kHz
+      new Float32Array(SAMPLE_RATE * settings.audioDuration), // 4kHz
+    ]);
+  }
 
   const THRESHOLD = 1e-12;
   let averageValue = 0;
@@ -665,6 +696,8 @@ export async function rayTrace(
 
   console.time("Total (excluding setup)");
 
+  // TODO BUG: number of bounces to plot does not line up with actual number plotted.
+
   for (let i = 0; i < maxPasses; i++) {
     update((i + 1) * bouncesPerPass, maxPasses * bouncesPerPass);
 
@@ -674,53 +707,61 @@ export async function rayTrace(
     let thisPassAverageValue = 0;
     let thisPassMaxValue = 0;
 
-    for (let j = 0; j < result[0].length; ++j) {
-      const index = Math.round(SAMPLE_RATE * (result[0][j] / SPEED_OF_SOUND));
-      const air_absorption = Math.exp(-result[0][j] * AIR_ABSORPTION_COEFF);
+    for (let k = 0; k < receiversCount; ++k) {
+      const output = outputs[k];
 
-      const lowerIndex = j;
-      const upperIndex = result[0].length + j;
+      for (let j = k; j < result[0].length; j += receiversCount) {
+        const index = Math.round(SAMPLE_RATE * (result[0][j] / SPEED_OF_SOUND));
+        const air_absorption = Math.exp(-result[0][j] * AIR_ABSORPTION_COEFF);
 
-      output125[index] += result[1][lowerIndex] * air_absorption;
-      output250[index] += result[1][upperIndex] * air_absorption;
-      output500[index] += result[2][lowerIndex] * air_absorption;
-      output1000[index] += result[2][upperIndex] * air_absorption;
-      output2000[index] += result[3][lowerIndex] * air_absorption;
-      output4000[index] += result[3][upperIndex] * air_absorption;
+        const lowerIndex = j;
+        const upperIndex = result[0].length + j;
 
-      // TODO: can probably do in shader.
-      const avg =
-        (result[1][lowerIndex] +
-          result[1][upperIndex] +
-          result[2][lowerIndex] +
-          result[2][upperIndex] +
-          result[3][lowerIndex] +
-          result[3][upperIndex]) *
-        air_absorption;
-      thisPassAverageValue += Math.abs(avg);
-      thisPassMaxValue = Math.max(Math.abs(avg), thisPassMaxValue);
+        output[0][index] += result[1][lowerIndex] * air_absorption;
+        output[1][index] += result[1][upperIndex] * air_absorption;
+        output[2][index] += result[2][lowerIndex] * air_absorption;
+        output[3][index] += result[2][upperIndex] * air_absorption;
+        output[4][index] += result[3][lowerIndex] * air_absorption;
+        output[5][index] += result[3][upperIndex] * air_absorption;
 
-      const rayIndex = Math.floor(j / bouncesPerPass);
-      const bounceIndex = bouncesPerPass * i + j - bouncesPerPass * rayIndex;
-      if (
-        rayIndex % gapBetweenIndicesToCount === 0 &&
-        rayIndex / gapBetweenIndicesToCount < plottedRayCoordinates.length &&
-        bounceIndex < settings.bouncePlotCount
-      ) {
-        // Plus 1 so we skip the initial location.
-        const pointIndex = (bounceIndex + 1) * 4;
+        // TODO: can probably do in shader.
+        const avg =
+          (result[1][lowerIndex] +
+            result[1][upperIndex] +
+            result[2][lowerIndex] +
+            result[2][upperIndex] +
+            result[3][lowerIndex] +
+            result[3][upperIndex]) *
+          air_absorption;
+        thisPassAverageValue += Math.abs(avg);
+        thisPassMaxValue = Math.max(Math.abs(avg), thisPassMaxValue);
 
-        plottedRayCoordinates[rayIndex / gapBetweenIndicesToCount][pointIndex] =
-          result[5][upperIndex];
-        plottedRayCoordinates[rayIndex / gapBetweenIndicesToCount][
-          pointIndex + 1
-        ] = result[4][lowerIndex];
-        plottedRayCoordinates[rayIndex / gapBetweenIndicesToCount][
-          pointIndex + 2
-        ] = result[4][upperIndex];
-        plottedRayCoordinates[rayIndex / gapBetweenIndicesToCount][
-          pointIndex + 3
-        ] = result[5][lowerIndex];
+        const rayIndex = Math.floor(j / (bouncesPerPass * receiversCount));
+        const bounceIndex =
+          bouncesPerPass * i +
+          (j - bouncesPerPass * receiversCount * rayIndex) / receiversCount;
+        if (
+          k === 0 &&
+          rayIndex % gapBetweenIndicesToCount === 0 &&
+          rayIndex / gapBetweenIndicesToCount < plottedRayCoordinates.length &&
+          bounceIndex < settings.bouncePlotCount
+        ) {
+          // Plus 1 so we skip the initial location.
+          const pointIndex = (bounceIndex + 1) * 4;
+
+          plottedRayCoordinates[rayIndex / gapBetweenIndicesToCount][
+            pointIndex
+          ] = result[5][upperIndex];
+          plottedRayCoordinates[rayIndex / gapBetweenIndicesToCount][
+            pointIndex + 1
+          ] = result[4][lowerIndex];
+          plottedRayCoordinates[rayIndex / gapBetweenIndicesToCount][
+            pointIndex + 2
+          ] = result[4][upperIndex];
+          plottedRayCoordinates[rayIndex / gapBetweenIndicesToCount][
+            pointIndex + 3
+          ] = result[5][lowerIndex];
+        }
       }
     }
 
@@ -740,14 +781,7 @@ export async function rayTrace(
     }
   }
 
-  const outputAudio = combineFilteredAudio(
-    output125,
-    output250,
-    output500,
-    output1000,
-    output2000,
-    output4000,
-  );
+  const outputAudio = outputs.map((output) => combineFilteredAudio(...output));
 
   console.timeEnd("Total (excluding setup)");
   console.timeEnd("Total (including setup)");
