@@ -748,6 +748,15 @@
     console.log("Creating geometry");
     const rays = [];
     const triangles = settings.geometry;
+    const direction = settings.sourceDirection?.slice() || null;
+    if (direction !== null) {
+      const length = Math.sqrt(
+        direction[0] ** 2 + direction[1] ** 2 + direction[2] ** 2
+      );
+      direction[0] /= length;
+      direction[1] /= length;
+      direction[2] /= length;
+    }
     const goldenRatio = (1 + Math.sqrt(5)) / 2;
     for (let i = 0; i < settings.rayCount; ++i) {
       const theta = 2 * Math.PI * i / goldenRatio;
@@ -757,9 +766,15 @@
         Math.sin(theta) * Math.sin(phi),
         Math.cos(phi)
       ];
+      let intensity = 1;
+      if (direction !== null) {
+        const rayDotDirection = ray[0] * direction[0] + ray[1] * direction[1] + ray[2] * direction[2];
+        intensity = (rayDotDirection + 1) / 2;
+      }
       rays.push({
         position: settings.sourcePosition,
-        direction: normalize(ray)
+        direction: normalize(ray),
+        intensity
       });
     }
     const gpuDevice = await getGPUDevice();
@@ -786,12 +801,12 @@
           ...ray.direction,
           ...[0, 0, 0],
           0,
-          1,
-          1,
-          1,
-          1,
-          1,
-          1
+          ray.intensity,
+          ray.intensity,
+          ray.intensity,
+          ray.intensity,
+          ray.intensity,
+          ray.intensity
         ])
       ),
       trianglesToFloatArray(triangles, settings.materials),
@@ -842,7 +857,7 @@
     const plottedRayCoordinates = [];
     for (let i = 0; i < settings.rayPlotCount; ++i) {
       plottedRayCoordinates.push(new Float32Array(4 * settings.bouncePlotCount));
-      plottedRayCoordinates[i][0] = 1;
+      plottedRayCoordinates[i][0] = rays[gapBetweenIndicesToCount * i].intensity;
       plottedRayCoordinates[i][1] = settings.sourcePosition[0];
       plottedRayCoordinates[i][2] = settings.sourcePosition[1];
       plottedRayCoordinates[i][3] = settings.sourcePosition[2];
@@ -304384,6 +304399,7 @@ void main() {
         audioDuration: 10,
         maxBounces: 1e4,
         sourcePosition: [0, 0, 0],
+        sourceDirection: null,
         receivers: [
           { position: [3, -1, 0], radius: 0.2 },
           { position: [3, 1, 0], radius: 0.2 }
@@ -304459,6 +304475,7 @@ void main() {
           const rayTraceOutput = await rayTrace(
             {
               sourcePosition: state.sourcePosition,
+              sourceDirection: state.sourceDirection,
               receivers: state.receivers,
               geometry: state.geometry.triangles(),
               materials: state.materials,
@@ -304744,6 +304761,7 @@ void main() {
         wireframeMesh: null,
         selectedMesh: null,
         source: null,
+        sourceDirection: null,
         receivers: [],
         camera: null,
         rays: [],
@@ -304874,6 +304892,27 @@ void main() {
             ThreeView.source.position.set(...state.sourcePosition);
             ThreeView.source.visible = state.geometry.triangles().length > 0;
           }
+          if (ThreeView.sourceDirection) {
+            ThreeView.scene?.remove(ThreeView.sourceDirection);
+            dispose(ThreeView.sourceDirection);
+          }
+          const sourceDirection = state.sourceDirection;
+          if (sourceDirection) {
+            const points = [
+              new Vector3(...state.sourcePosition),
+              new Vector3(
+                ...state.sourcePosition.map((p, i) => p + sourceDirection[i])
+              )
+            ];
+            const material = new LineBasicMaterial({
+              color: 65280
+            });
+            const geometry = new BufferGeometry().setFromPoints(points);
+            const line = new Line(geometry, material);
+            line.renderOrder = -1;
+            ThreeView.scene?.add(line);
+            ThreeView.sourceDirection = line;
+          }
           ThreeView.receivers.map((receiver) => {
             ThreeView.scene?.remove(receiver);
             dispose(receiver);
@@ -304996,7 +305035,7 @@ void main() {
               (0, import_mithril2.default)("input", {
                 type: "number",
                 value: state.sourcePosition[0],
-                oninput: function(e) {
+                onchange: function(e) {
                   state.sourcePosition[0] = parseFloat(
                     e.target.value
                   );
@@ -305005,7 +305044,7 @@ void main() {
               (0, import_mithril2.default)("input", {
                 type: "number",
                 value: state.sourcePosition[1],
-                oninput: function(e) {
+                onchange: function(e) {
                   state.sourcePosition[1] = parseFloat(
                     e.target.value
                   );
@@ -305014,13 +305053,64 @@ void main() {
               (0, import_mithril2.default)("input", {
                 type: "number",
                 value: state.sourcePosition[2],
-                oninput: function(e) {
+                onchange: function(e) {
                   state.sourcePosition[2] = parseFloat(
                     e.target.value
                   );
                 }
               })
-            ])
+            ]),
+            (0, import_mithril2.default)("label", [
+              "Directional source?",
+              (0, import_mithril2.default)("input", {
+                type: "checkbox",
+                checked: state.sourceDirection !== null,
+                onchange: function(event) {
+                  const checked = event.target.checked;
+                  if (checked) {
+                    state.sourceDirection = [1, 0, 0];
+                  } else {
+                    state.sourceDirection = null;
+                  }
+                }
+              })
+            ]),
+            state.sourceDirection ? (0, import_mithril2.default)("label", [
+              "Source direction:",
+              (0, import_mithril2.default)("input", {
+                type: "number",
+                value: state.sourceDirection?.[0],
+                onchange: function(e) {
+                  if (state.sourceDirection !== null) {
+                    state.sourceDirection[0] = parseFloat(
+                      e.target.value
+                    );
+                  }
+                }
+              }),
+              (0, import_mithril2.default)("input", {
+                type: "number",
+                value: state.sourceDirection?.[1],
+                onchange: function(e) {
+                  if (state.sourceDirection !== null) {
+                    state.sourceDirection[1] = parseFloat(
+                      e.target.value
+                    );
+                  }
+                }
+              }),
+              (0, import_mithril2.default)("input", {
+                type: "number",
+                value: state.sourceDirection?.[2],
+                onchange: function(e) {
+                  if (state.sourceDirection) {
+                    state.sourceDirection[2] = parseFloat(
+                      e.target.value
+                    );
+                  }
+                }
+              })
+            ]) : null
           ]),
           state.receivers.map(
             (receiver, i) => (0, import_mithril2.default)("section", [
@@ -305029,7 +305119,7 @@ void main() {
                 (0, import_mithril2.default)("input", {
                   type: "number",
                   value: receiver.position[0],
-                  oninput: function(e) {
+                  onchange: function(e) {
                     receiver.position[0] = parseFloat(
                       e.target.value
                     );
@@ -305038,7 +305128,7 @@ void main() {
                 (0, import_mithril2.default)("input", {
                   type: "number",
                   value: receiver.position[1],
-                  oninput: function(e) {
+                  onchange: function(e) {
                     receiver.position[1] = parseFloat(
                       e.target.value
                     );
@@ -305047,7 +305137,7 @@ void main() {
                 (0, import_mithril2.default)("input", {
                   type: "number",
                   value: receiver.position[2],
-                  oninput: function(e) {
+                  onchange: function(e) {
                     receiver.position[2] = parseFloat(
                       e.target.value
                     );
@@ -305061,7 +305151,7 @@ void main() {
                   min: 0,
                   step: 0.05,
                   value: receiver.radius,
-                  oninput: function(e) {
+                  onchange: function(e) {
                     const r = parseFloat(e.target.value);
                     receiver.radius = r;
                   }
@@ -305188,7 +305278,7 @@ void main() {
                 type: "number",
                 min: 1,
                 value: state.rayCount,
-                oninput: function(e) {
+                onchange: function(e) {
                   state.rayCount = parseInt(e.target.value);
                 }
               })
@@ -305200,7 +305290,7 @@ void main() {
                 min: 0,
                 step: 0.1,
                 value: state.audioDuration,
-                oninput: function(e) {
+                onchange: function(e) {
                   state.audioDuration = parseFloat(
                     e.target.value
                   );

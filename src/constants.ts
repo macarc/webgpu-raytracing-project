@@ -12,6 +12,7 @@ export type Vec3 = [number, number, number];
 export type Ray = {
   position: [number, number, number];
   direction: [number, number, number];
+  intensity: number;
 };
 
 export type Triangle = {

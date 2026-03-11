@@ -21,6 +21,7 @@ let state = {
   audioDuration: 10,
   maxBounces: 10000,
   sourcePosition: [0, 0, 0] as Vec3,
+  sourceDirection: null as Vec3 | null,
   receivers: [
     { position: [3.0, -1.0, 0.0], radius: 0.2 },
     { position: [3.0, 1.0, 0.0], radius: 0.2 },
@@ -105,6 +106,7 @@ let state = {
     const rayTraceOutput = await rayTrace(
       {
         sourcePosition: state.sourcePosition,
+        sourceDirection: state.sourceDirection,
         receivers: state.receivers,
         geometry: state.geometry.triangles(),
         materials: state.materials,
@@ -491,6 +493,7 @@ let ThreeView = {
   wireframeMesh: null as THREE.Mesh | null,
   selectedMesh: null as THREE.Mesh | null,
   source: null as THREE.Mesh | null,
+  sourceDirection: null as THREE.Line | null,
   receivers: [] as THREE.Mesh[],
   camera: null as THREE.Camera | null,
   rays: [] as THREE.Line[],
@@ -658,6 +661,31 @@ let ThreeView = {
       ThreeView.source.visible = state.geometry.triangles().length > 0;
     }
 
+    if (ThreeView.sourceDirection) {
+      ThreeView.scene?.remove(ThreeView.sourceDirection);
+      dispose(ThreeView.sourceDirection);
+    }
+
+    const sourceDirection = state.sourceDirection;
+    if (sourceDirection) {
+      const points = [
+        new THREE.Vector3(...state.sourcePosition),
+        new THREE.Vector3(
+          ...state.sourcePosition.map((p, i) => p + sourceDirection[i]),
+        ),
+      ];
+      const material = new THREE.LineBasicMaterial({
+        color: 0x00ff00,
+      });
+      const geometry = new THREE.BufferGeometry().setFromPoints(points);
+      const line = new THREE.Line(geometry, material);
+      // Required to prevent issues with lines randomly disappearing.
+      line.renderOrder = -1;
+
+      ThreeView.scene?.add(line);
+      ThreeView.sourceDirection = line;
+    }
+
     ThreeView.receivers.map((receiver) => {
       ThreeView.scene?.remove(receiver);
       dispose(receiver);
@@ -813,7 +841,7 @@ function geometryMenu() {
         m("input", {
           type: "number",
           value: state.sourcePosition[0],
-          oninput: function (e: InputEvent) {
+          onchange: function (e: InputEvent) {
             state.sourcePosition[0] = parseFloat(
               (e.target as HTMLInputElement).value,
             );
@@ -822,7 +850,7 @@ function geometryMenu() {
         m("input", {
           type: "number",
           value: state.sourcePosition[1],
-          oninput: function (e: InputEvent) {
+          onchange: function (e: InputEvent) {
             state.sourcePosition[1] = parseFloat(
               (e.target as HTMLInputElement).value,
             );
@@ -831,13 +859,67 @@ function geometryMenu() {
         m("input", {
           type: "number",
           value: state.sourcePosition[2],
-          oninput: function (e: InputEvent) {
+          onchange: function (e: InputEvent) {
             state.sourcePosition[2] = parseFloat(
               (e.target as HTMLInputElement).value,
             );
           },
         }),
       ]),
+      m("label", [
+        "Directional source?",
+        m("input", {
+          type: "checkbox",
+          checked: state.sourceDirection !== null,
+          onchange: function (event: InputEvent) {
+            const checked = (event.target as HTMLInputElement).checked;
+
+            if (checked) {
+              state.sourceDirection = [1, 0, 0];
+            } else {
+              state.sourceDirection = null;
+            }
+          },
+        }),
+      ]),
+      state.sourceDirection
+        ? m("label", [
+            "Source direction:",
+            m("input", {
+              type: "number",
+              value: state.sourceDirection?.[0],
+              onchange: function (e: InputEvent) {
+                if (state.sourceDirection !== null) {
+                  state.sourceDirection[0] = parseFloat(
+                    (e.target as HTMLInputElement).value,
+                  );
+                }
+              },
+            }),
+            m("input", {
+              type: "number",
+              value: state.sourceDirection?.[1],
+              onchange: function (e: InputEvent) {
+                if (state.sourceDirection !== null) {
+                  state.sourceDirection[1] = parseFloat(
+                    (e.target as HTMLInputElement).value,
+                  );
+                }
+              },
+            }),
+            m("input", {
+              type: "number",
+              value: state.sourceDirection?.[2],
+              onchange: function (e: InputEvent) {
+                if (state.sourceDirection) {
+                  state.sourceDirection[2] = parseFloat(
+                    (e.target as HTMLInputElement).value,
+                  );
+                }
+              },
+            }),
+          ])
+        : null,
     ]),
 
     state.receivers.map((receiver, i) =>
@@ -847,7 +929,7 @@ function geometryMenu() {
           m("input", {
             type: "number",
             value: receiver.position[0],
-            oninput: function (e: InputEvent) {
+            onchange: function (e: InputEvent) {
               receiver.position[0] = parseFloat(
                 (e.target as HTMLInputElement).value,
               );
@@ -856,7 +938,7 @@ function geometryMenu() {
           m("input", {
             type: "number",
             value: receiver.position[1],
-            oninput: function (e: InputEvent) {
+            onchange: function (e: InputEvent) {
               receiver.position[1] = parseFloat(
                 (e.target as HTMLInputElement).value,
               );
@@ -865,7 +947,7 @@ function geometryMenu() {
           m("input", {
             type: "number",
             value: receiver.position[2],
-            oninput: function (e: InputEvent) {
+            onchange: function (e: InputEvent) {
               receiver.position[2] = parseFloat(
                 (e.target as HTMLInputElement).value,
               );
@@ -879,7 +961,7 @@ function geometryMenu() {
             min: 0,
             step: 0.05,
             value: receiver.radius,
-            oninput: function (e: InputEvent) {
+            onchange: function (e: InputEvent) {
               const r = parseFloat((e.target as HTMLInputElement).value);
               receiver.radius = r;
             },
@@ -1019,7 +1101,7 @@ function raytracingMenu() {
           type: "number",
           min: 1,
           value: state.rayCount,
-          oninput: function (e: InputEvent) {
+          onchange: function (e: InputEvent) {
             state.rayCount = parseInt((e.target as HTMLInputElement).value);
           },
         }),
@@ -1031,7 +1113,7 @@ function raytracingMenu() {
           min: 0,
           step: 0.1,
           value: state.audioDuration,
-          oninput: function (e: InputEvent) {
+          onchange: function (e: InputEvent) {
             state.audioDuration = parseFloat(
               (e.target as HTMLInputElement).value,
             );
@@ -1068,8 +1150,8 @@ function raytracingMenu() {
             if (val !== undefined && val >= 0) {
               state.maxBounces = val;
             }
-          }
-        })
+          },
+        }),
       ]),
       m("label", [
         "Number of rays to plot:",

@@ -26,6 +26,7 @@ export type Receiver = {
 
 export type Settings = {
   sourcePosition: Vec3;
+  sourceDirection: Vec3 | null;
   receivers: Receiver[];
   rayCount: number;
   throttle: number;
@@ -35,7 +36,7 @@ export type Settings = {
   audioDuration: number;
   geometry: Triangle[];
   materials: Material[];
-}
+};
 
 /**
  *
@@ -574,6 +575,16 @@ export async function rayTrace(
   const rays: Ray[] = [];
   const triangles = settings.geometry;
 
+  const direction = settings.sourceDirection?.slice() || null;
+  if (direction !== null) {
+    const length = Math.sqrt(
+      direction[0] ** 2 + direction[1] ** 2 + direction[2] ** 2,
+    );
+    direction[0] /= length;
+    direction[1] /= length;
+    direction[2] /= length;
+  }
+
   // Create the rays.
   const goldenRatio = (1 + Math.sqrt(5)) / 2;
   for (let i = 0; i < settings.rayCount; ++i) {
@@ -585,9 +596,18 @@ export async function rayTrace(
       Math.cos(phi),
     ];
 
+    let intensity = 1.0;
+
+    if (direction !== null) {
+      const rayDotDirection =
+        ray[0] * direction[0] + ray[1] * direction[1] + ray[2] * direction[2];
+      intensity = (rayDotDirection + 1) / 2;
+    }
+
     rays.push({
       position: settings.sourcePosition,
       direction: normalize(ray),
+      intensity,
     });
   }
 
@@ -628,12 +648,12 @@ export async function rayTrace(
         ...ray.direction,
         ...[0, 0, 0],
         0,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
+        ray.intensity,
+        ray.intensity,
+        ray.intensity,
+        ray.intensity,
+        ray.intensity,
+        ray.intensity,
       ]),
     ),
     trianglesToFloatArray(triangles, settings.materials),
@@ -686,7 +706,7 @@ export async function rayTrace(
 
   for (let i = 0; i < settings.rayPlotCount; ++i) {
     plottedRayCoordinates.push(new Float32Array(4 * settings.bouncePlotCount));
-    plottedRayCoordinates[i][0] = 1.0;
+    plottedRayCoordinates[i][0] = rays[gapBetweenIndicesToCount * i].intensity;
     plottedRayCoordinates[i][1] = settings.sourcePosition[0];
     plottedRayCoordinates[i][2] = settings.sourcePosition[1];
     plottedRayCoordinates[i][3] = settings.sourcePosition[2];
@@ -695,7 +715,7 @@ export async function rayTrace(
   console.time("Total (excluding setup)");
 
   // Math.ceil so that it is obvious to the user that the maximum has been hit.
-  const maxPasses = Math.ceil(settings.maxBounces / bouncesPerPass)
+  const maxPasses = Math.ceil(settings.maxBounces / bouncesPerPass);
 
   // TODO BUG: number of bounces to plot does not line up with actual number plotted.
 
