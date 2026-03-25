@@ -11,21 +11,57 @@ import {
 } from "./geometry_helpers";
 import { SphereGeometry } from "three";
 
+/**
+ * The Geometry base class - all Geometry objects
+ * (including shoebox room, sphere, etc.) derive from this class.
+ */
 export abstract class Geometry {
+  /**
+   * Initialise the geometry.
+   */
   abstract initialise(): Promise<void>;
+
+  /**
+   * Get the triangles that make up the geometry.
+   * This should return the same array if the geometry has not changed,
+   * and a different array if the geometry has changed. TODO is this true.
+   */
   abstract triangles(): Triangle[];
-  abstract view(): m.Children;
+
+  /**
+   * Set the material of a triangle.
+   * @param index the index into .triangles() of the triangle.
+   * @param material the name of the material.
+   */
   abstract setTriangleMaterial(index: number, material: string): void;
 
-  selectedIndex = -1;
+  /**
+   * View the sidebar UI that can modify the geometry.
+   */
+  abstract view(): m.Children;
 
-  selectedTriangle(): Triangle | null {
+  /**
+   * The index into .triangles() of the selected triangle.
+   * -1 if no triangles are selected.
+   */
+  public selectedIndex = -1;
+
+  /**
+   * Get the currently-selected triangle.
+   * @returns the selected triangle, if present.
+   */
+  public selectedTriangle(): Triangle | null {
     return this.triangles()[this.selectedIndex] || null;
   }
 }
 
+/**
+ * A shoebox (cuboid) room.
+ */
 export class BoxRoomGeometry extends Geometry {
-  geometry: Triangle[] = [];
+  /**
+   * Configuration for the room.
+   */
   config: BoxRoomConfig = {
     xDim: 10,
     yDim: 10,
@@ -35,8 +71,16 @@ export class BoxRoomGeometry extends Geometry {
     ceilingMaterial: "plaster",
   };
 
+  /**
+   * The triangles that make up the room.
+   * Updated in .updateGeometry().
+   */
+  geometry: Triangle[] = [];
+
   async initialise() {
-    this.geometry = await boxRoom(this.config);
+    // TODO: check this works
+    this.updateGeometry();
+    // this.geometry = await boxRoom(this.config);
   }
 
   setTriangleMaterial(index: number, material: string) {
@@ -79,7 +123,10 @@ export class BoxRoomGeometry extends Geometry {
     ]);
   }
 
-  private async updateGeometry() {
+  /**
+   * Update this.geometry with the triangles that match the current config.
+   */
+  private async updateGeometry(): Promise<void> {
     const dimensions = [this.config.xDim, this.config.yDim, this.config.zDim];
 
     // Don't update the geometry if there's a zero in it (this may occur if the user
@@ -140,11 +187,6 @@ export class LoadedGeometry extends Geometry {
     this.updateScaledGeometry();
   }
 
-  rotate(axis: "x" | "y" | "z") {
-    rotate(this.geometry, axis);
-    this.updateScaledGeometry();
-  }
-
   view(): m.Children {
     return m("section", [
       m("label", [
@@ -164,6 +206,11 @@ export class LoadedGeometry extends Geometry {
       m("button", { onclick: () => this.rotate("y") }, "Rotate Y"),
       m("button", { onclick: () => this.rotate("z") }, "Rotate Z"),
     ]);
+  }
+
+  private rotate(axis: "x" | "y" | "z") {
+    rotate(this.geometry, axis);
+    this.updateScaledGeometry();
   }
 
   private updateScaledGeometry() {

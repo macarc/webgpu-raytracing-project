@@ -12,7 +12,7 @@ import {
   LoadedGeometry,
   RoundGeometry,
 } from "./geometry";
-import { dispose } from "./geometry_helpers";
+import { dispose } from "./dispose";
 
 type Menu = "geometry" | "materials" | "raytracing";
 

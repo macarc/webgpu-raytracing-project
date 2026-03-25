@@ -1,5 +1,11 @@
 import { materialNameToIndex, Triangle, Material } from "./constants";
 
+/**
+ * Convert triangles to a Float32Array to be passed to a shader.
+ * @param triangles 
+ * @param materials 
+ * @returns the triangles mapped into a Float32Array, in the format required by the shader.
+ */
 export function trianglesToFloatArray(
   triangles: Triangle[],
   materials: Material[],
@@ -18,6 +24,11 @@ export function trianglesToFloatArray(
   );
 }
 
+/**
+ * Convert materials to a Float32Array to be passed to a shader.
+ * @param materials 
+ * @returns the materials mapped into a Float32Array, in the format required by the shader.
+ */
 export function materialsToFloatArray(materials: Material[]) {
   return new Float32Array(
     materials.flatMap((material) => [

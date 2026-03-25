@@ -2,8 +2,6 @@
 //       They are calculated from MATLAB:
 //       [B0,A0] = octdsgn(125, fs);
 //       ... etc.
-//
-// TODO: generate these in JS?
 const A0 = [
   1, -5.97710280273096, 14.8865696804245, -19.7752371006017, 14.7773215278572,
   -5.88969646032918, 0.978145155399091,
@@ -64,17 +62,28 @@ const B5 = [
   -0.00399558738785181,
 ];
 
+/**
+ * Assert that a value is true. Throws an error if t is not true.
+ * @param t the value to check.
+ */
 function ensure(t: boolean) {
   if (t !== true) {
     throw new Error("Ensure failed!");
   }
 }
 
+/**
+ * Apply a filter to the Float32Array.
+ * @param B filter coefficients TODO better documentation
+ * @param A filter coefficients TODO better documentation
+ * @param input input audio.
+ * @returns output filtered audio.
+ */
 function filter(B: number[], A: number[], input: Float32Array): Float64Array {
   ensure(A.length === B.length);
   ensure(A[0] === 1); // Ensure that the filter is normalised.
 
-  // Using a 32-bit array causes instability.
+  // Using a 32-bit array causes instability, so convert to 64-bit.
   const x = new Float64Array(input);
   const output = new Float64Array(input.length);
 
@@ -95,6 +104,16 @@ function filter(B: number[], A: number[], input: Float32Array): Float64Array {
   return output;
 }
 
+/**
+ * Combine audio from multiple octave bands into a single audio Float32Array.
+ * @param band_125 
+ * @param band_250 
+ * @param band_500 
+ * @param band_1000 
+ * @param band_2000 
+ * @param band_4000 
+ * @returns the output audio.
+ */
 export function combineFilteredAudio(
   band_125: Float32Array,
   band_250: Float32Array,

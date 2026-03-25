@@ -303885,9 +303885,18 @@ void main() {
     }
   });
 
-  // src/geometry_helpers.ts
-  function isMesh(obj) {
-    return obj.isMesh || false;
+  // src/dispose.ts
+  function dispose(o) {
+    if (o) {
+      callOnAllChildren(o, disposeNode);
+    }
+  }
+  function callOnAllChildren(node, callback) {
+    for (var i = node.children.length - 1; i >= 0; i--) {
+      var child = node.children[i];
+      callOnAllChildren(child, callback);
+      callback(child);
+    }
   }
   function disposeNode(node) {
     if (node instanceof Mesh) {
@@ -303918,17 +303927,16 @@ void main() {
       }
     }
   }
-  function disposeHierarchy(node, callback) {
-    for (var i = node.children.length - 1; i >= 0; i--) {
-      var child = node.children[i];
-      disposeHierarchy(child, callback);
-      callback(child);
+  var init_dispose = __esm({
+    "src/dispose.ts"() {
+      "use strict";
+      init_three_module();
     }
-  }
-  function dispose(o) {
-    if (o) {
-      disposeHierarchy(o, disposeNode);
-    }
+  });
+
+  // src/geometry_helpers.ts
+  function isMesh(obj) {
+    return obj.isMesh || false;
   }
   function loadObjectFromData(data, filetype) {
     if (filetype === "3dm") {
@@ -304125,10 +304133,10 @@ void main() {
   var init_geometry_helpers = __esm({
     "src/geometry_helpers.ts"() {
       "use strict";
-      init_three_module();
       init_GLTFLoader();
       init_DMLoader();
       init_orient_surfaces();
+      init_dispose();
     }
   });
 
@@ -304187,13 +304195,23 @@ void main() {
       init_geometry_helpers();
       init_three_module();
       Geometry = class {
+        /**
+         * The index into .triangles() of the selected triangle.
+         * -1 if no triangles are selected.
+         */
         selectedIndex = -1;
+        /**
+         * Get the currently-selected triangle.
+         * @returns the selected triangle, if present.
+         */
         selectedTriangle() {
           return this.triangles()[this.selectedIndex] || null;
         }
       };
       BoxRoomGeometry = class extends Geometry {
-        geometry = [];
+        /**
+         * Configuration for the room.
+         */
         config = {
           xDim: 10,
           yDim: 10,
@@ -304202,8 +304220,13 @@ void main() {
           wallMaterial: "plaster",
           ceilingMaterial: "plaster"
         };
+        /**
+         * The triangles that make up the room.
+         * Updated in .updateGeometry().
+         */
+        geometry = [];
         async initialise() {
-          this.geometry = await boxRoom(this.config);
+          this.updateGeometry();
         }
         setTriangleMaterial(index, material) {
           this.geometry[index].material = material;
@@ -304242,6 +304265,9 @@ void main() {
             ])
           ]);
         }
+        /**
+         * Update this.geometry with the triangles that match the current config.
+         */
         async updateGeometry() {
           const dimensions = [this.config.xDim, this.config.yDim, this.config.zDim];
           if (dimensions.includes(0) || dimensions.includes(NaN)) {
@@ -304286,10 +304312,6 @@ void main() {
           this.geometry[index].material = material;
           this.updateScaledGeometry();
         }
-        rotate(axis) {
-          rotate(this.geometry, axis);
-          this.updateScaledGeometry();
-        }
         view() {
           return (0, import_mithril.default)("section", [
             (0, import_mithril.default)("label", [
@@ -304309,6 +304331,10 @@ void main() {
             (0, import_mithril.default)("button", { onclick: () => this.rotate("y") }, "Rotate Y"),
             (0, import_mithril.default)("button", { onclick: () => this.rotate("z") }, "Rotate Z")
           ]);
+        }
+        rotate(axis) {
+          rotate(this.geometry, axis);
+          this.updateScaledGeometry();
         }
         updateScaledGeometry() {
           if (this.scale > 0) {
@@ -304393,7 +304419,7 @@ void main() {
       var import_fft = __toESM(require_fft());
       init_dsp();
       init_geometry();
-      init_geometry_helpers();
+      init_dispose();
       var state = {
         rayCount: 2e4,
         audioDuration: 10,

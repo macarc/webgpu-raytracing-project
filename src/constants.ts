@@ -7,21 +7,33 @@ export const WORKGROUP_SIZE = 64;
 export const SAMPLE_RATE = 48000;
 export const SPEED_OF_SOUND = 340;
 
+/**
+ * A 3D vector.
+ */
 export type Vec3 = [number, number, number];
 
+/**
+ * Represents a ray.
+ */
 export type Ray = {
-  position: [number, number, number];
-  direction: [number, number, number];
+  position: Vec3;
+  direction: Vec3;
   intensity: number;
 };
 
+/**
+ * Represents a triangle, in terms of its vertices' coordinates.
+ */
 export type Triangle = {
   material: string;
-  p1: [number, number, number];
-  p2: [number, number, number];
-  p3: [number, number, number];
+  p1: Vec3;
+  p2: Vec3;
+  p3: Vec3;
 };
 
+/**
+ * Represents a surface material, with absorption coefficent for each frequency band.
+ */
 export type Material = {
   name: string;
   a125: number;
@@ -33,6 +45,12 @@ export type Material = {
   scatter: number;
 };
 
+/**
+ * Convert material name into an index into the materials array.
+ * @param materials the array of materials.
+ * @param name the name of the material.
+ * @returns the index of the material in materials.
+ */
 export function materialNameToIndex(
   materials: Material[],
   name: string,
@@ -44,6 +62,7 @@ export function materialNameToIndex(
   return index;
 }
 
+// Regular expression to match against user-agent to test if the device is mobile.
 const mobileNames = [
   /Android/i,
   /webOS/i,
@@ -54,7 +73,8 @@ const mobileNames = [
   /Windows Phone/i,
 ];
 
-// https://stackoverflow.com/a/11381730
+// Detect if on mobile by matching against the user-agent.
+// Source: https://stackoverflow.com/a/11381730
 export const isOnMobile = mobileNames.some((name) => {
   return navigator.userAgent.match(name);
 });
