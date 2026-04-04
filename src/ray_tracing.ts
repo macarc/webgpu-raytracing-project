@@ -685,6 +685,7 @@ export async function rayTrace(
   ][] = [];
 
   for (let i = 0; i < receiversCount; ++i) {
+    // TODO BUG this could be a non-integer
     outputs.push([
       new Float32Array(SAMPLE_RATE * settings.audioDuration), // 125Hz
       new Float32Array(SAMPLE_RATE * settings.audioDuration), // 250Hz

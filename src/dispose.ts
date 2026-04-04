@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import * as THREE from "three";
 
 // This file was adapted from:
 // https://github.com/maximeq/three-js-disposer/blob/r4.130/src/disposer.ts
@@ -17,10 +17,13 @@ export function dispose(o: THREE.Object3D | null) {
 
 /**
  * Run a callback on each descendent of the node.
- * @param node 
- * @param callback 
+ * @param node
+ * @param callback
  */
-function callOnAllChildren(node: THREE.Object3D, callback: (node: THREE.Object3D) => void) {
+function callOnAllChildren(
+  node: THREE.Object3D,
+  callback: (node: THREE.Object3D) => void,
+) {
   for (var i = node.children.length - 1; i >= 0; i--) {
     var child = node.children[i];
     callOnAllChildren(child, callback);
@@ -30,7 +33,7 @@ function callOnAllChildren(node: THREE.Object3D, callback: (node: THREE.Object3D
 
 /**
  * Free all WebGL resources associated with an Object3D.
- * @param node 
+ * @param node
  */
 function disposeNode(node: THREE.Object3D) {
   if (node instanceof THREE.Mesh) {

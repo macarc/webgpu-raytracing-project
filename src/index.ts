@@ -16,22 +16,35 @@ import { dispose } from "./dispose";
 
 type Menu = "geometry" | "materials" | "raytracing";
 
-let state = {
+type SavedState = {
+  type: "webgpu-raytracing-project-state";
+  rayCount: number;
+  audioDuration: number;
+  maxBounces: number;
+  sourcePosition: Vec3;
+  sourceDirection: Vec3 | null;
+  receivers: Receiver[];
+  rayPlotCount: number;
+  bouncePlotCount: number;
+  triangles: Triangle[] | null;
+  materials: Material[];
+  selectedChannels: number[];
+};
+
+const defaultSavedState: SavedState = {
+  type: "webgpu-raytracing-project-state",
   rayCount: 20000,
   audioDuration: 10,
   maxBounces: 10000,
-  sourcePosition: [0, 0, 0] as Vec3,
-  sourceDirection: null as Vec3 | null,
+  sourcePosition: [0, 0, 0],
+  sourceDirection: null,
   receivers: [
     { position: [3.0, -1.0, 0.0], radius: 0.2 },
     { position: [3.0, 1.0, 0.0], radius: 0.2 },
-  ] as Receiver[],
+  ],
   rayPlotCount: 10,
   bouncePlotCount: 10,
-  throttle: isOnMobile ? 0.8 : 0,
-  geometry: new BoxRoomGeometry() as Geometry,
-  bounceCoordinates: [] as Float32Array<ArrayBuffer>[],
-  menu: "geometry" as Menu,
+  triangles: null,
   materials: [
     {
       name: "carpet",
@@ -63,16 +76,89 @@ let state = {
       a4000: 0.04,
       scatter: 0.1,
     },
-  ] as Material[],
-
-  raytracedAudio: [] as Float32Array[],
+  ],
   selectedChannels: [0],
+};
+
+let state = {
+  ...defaultSavedState,
+  throttle: isOnMobile ? 0.8 : 0,
+  geometry: new BoxRoomGeometry() as Geometry,
+  bounceCoordinates: [] as Float32Array<ArrayBuffer>[],
+  menu: "geometry" as Menu,
+  raytracedAudio: [] as Float32Array[],
   ctx: null as AudioContext | null,
   running: false,
   rayTracingProgress: [0, 0] as [number, number],
   source: null as AudioBufferSourceNode | null,
 
   initialise: async function () {
+    await state.geometry.initialise();
+  },
+
+  loadFromLocalStorage: async function () {
+    const stored = localStorage.getItem("state");
+    if (stored) {
+      const obj = JSON.parse(stored);
+      if (obj["type"] === "webgpu-raytracing-project-state") {
+        try {
+          state.loadFromSaved(obj);
+          return;
+        } catch {}
+      }
+    }
+
+    console.error("Could not load from local storage");
+    state.loadFromSaved(defaultSavedState);
+    await state.geometry.initialise();
+  },
+
+  loadFromSaved: function (saved: SavedState) {
+    state.rayCount = saved.rayCount;
+    state.audioDuration = saved.audioDuration;
+    state.maxBounces = saved.maxBounces;
+    state.sourcePosition = saved.sourcePosition;
+    state.sourceDirection = saved.sourceDirection;
+    state.receivers = saved.receivers;
+    state.rayPlotCount = saved.rayPlotCount;
+    state.bouncePlotCount = saved.bouncePlotCount;
+    if (saved.triangles !== null) {
+      state.geometry = LoadedGeometry.fromTriangles(saved.triangles);
+    } else {
+      state.geometry = new BoxRoomGeometry();
+    }
+    state.materials = saved.materials;
+    state.selectedChannels = saved.selectedChannels;
+  },
+
+  saveToLocalStorage: function () {
+    const savedState: SavedState = {
+      type: "webgpu-raytracing-project-state",
+      rayCount: this.rayCount,
+      audioDuration: this.audioDuration,
+      maxBounces: this.maxBounces,
+      sourcePosition: this.sourcePosition,
+      sourceDirection: this.sourceDirection,
+      receivers: this.receivers,
+      rayPlotCount: this.rayPlotCount,
+      bouncePlotCount: this.bouncePlotCount,
+      triangles: this.geometry.triangles(),
+      materials: this.materials,
+      selectedChannels: this.selectedChannels,
+    };
+
+    try {
+      localStorage.setItem("state", JSON.stringify(savedState));
+    } catch (e) {
+      console.error(
+        "Could not save state - this is probably due to exceeding the storage limit.",
+      );
+      console.log(e);
+    }
+  },
+
+  resetSettings: async function () {
+    state.loadFromSaved(defaultSavedState);
     await state.geometry.initialise();
   },
 
@@ -971,6 +1057,11 @@ function geometryMenu() {
     ),
     m("button", { onclick: () => state.addReceiver() }, "Add receiver"),
     m("button", { onclick: () => state.deleteReceiver() }, "Delete receiver"),
+    m(
+      "button.reset",
+      { onclick: () => state.resetSettings() },
+      "Reset all settings",
+    ),
   ];
 }
 
@@ -1252,6 +1343,9 @@ function raytracingMenu() {
 }
 
 let AppView = {
+  onupdate: function () {
+    state.saveToLocalStorage();
+  },
   view: function () {
     return m("div.root-container", [
       m(ThreeView),
@@ -1295,7 +1389,7 @@ let AppView = {
 };
 
 document.addEventListener("DOMContentLoaded", async () => {
-  await state.initialise();
+  await state.loadFromLocalStorage();
 
   const root = document.querySelector("#root");
   if (root) {

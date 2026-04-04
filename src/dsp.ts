@@ -106,12 +106,12 @@ function filter(B: number[], A: number[], input: Float32Array): Float64Array {
 
 /**
  * Combine audio from multiple octave bands into a single audio Float32Array.
- * @param band_125 
- * @param band_250 
- * @param band_500 
- * @param band_1000 
- * @param band_2000 
- * @param band_4000 
+ * @param band_125
+ * @param band_250
+ * @param band_500
+ * @param band_1000
+ * @param band_2000
+ * @param band_4000
  * @returns the output audio.
  */
 export function combineFilteredAudio(

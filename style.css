@@ -116,6 +116,14 @@ button:disabled {
   color: rgba(255, 255, 255, 0.5);
 }
 
+button.reset {
+  display: block;
+  margin-top: 1rem;
+  background-color: red;
+  border-bottom-color: darkred;
+  border-left-color: darkred;
+}
+
 * > button:not(:last-child) {
   margin-right: 1rem;
 }

@@ -303800,6 +303800,7 @@ void main() {
       return t;
     }
 
+    // TODO BUG: check how often this happens - it seems to happen even on a box room for rust code.
     return INFINITY;
   }
 
@@ -304273,11 +304274,13 @@ void main() {
           if (dimensions.includes(0) || dimensions.includes(NaN)) {
             return;
           }
+          const materials = this.geometry.map((tri) => tri.material);
           this.geometry = await boxRoom(this.config);
+          materials.map((material, i) => this.geometry[i].material = material);
           import_mithril.default.redraw();
         }
       };
-      LoadedGeometry = class extends Geometry {
+      LoadedGeometry = class _LoadedGeometry extends Geometry {
         geometry = [];
         scaledGeometry = [];
         scale = 1;
@@ -304285,6 +304288,12 @@ void main() {
         constructor(path = null) {
           super();
           this.path = path;
+        }
+        static fromTriangles(triangles) {
+          const g = new _LoadedGeometry();
+          g.geometry = triangles;
+          g.updateScaledGeometry();
+          return g;
         }
         async initialise() {
           if (this.path) {
@@ -304420,7 +304429,8 @@ void main() {
       init_dsp();
       init_geometry();
       init_dispose();
-      var state = {
+      var defaultSavedState = {
+        type: "webgpu-raytracing-project-state",
         rayCount: 2e4,
         audioDuration: 10,
         maxBounces: 1e4,
@@ -304432,10 +304442,7 @@ void main() {
         ],
         rayPlotCount: 10,
         bouncePlotCount: 10,
-        throttle: isOnMobile ? 0.8 : 0,
-        geometry: new BoxRoomGeometry(),
-        bounceCoordinates: [],
-        menu: "geometry",
+        triangles: null,
         materials: [
           {
             name: "carpet",
@@ -304468,13 +304475,81 @@ void main() {
             scatter: 0.1
           }
         ],
+        selectedChannels: [0]
+      };
+      var state = {
+        ...defaultSavedState,
+        throttle: isOnMobile ? 0.8 : 0,
+        geometry: new BoxRoomGeometry(),
+        bounceCoordinates: [],
+        menu: "geometry",
         raytracedAudio: [],
-        selectedChannels: [0],
         ctx: null,
         running: false,
         rayTracingProgress: [0, 0],
         source: null,
         initialise: async function() {
+          await state.geometry.initialise();
+        },
+        loadFromLocalStorage: async function() {
+          const stored = localStorage.getItem("state");
+          if (stored) {
+            const obj = JSON.parse(stored);
+            if (obj["type"] === "webgpu-raytracing-project-state") {
+              try {
+                state.loadFromSaved(obj);
+                return;
+              } catch {
+              }
+            }
+          }
+          console.error("Could not load from local storage");
+          state.loadFromSaved(defaultSavedState);
+          await state.geometry.initialise();
+        },
+        loadFromSaved: function(saved) {
+          state.rayCount = saved.rayCount;
+          state.audioDuration = saved.audioDuration;
+          state.maxBounces = saved.maxBounces;
+          state.sourcePosition = saved.sourcePosition;
+          state.sourceDirection = saved.sourceDirection;
+          state.receivers = saved.receivers;
+          state.rayPlotCount = saved.rayPlotCount;
+          state.bouncePlotCount = saved.bouncePlotCount;
+          if (saved.triangles !== null) {
+            state.geometry = LoadedGeometry.fromTriangles(saved.triangles);
+          } else {
+            state.geometry = new BoxRoomGeometry();
+          }
+          state.materials = saved.materials;
+          state.selectedChannels = saved.selectedChannels;
+        },
+        saveToLocalStorage: function() {
+          const savedState = {
+            type: "webgpu-raytracing-project-state",
+            rayCount: this.rayCount,
+            audioDuration: this.audioDuration,
+            maxBounces: this.maxBounces,
+            sourcePosition: this.sourcePosition,
+            sourceDirection: this.sourceDirection,
+            receivers: this.receivers,
+            rayPlotCount: this.rayPlotCount,
+            bouncePlotCount: this.bouncePlotCount,
+            triangles: this.geometry.triangles(),
+            materials: this.materials,
+            selectedChannels: this.selectedChannels
+          };
+          try {
+            localStorage.setItem("state", JSON.stringify(savedState));
+          } catch (e) {
+            console.error(
+              "Could not save state - this is probably due to exceeding the storage limit."
+            );
+            console.log(e);
+          }
+        },
+        resetSettings: async function() {
+          state.loadFromSaved(defaultSavedState);
           await state.geometry.initialise();
         },
         setBoxGeometry: async function() {
@@ -305186,7 +305261,12 @@ void main() {
             ])
           ),
           (0, import_mithril2.default)("button", { onclick: () => state.addReceiver() }, "Add receiver"),
-          (0, import_mithril2.default)("button", { onclick: () => state.deleteReceiver() }, "Delete receiver")
+          (0, import_mithril2.default)("button", { onclick: () => state.deleteReceiver() }, "Delete receiver"),
+          (0, import_mithril2.default)(
+            "button.reset",
+            { onclick: () => state.resetSettings() },
+            "Reset all settings"
+          )
         ];
       }
       function materialsMenu() {
@@ -305450,6 +305530,9 @@ void main() {
         ];
       }
       var AppView = {
+        onupdate: function() {
+          state.saveToLocalStorage();
+        },
         view: function() {
           return (0, import_mithril2.default)("div.root-container", [
             (0, import_mithril2.default)(ThreeView),
@@ -305492,7 +305575,7 @@ void main() {
         }
       };
       document.addEventListener("DOMContentLoaded", async () => {
-        await state.initialise();
+        await state.loadFromLocalStorage();
         const root = document.querySelector("#root");
         if (root) {
           import_mithril2.default.mount(root, AppView);

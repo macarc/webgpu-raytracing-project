@@ -135,7 +135,13 @@ export class BoxRoomGeometry extends Geometry {
       return;
     }
 
+    const materials = this.geometry.map((tri) => tri.material);
+
     this.geometry = await boxRoom(this.config);
+
+    // Retain materials when resizing.
+    materials.map((material, i) => (this.geometry[i].material = material));
+
     m.redraw();
   }
 }
@@ -149,6 +155,13 @@ export class LoadedGeometry extends Geometry {
   constructor(path: string | null = null) {
     super();
     this.path = path;
+  }
+
+  static fromTriangles(triangles: Triangle[]) {
+    const g = new LoadedGeometry();
+    g.geometry = triangles;
+    g.updateScaledGeometry();
+    return g;
   }
 
   async initialise(): Promise<void> {
