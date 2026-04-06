@@ -37,6 +37,24 @@
     }
     return index;
   }
+  async function readFile(file) {
+    return new Promise((res, rej) => {
+      const reader = new FileReader();
+      reader.readAsText(file, "UTF-8");
+      reader.addEventListener("error", rej);
+      reader.addEventListener("load", (e) => {
+        const data = e.target?.result;
+        if (data) res(data.toString());
+      });
+    });
+  }
+  function saveFile(name2, contents, type) {
+    const blob = new Blob([contents], { type });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = name2;
+    a.click();
+  }
   var FLOAT32_SIZE, WORKGROUP_SIZE, SAMPLE_RATE, SPEED_OF_SOUND, mobileNames, isOnMobile;
   var init_constants = __esm({
     "src/constants.ts"() {
@@ -304142,7 +304160,7 @@ void main() {
   });
 
   // src/geometry.ts
-  async function readFile(file) {
+  async function readFile2(file) {
     return new Promise((res, rej) => {
       const reader = new FileReader();
       reader.readAsArrayBuffer(file);
@@ -304171,7 +304189,7 @@ void main() {
           const file = f.files.item(0);
           if (file) {
             try {
-              const data = await readFile(file);
+              const data = await readFile2(file);
               res({
                 filetype: pathToFormat3D(file.name),
                 data
@@ -304507,6 +304525,22 @@ void main() {
           state.loadFromSaved(defaultSavedState);
           await state.geometry.initialise();
         },
+        toSavedState: function() {
+          return {
+            type: "webgpu-raytracing-project-state",
+            rayCount: this.rayCount,
+            audioDuration: this.audioDuration,
+            maxBounces: this.maxBounces,
+            sourcePosition: this.sourcePosition,
+            sourceDirection: this.sourceDirection,
+            receivers: this.receivers,
+            rayPlotCount: this.rayPlotCount,
+            bouncePlotCount: this.bouncePlotCount,
+            triangles: this.geometry.triangles(),
+            materials: this.materials,
+            selectedChannels: this.selectedChannels
+          };
+        },
         loadFromSaved: function(saved) {
           state.rayCount = saved.rayCount;
           state.audioDuration = saved.audioDuration;
@@ -304525,28 +304559,48 @@ void main() {
           state.selectedChannels = saved.selectedChannels;
         },
         saveToLocalStorage: function() {
-          const savedState = {
-            type: "webgpu-raytracing-project-state",
-            rayCount: this.rayCount,
-            audioDuration: this.audioDuration,
-            maxBounces: this.maxBounces,
-            sourcePosition: this.sourcePosition,
-            sourceDirection: this.sourceDirection,
-            receivers: this.receivers,
-            rayPlotCount: this.rayPlotCount,
-            bouncePlotCount: this.bouncePlotCount,
-            triangles: this.geometry.triangles(),
-            materials: this.materials,
-            selectedChannels: this.selectedChannels
-          };
           try {
-            localStorage.setItem("state", JSON.stringify(savedState));
+            localStorage.setItem("state", JSON.stringify(state.toSavedState()));
           } catch (e) {
             console.error(
               "Could not save state - this is probably due to exceeding the storage limit."
             );
             console.log(e);
           }
+        },
+        saveState: function() {
+          saveFile(
+            "raytracing_model.json",
+            JSON.stringify(state.toSavedState()),
+            "text/json"
+          );
+        },
+        loadState: function() {
+          return new Promise((res, rej) => {
+            const f = document.createElement("input");
+            f.setAttribute("type", "file");
+            f.setAttribute("accept", ".json,text/json");
+            f.addEventListener("change", async () => {
+              if (f.files.length === 1) {
+                const file = f.files.item(0);
+                if (file) {
+                  const contents = await readFile(file);
+                  const json = JSON.parse(contents);
+                  if (json["type"] === "webgpu-raytracing-project-state") {
+                    try {
+                      state.loadFromSaved(json);
+                      res();
+                      return;
+                    } catch {
+                      rej("incorrect file format");
+                    }
+                  }
+                }
+              }
+              rej("invalid selection");
+            });
+            f.click();
+          });
         },
         resetSettings: async function() {
           state.loadFromSaved(defaultSavedState);
@@ -305260,13 +305314,19 @@ void main() {
               ])
             ])
           ),
-          (0, import_mithril2.default)("button", { onclick: () => state.addReceiver() }, "Add receiver"),
-          (0, import_mithril2.default)("button", { onclick: () => state.deleteReceiver() }, "Delete receiver"),
-          (0, import_mithril2.default)(
-            "button.reset",
-            { onclick: () => state.resetSettings() },
-            "Reset all settings"
-          )
+          (0, import_mithril2.default)("section", [
+            (0, import_mithril2.default)("button", { onclick: () => state.addReceiver() }, "Add receiver"),
+            (0, import_mithril2.default)("button", { onclick: () => state.deleteReceiver() }, "Delete receiver")
+          ]),
+          (0, import_mithril2.default)("section", [
+            (0, import_mithril2.default)("button", { onclick: () => state.saveState() }, "Save settings"),
+            (0, import_mithril2.default)("button", { onclick: () => state.loadState() }, "Load settings"),
+            (0, import_mithril2.default)(
+              "button.reset",
+              { onclick: () => state.resetSettings() },
+              "Reset all settings"
+            )
+          ])
         ];
       }
       function materialsMenu() {

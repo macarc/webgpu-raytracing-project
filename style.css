@@ -117,8 +117,6 @@ button:disabled {
 }
 
 button.reset {
-  display: block;
-  margin-top: 1rem;
   background-color: red;
   border-bottom-color: darkred;
   border-left-color: darkred;

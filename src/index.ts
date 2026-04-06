@@ -1,5 +1,13 @@
 import { rayTrace, Receiver } from "./ray_tracing";
-import { isOnMobile, Material, SAMPLE_RATE, Triangle, Vec3 } from "./constants";
+import {
+  isOnMobile,
+  Material,
+  readFile,
+  SAMPLE_RATE,
+  saveFile,
+  Triangle,
+  Vec3,
+} from "./constants";
 import m from "mithril";
 import Plotly, { Data } from "plotly.js-dist";
 import * as THREE from "three";
@@ -113,6 +121,23 @@ let state = {
     await state.geometry.initialise();
   },
 
+  toSavedState: function (): SavedState {
+    return {
+      type: "webgpu-raytracing-project-state",
+      rayCount: this.rayCount,
+      audioDuration: this.audioDuration,
+      maxBounces: this.maxBounces,
+      sourcePosition: this.sourcePosition,
+      sourceDirection: this.sourceDirection,
+      receivers: this.receivers,
+      rayPlotCount: this.rayPlotCount,
+      bouncePlotCount: this.bouncePlotCount,
+      triangles: this.geometry.triangles(),
+      materials: this.materials,
+      selectedChannels: this.selectedChannels,
+    };
+  },
+
   loadFromSaved: function (saved: SavedState) {
     state.rayCount = saved.rayCount;
     state.audioDuration = saved.audioDuration;
@@ -132,29 +157,58 @@ let state = {
   },
 
   saveToLocalStorage: function () {
-    const savedState: SavedState = {
-      type: "webgpu-raytracing-project-state",
-      rayCount: this.rayCount,
-      audioDuration: this.audioDuration,
-      maxBounces: this.maxBounces,
-      sourcePosition: this.sourcePosition,
-      sourceDirection: this.sourceDirection,
-      receivers: this.receivers,
-      rayPlotCount: this.rayPlotCount,
-      bouncePlotCount: this.bouncePlotCount,
-      triangles: this.geometry.triangles(),
-      materials: this.materials,
-      selectedChannels: this.selectedChannels,
-    };
-
     try {
-      localStorage.setItem("state", JSON.stringify(savedState));
+      localStorage.setItem("state", JSON.stringify(state.toSavedState()));
     } catch (e) {
       console.error(
         "Could not save state - this is probably due to exceeding the storage limit.",
       );
       console.log(e);
     }
+  },
+
+  saveState: function () {
+    saveFile(
+      "raytracing_model.json",
+      JSON.stringify(state.toSavedState()),
+      "text/json",
+    );
+  },
+
+  loadState: function (): Promise<void> {
+    return new Promise((res, rej) => {
+      // Create a temporary file input element, and use that to
+      // prompt the user to select a file
+      const f = document.createElement("input") as HTMLInputElement & {
+        files: FileList;
+      };
+
+      f.setAttribute("type", "file");
+      f.setAttribute("accept", ".json,text/json");
+
+      f.addEventListener("change", async () => {
+        if (f.files.length === 1) {
+          const file = f.files.item(0);
+          if (file) {
+            const contents = await readFile(file);
+            const json = JSON.parse(contents);
+            if (json["type"] === "webgpu-raytracing-project-state") {
+              try {
+                state.loadFromSaved(json as SavedState);
+                res();
+                return;
+              } catch {
+                rej("incorrect file format");
+              }
+            }
+          }
+        }
+        rej("invalid selection");
+      });
+
+      // Trigger the file dialogue
+      f.click();
+    });
   },
 
   resetSettings: async function () {
@@ -1055,13 +1109,19 @@ function geometryMenu() {
         ]),
       ]),
     ),
-    m("button", { onclick: () => state.addReceiver() }, "Add receiver"),
-    m("button", { onclick: () => state.deleteReceiver() }, "Delete receiver"),
-    m(
-      "button.reset",
-      { onclick: () => state.resetSettings() },
-      "Reset all settings",
-    ),
+    m("section", [
+      m("button", { onclick: () => state.addReceiver() }, "Add receiver"),
+      m("button", { onclick: () => state.deleteReceiver() }, "Delete receiver"),
+    ]),
+    m("section", [
+      m("button", { onclick: () => state.saveState() }, "Save settings"),
+      m("button", { onclick: () => state.loadState() }, "Load settings"),
+      m(
+        "button.reset",
+        { onclick: () => state.resetSettings() },
+        "Reset all settings",
+      ),
+    ]),
   ];
 }
 
