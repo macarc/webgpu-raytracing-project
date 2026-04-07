@@ -27,6 +27,7 @@
     "prettier": "^3.8.0",
     "rhino3dm": "^8.17.0",
     "three": "^0.182.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "wav-file-encoder": "^1.0.4"
   }
 }

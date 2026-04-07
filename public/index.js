@@ -668,20 +668,24 @@
               let rayTriangleDistance = raydistancetravelled + distanceToReceivers[j];
               let rayVecToClosestReceiverPoint = dot(vecToReceivers[j], raydirection) * raydirection;
               let distanceFromRayToReceiver = length(vecToReceivers[j] - rayVecToClosestReceiverPoint);
-              let additionDueToRay = f32(distanceFromRayToReceiver <= receiverRadii[j]);
-                
-              // let totalIntensity = additionDueToRay + cosNormalAngleToReceiver;
-              let totalIntensity = (1 - material.scatter) * additionDueToRay + material.scatter * cosNormalAngleToReceiver;
-              // let totalIntensity = additionDueToRay;
 
+              let specularCoefficient = (1 - material.scatter) * f32(distanceFromRayToReceiver <= receiverRadii[j]);
+              // let diffuseCoefficient = material.scatter * (1 - 1 / sqrt(pow(receiverRadii[j] / distanceFromRayToReceiver, 2) + 1)) * 2 * cosNormalAngleToReceiver;
+              let diffuseCoefficient = material.scatter * cosNormalAngleToReceiver;// / (2.0*3.14159265);
+
+              // let totalIntensity = additionDueToRay + cosNormalAngleToReceiver;
+              // let totalIntensity = (1 - material.scatter) * additionDueToRay + material.scatter * cosNormalAngleToReceiver;
+              let totalCoefficient = specularCoefficient + diffuseCoefficient;
+
+              
               distances[lowerIndex + j] = rayTriangleDistance;
 
-              band_125_and_250[lowerIndex + j] = intensity_125 * totalIntensity;
-              band_125_and_250[upperIndex + j] = intensity_250 * totalIntensity;
-              band_500_and_1000[lowerIndex + j] = intensity_500 * totalIntensity;
-              band_500_and_1000[upperIndex + j] = intensity_1000 * totalIntensity;
-              band_2000_and_4000[lowerIndex + j] = intensity_2000 * totalIntensity;
-              band_2000_and_4000[upperIndex + j] = intensity_4000 * totalIntensity;
+              band_125_and_250[lowerIndex + j] = intensity_125 * totalCoefficient;
+              band_125_and_250[upperIndex + j] = intensity_250 * totalCoefficient;
+              band_500_and_1000[lowerIndex + j] = intensity_500 * totalCoefficient;
+              band_500_and_1000[upperIndex + j] = intensity_1000 * totalCoefficient;
+              band_2000_and_4000[lowerIndex + j] = intensity_2000 * totalCoefficient;
+              band_2000_and_4000[upperIndex + j] = intensity_4000 * totalCoefficient;
             }
           }
         }
@@ -304434,6 +304438,114 @@ void main() {
     }
   });
 
+  // node_modules/wav-file-encoder/dist/WavFileEncoder.js
+  function encodeWavFileFromAudioBuffer(audioBuffer, wavFileType) {
+    const numberOfChannels = audioBuffer.numberOfChannels;
+    const numberOfFrames = audioBuffer.length;
+    const sampleRate = audioBuffer.sampleRate;
+    const channelData = Array(numberOfChannels);
+    for (let channelNo = 0; channelNo < numberOfChannels; channelNo++) {
+      channelData[channelNo] = audioBuffer.getChannelData(channelNo);
+      if (channelData[channelNo].length != numberOfFrames) {
+        throw new Error("Unexpected channel data array size.");
+      }
+    }
+    return encodeWavFileFromArrays(channelData, sampleRate, wavFileType);
+  }
+  function encodeWavFileFromArrays(channelData, sampleRate, wavFileType) {
+    const numberOfChannels = channelData.length;
+    if (numberOfChannels < 1) {
+      throw new Error("No audio channels.");
+    }
+    const numberOfFrames = channelData[0].length;
+    let bitsPerSample;
+    let formatCode;
+    let fmtChunkSize;
+    let writeSampleData;
+    switch (wavFileType) {
+      case 0: {
+        bitsPerSample = 16;
+        formatCode = 1;
+        fmtChunkSize = 16;
+        writeSampleData = writeSampleData_int16;
+        break;
+      }
+      case 1: {
+        bitsPerSample = 32;
+        formatCode = 3;
+        fmtChunkSize = 18;
+        writeSampleData = writeSampleData_float32;
+        break;
+      }
+      default: {
+        throw new Error();
+      }
+    }
+    const bytesPerSample = Math.ceil(bitsPerSample / 8);
+    const bytesPerFrame = numberOfChannels * bytesPerSample;
+    const bytesPerSec = sampleRate * numberOfChannels * bytesPerSample;
+    const headerLength = 20 + fmtChunkSize + 8;
+    const sampleDataLength = numberOfChannels * numberOfFrames * bytesPerSample;
+    const fileLength = headerLength + sampleDataLength;
+    const arrayBuffer = new ArrayBuffer(fileLength);
+    const dataView = new DataView(arrayBuffer);
+    writeWavFileHeader();
+    writeSampleData();
+    return arrayBuffer;
+    function writeWavFileHeader() {
+      setString(0, "RIFF");
+      dataView.setUint32(4, fileLength - 8, true);
+      setString(8, "WAVE");
+      setString(12, "fmt ");
+      dataView.setUint32(16, fmtChunkSize, true);
+      dataView.setUint16(20, formatCode, true);
+      dataView.setUint16(22, numberOfChannels, true);
+      dataView.setUint32(24, sampleRate, true);
+      dataView.setUint32(28, bytesPerSec, true);
+      dataView.setUint16(32, bytesPerFrame, true);
+      dataView.setUint16(34, bitsPerSample, true);
+      if (fmtChunkSize > 16) {
+        dataView.setUint16(36, 0, true);
+      }
+      const p = 20 + fmtChunkSize;
+      setString(p, "data");
+      dataView.setUint32(p + 4, sampleDataLength, true);
+    }
+    function writeSampleData_int16() {
+      let offs = headerLength;
+      for (let frameNo = 0; frameNo < numberOfFrames; frameNo++) {
+        for (let channelNo = 0; channelNo < numberOfChannels; channelNo++) {
+          const sampleValueFloat = channelData[channelNo][frameNo];
+          const sampleValueInt16 = convertFloatSampleToInt16(sampleValueFloat);
+          dataView.setInt16(offs, sampleValueInt16, true);
+          offs += 2;
+        }
+      }
+    }
+    function writeSampleData_float32() {
+      let offs = headerLength;
+      for (let frameNo = 0; frameNo < numberOfFrames; frameNo++) {
+        for (let channelNo = 0; channelNo < numberOfChannels; channelNo++) {
+          const sampleValueFloat = channelData[channelNo][frameNo];
+          dataView.setFloat32(offs, sampleValueFloat, true);
+          offs += 4;
+        }
+      }
+    }
+    function convertFloatSampleToInt16(v) {
+      return Math.max(-32768, Math.min(32767, Math.round(v * 32768)));
+    }
+    function setString(offset, value) {
+      for (let p = 0; p < value.length; p++) {
+        dataView.setUint8(offset + p, value.charCodeAt(p));
+      }
+    }
+  }
+  var init_WavFileEncoder = __esm({
+    "node_modules/wav-file-encoder/dist/WavFileEncoder.js"() {
+    }
+  });
+
   // src/index.ts
   var require_index = __commonJS({
     "src/index.ts"() {
@@ -304447,6 +304559,7 @@ void main() {
       init_dsp();
       init_geometry();
       init_dispose();
+      init_WavFileEncoder();
       var defaultSavedState = {
         type: "webgpu-raytracing-project-state",
         rayCount: 2e4,
@@ -304662,48 +304775,55 @@ void main() {
           import_mithril2.default.redraw();
         },
         playAudio: function() {
-          const audioChannels = state.audioChannelsToPlay();
           if (!state.ctx) {
             state.ctx = new AudioContext({
               sampleRate: SAMPLE_RATE
             });
           }
           state.source?.stop();
-          if (audioChannels.length === 1) {
-            console.log("Playing mono audio");
-            const sourceBuffer = state.ctx.createBuffer(
-              1,
-              audioChannels[0].length,
-              SAMPLE_RATE
-            );
-            const channel0 = sourceBuffer.getChannelData(0);
-            for (let i = 0; i < audioChannels[0].length; ++i) {
-              channel0[i] = audioChannels[0][i];
-            }
-            state.source = state.ctx.createBufferSource();
-            state.source.buffer = sourceBuffer;
-            state.source.connect(state.ctx.destination);
-            state.source.start(0);
-          } else if (audioChannels.length === 2) {
-            console.log("Playing stereo");
-            const sourceBuffer = state.ctx.createBuffer(
-              2,
-              audioChannels[0].length,
-              SAMPLE_RATE
-            );
-            const channel0 = sourceBuffer.getChannelData(0);
-            const channel1 = sourceBuffer.getChannelData(1);
-            for (let i = 0; i < audioChannels[0].length; ++i) {
-              channel0[i] = audioChannels[0][i];
-              channel1[i] = audioChannels[1][i];
-            }
-            state.source = state.ctx.createBufferSource();
-            state.source.buffer = sourceBuffer;
-            state.source.connect(state.ctx.destination);
-            state.source.start(0);
-          } else {
-            console.log("Cannot play audio with ", audioChannels.length, "channels");
+          const audioBuffer = state.createAudioBuffer(state.ctx);
+          if (audioBuffer.numberOfChannels === 0) {
+            console.error("No channels in audio to play!");
+            return;
           }
+          if (audioBuffer.numberOfChannels > 2) {
+            console.error("Cannot play audio with more than 2 channels!");
+            return;
+          }
+          state.source = state.ctx.createBufferSource();
+          state.source.buffer = audioBuffer;
+          state.source.connect(state.ctx.destination);
+          state.source.start(0);
+        },
+        downloadAudio: function() {
+          if (!state.ctx) {
+            state.ctx = new AudioContext({ sampleRate: SAMPLE_RATE });
+          }
+          const audioBuffer = state.createAudioBuffer(state.ctx);
+          if (audioBuffer.numberOfChannels === 0) {
+            return;
+          }
+          const wavFile = encodeWavFileFromAudioBuffer(
+            audioBuffer,
+            1
+            /* float32 */
+          );
+          saveFile("raytraced_IR.wav", wavFile, "audio/wav");
+        },
+        createAudioBuffer: function(ctx) {
+          const audioChannels = state.audioChannelsToPlay();
+          const sourceBuffer = ctx.createBuffer(
+            audioChannels.length,
+            audioChannels[0].length,
+            SAMPLE_RATE
+          );
+          for (let chan = 0; chan < audioChannels.length; ++chan) {
+            const channel = sourceBuffer.getChannelData(chan);
+            for (let i = 0; i < audioChannels[0].length; ++i) {
+              channel[i] = audioChannels[chan][i];
+            }
+          }
+          return sourceBuffer;
         },
         playConvolved: async function() {
           const audioChannels = state.audioChannelsToPlay();
@@ -305583,6 +305703,14 @@ void main() {
                 onclick: state.playConvolved
               },
               "Play convolved audio"
+            ),
+            (0, import_mithril2.default)(
+              "button",
+              {
+                disabled: state.raytracedAudio.length === 0,
+                onclick: state.downloadAudio
+              },
+              "Download audio"
             )
           ]),
           (0, import_mithril2.default)(WaveformPlot),

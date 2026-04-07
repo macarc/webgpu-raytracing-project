@@ -21,6 +21,7 @@ import {
   RoundGeometry,
 } from "./geometry";
 import { dispose } from "./dispose";
+import { encodeWavFileFromAudioBuffer } from "wav-file-encoder";
 
 type Menu = "geometry" | "materials" | "raytracing";
 
@@ -281,8 +282,6 @@ let state = {
   },
 
   playAudio: function () {
-    const audioChannels = state.audioChannelsToPlay();
-
     // Create an AudioContext if one does not exist.
     if (!state.ctx) {
       state.ctx = new AudioContext({
@@ -293,53 +292,60 @@ let state = {
     // Stop the audio if it is already playing.
     state.source?.stop();
 
-    if (audioChannels.length === 1) {
-      console.log("Playing mono audio");
+    const audioBuffer = state.createAudioBuffer(state.ctx);
 
-      // Create the buffer to play.
-      const sourceBuffer = state.ctx.createBuffer(
-        1,
-        audioChannels[0].length,
-        SAMPLE_RATE,
-      );
-      const channel0 = sourceBuffer.getChannelData(0);
-      for (let i = 0; i < audioChannels[0].length; ++i) {
-        channel0[i] = audioChannels[0][i];
-      }
-
-      // Create the audio buffer source to play.
-      state.source = state.ctx.createBufferSource();
-      state.source.buffer = sourceBuffer;
-
-      // Start playing the audio buffer source.
-      state.source.connect(state.ctx.destination);
-      state.source.start(0);
-    } else if (audioChannels.length === 2) {
-      console.log("Playing stereo");
-
-      // Create the buffer to play.
-      const sourceBuffer = state.ctx.createBuffer(
-        2,
-        audioChannels[0].length,
-        SAMPLE_RATE,
-      );
-      const channel0 = sourceBuffer.getChannelData(0);
-      const channel1 = sourceBuffer.getChannelData(1);
-      for (let i = 0; i < audioChannels[0].length; ++i) {
-        channel0[i] = audioChannels[0][i];
-        channel1[i] = audioChannels[1][i];
-      }
-
-      // Create the audio buffer source to play.
-      state.source = state.ctx.createBufferSource();
-      state.source.buffer = sourceBuffer;
-
-      // Start playing the audio buffer source.
-      state.source.connect(state.ctx.destination);
-      state.source.start(0);
-    } else {
-      console.log("Cannot play audio with ", audioChannels.length, "channels");
+    if (audioBuffer.numberOfChannels === 0) {
+      console.error("No channels in audio to play!");
+      return;
     }
+
+    if (audioBuffer.numberOfChannels > 2) {
+      console.error("Cannot play audio with more than 2 channels!");
+      return;
+    }
+
+    // Create the audio gbuffer source to play.
+    state.source = state.ctx.createBufferSource();
+    state.source.buffer = audioBuffer;
+
+    // Start playing the audio buffer source.
+    state.source.connect(state.ctx.destination);
+    state.source.start(0);
+  },
+
+  downloadAudio: function () {
+    // Create an AudioContext if one does not exist.
+    if (!state.ctx) {
+      state.ctx = new AudioContext({ sampleRate: SAMPLE_RATE });
+    }
+
+    const audioBuffer = state.createAudioBuffer(state.ctx);
+
+    if (audioBuffer.numberOfChannels === 0) {
+      return;
+    }
+
+    const wavFile = encodeWavFileFromAudioBuffer(audioBuffer, 1 /* float32 */);
+
+    saveFile("raytraced_IR.wav", wavFile, "audio/wav");
+  },
+
+  createAudioBuffer: function (ctx: AudioContext): AudioBuffer {
+    const audioChannels = state.audioChannelsToPlay();
+
+    const sourceBuffer = ctx.createBuffer(
+      audioChannels.length,
+      audioChannels[0].length,
+      SAMPLE_RATE,
+    );
+    for (let chan = 0; chan < audioChannels.length; ++chan) {
+      const channel = sourceBuffer.getChannelData(chan);
+      for (let i = 0; i < audioChannels[0].length; ++i) {
+        channel[i] = audioChannels[chan][i];
+      }
+    }
+
+    return sourceBuffer;
   },
 
   playConvolved: async function () {
@@ -1395,6 +1401,14 @@ function raytracingMenu() {
           onclick: state.playConvolved,
         },
         "Play convolved audio",
+      ),
+      m(
+        "button",
+        {
+          disabled: state.raytracedAudio.length === 0,
+          onclick: state.downloadAudio,
+        },
+        "Download audio",
       ),
     ]),
     m(WaveformPlot),

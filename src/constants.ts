@@ -92,7 +92,11 @@ export async function readFile(file: File): Promise<string> {
   });
 }
 
-export function saveFile(name: string, contents: string, type: string) {
+export function saveFile(
+  name: string,
+  contents: string | ArrayBuffer,
+  type: string,
+) {
   const blob = new Blob([contents], { type });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
