@@ -304164,6 +304164,17 @@ void main() {
   });
 
   // src/geometry.ts
+  async function fromSavedGeometry(s) {
+    if (Array.isArray(s)) {
+      return LoadedGeometry.fromTriangles(s);
+    } else {
+      const geom = new BoxRoomGeometry();
+      geom.config = s.config;
+      await geom.initialise();
+      s.materials.forEach((material, i) => geom.setTriangleMaterial(i, material));
+      return geom;
+    }
+  }
   async function readFile2(file) {
     return new Promise((res, rej) => {
       const reader = new FileReader();
@@ -304230,6 +304241,9 @@ void main() {
         selectedTriangle() {
           return this.triangles()[this.selectedIndex] || null;
         }
+        savedGeometry() {
+          return this.triangles();
+        }
       };
       BoxRoomGeometry = class extends Geometry {
         /**
@@ -304249,13 +304263,20 @@ void main() {
          */
         geometry = [];
         async initialise() {
-          this.updateGeometry();
+          await this.updateGeometry();
         }
         setTriangleMaterial(index, material) {
           this.geometry[index].material = material;
         }
         triangles() {
           return this.geometry;
+        }
+        savedGeometry() {
+          return {
+            type: "box",
+            config: this.config,
+            materials: this.triangles().map((tri) => tri.material)
+          };
         }
         view() {
           return (0, import_mithril.default)("section", [
@@ -304628,14 +304649,14 @@ void main() {
             const obj = JSON.parse(stored);
             if (obj["type"] === "webgpu-raytracing-project-state") {
               try {
-                state.loadFromSaved(obj);
+                await state.loadFromSaved(obj);
                 return;
               } catch {
               }
             }
           }
           console.error("Could not load from local storage");
-          state.loadFromSaved(defaultSavedState);
+          await state.loadFromSaved(defaultSavedState);
           await state.geometry.initialise();
         },
         toSavedState: function() {
@@ -304649,12 +304670,12 @@ void main() {
             receivers: this.receivers,
             rayPlotCount: this.rayPlotCount,
             bouncePlotCount: this.bouncePlotCount,
-            triangles: this.geometry.triangles(),
+            triangles: this.geometry.savedGeometry(),
             materials: this.materials,
             selectedChannels: this.selectedChannels
           };
         },
-        loadFromSaved: function(saved) {
+        loadFromSaved: async function(saved) {
           state.rayCount = saved.rayCount;
           state.audioDuration = saved.audioDuration;
           state.maxBounces = saved.maxBounces;
@@ -304664,7 +304685,7 @@ void main() {
           state.rayPlotCount = saved.rayPlotCount;
           state.bouncePlotCount = saved.bouncePlotCount;
           if (saved.triangles !== null) {
-            state.geometry = LoadedGeometry.fromTriangles(saved.triangles);
+            state.geometry = await fromSavedGeometry(saved.triangles);
           } else {
             state.geometry = new BoxRoomGeometry();
           }
@@ -304701,7 +304722,7 @@ void main() {
                   const json = JSON.parse(contents);
                   if (json["type"] === "webgpu-raytracing-project-state") {
                     try {
-                      state.loadFromSaved(json);
+                      await state.loadFromSaved(json);
                       res();
                       return;
                     } catch {
@@ -304716,7 +304737,7 @@ void main() {
           });
         },
         resetSettings: async function() {
-          state.loadFromSaved(defaultSavedState);
+          await state.loadFromSaved(defaultSavedState);
           await state.geometry.initialise();
         },
         setBoxGeometry: async function() {

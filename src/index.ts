@@ -16,9 +16,11 @@ import FFT from "fft.js";
 import { pad } from "./dsp";
 import {
   BoxRoomGeometry,
+  fromSavedGeometry,
   Geometry,
   LoadedGeometry,
   RoundGeometry,
+  SavedGeometry,
 } from "./geometry";
 import { dispose } from "./dispose";
 import { encodeWavFileFromAudioBuffer } from "wav-file-encoder";
@@ -35,7 +37,7 @@ type SavedState = {
   receivers: Receiver[];
   rayPlotCount: number;
   bouncePlotCount: number;
-  triangles: Triangle[] | null;
+  triangles: SavedGeometry | null;
   materials: Material[];
   selectedChannels: number[];
 };
@@ -111,14 +113,14 @@ let state = {
       const obj = JSON.parse(stored);
       if (obj["type"] === "webgpu-raytracing-project-state") {
         try {
-          state.loadFromSaved(obj);
+          await state.loadFromSaved(obj);
           return;
         } catch {}
       }
     }
 
     console.error("Could not load from local storage");
-    state.loadFromSaved(defaultSavedState);
+    await state.loadFromSaved(defaultSavedState);
     await state.geometry.initialise();
   },
 
@@ -133,13 +135,13 @@ let state = {
       receivers: this.receivers,
       rayPlotCount: this.rayPlotCount,
       bouncePlotCount: this.bouncePlotCount,
-      triangles: this.geometry.triangles(),
+      triangles: this.geometry.savedGeometry(),
       materials: this.materials,
       selectedChannels: this.selectedChannels,
     };
   },
 
-  loadFromSaved: function (saved: SavedState) {
+  loadFromSaved: async function (saved: SavedState) {
     state.rayCount = saved.rayCount;
     state.audioDuration = saved.audioDuration;
     state.maxBounces = saved.maxBounces;
@@ -149,7 +151,7 @@ let state = {
     state.rayPlotCount = saved.rayPlotCount;
     state.bouncePlotCount = saved.bouncePlotCount;
     if (saved.triangles !== null) {
-      state.geometry = LoadedGeometry.fromTriangles(saved.triangles);
+      state.geometry = await fromSavedGeometry(saved.triangles);
     } else {
       state.geometry = new BoxRoomGeometry();
     }
@@ -195,7 +197,7 @@ let state = {
             const json = JSON.parse(contents);
             if (json["type"] === "webgpu-raytracing-project-state") {
               try {
-                state.loadFromSaved(json as SavedState);
+                await state.loadFromSaved(json as SavedState);
                 res();
                 return;
               } catch {
@@ -213,7 +215,7 @@ let state = {
   },
 
   resetSettings: async function () {
-    state.loadFromSaved(defaultSavedState);
+    await state.loadFromSaved(defaultSavedState);
     await state.geometry.initialise();
   },
 

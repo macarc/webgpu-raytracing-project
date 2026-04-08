@@ -11,6 +11,22 @@ import {
 } from "./geometry_helpers";
 import { SphereGeometry } from "three";
 
+export type SavedGeometry =
+  | Triangle[]
+  | { type: "box"; config: BoxRoomConfig; materials: string[] };
+
+export async function fromSavedGeometry(s: SavedGeometry): Promise<Geometry> {
+  if (Array.isArray(s)) {
+    return LoadedGeometry.fromTriangles(s);
+  } else {
+    const geom = new BoxRoomGeometry();
+    geom.config = s.config;
+    await geom.initialise();
+    s.materials.forEach((material, i) => geom.setTriangleMaterial(i, material));
+    return geom;
+  }
+}
+
 /**
  * The Geometry base class - all Geometry objects
  * (including shoebox room, sphere, etc.) derive from this class.
@@ -53,6 +69,10 @@ export abstract class Geometry {
   public selectedTriangle(): Triangle | null {
     return this.triangles()[this.selectedIndex] || null;
   }
+
+  public savedGeometry(): SavedGeometry {
+    return this.triangles();
+  }
 }
 
 /**
@@ -79,7 +99,7 @@ export class BoxRoomGeometry extends Geometry {
 
   async initialise() {
     // TODO: check this works
-    this.updateGeometry();
+    await this.updateGeometry();
     // this.geometry = await boxRoom(this.config);
   }
 
@@ -89,6 +109,14 @@ export class BoxRoomGeometry extends Geometry {
 
   triangles(): Triangle[] {
     return this.geometry;
+  }
+
+  public override savedGeometry(): SavedGeometry {
+    return {
+      type: "box",
+      config: this.config,
+      materials: this.triangles().map((tri) => tri.material),
+    };
   }
 
   view(): m.Children {
