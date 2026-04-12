@@ -1,4 +1,4 @@
-import { rayTrace, Receiver } from "./ray_tracing";
+import { RayTrace, RayTraceProgress, Receiver } from "./ray_tracing";
 import {
   isOnMobile,
   Material,
@@ -31,7 +31,6 @@ type SavedState = {
   type: "webgpu-raytracing-project-state";
   rayCount: number;
   audioDuration: number;
-  maxBounces: number;
   sourcePosition: Vec3;
   sourceDirection: Vec3 | null;
   receivers: Receiver[];
@@ -45,8 +44,7 @@ type SavedState = {
 const defaultSavedState: SavedState = {
   type: "webgpu-raytracing-project-state",
   rayCount: 20000,
-  audioDuration: 10,
-  maxBounces: 10000,
+  audioDuration: 4,
   sourcePosition: [0, 0, 0],
   sourceDirection: null,
   receivers: [
@@ -100,8 +98,15 @@ let state = {
   raytracedAudio: [] as Float32Array[],
   ctx: null as AudioContext | null,
   running: false,
-  rayTracingProgress: [0, 0] as [number, number],
+  progress: {
+    bounceCount: 0,
+    secondsElapsed: 0,
+    totalSeconds: 0,
+    escapedRayCount: 0,
+    totalRayCount: 0,
+  } as RayTraceProgress,
   source: null as AudioBufferSourceNode | null,
+  rayTrace: new RayTrace(),
 
   initialise: async function () {
     await state.geometry.initialise();
@@ -129,7 +134,6 @@ let state = {
       type: "webgpu-raytracing-project-state",
       rayCount: this.rayCount,
       audioDuration: this.audioDuration,
-      maxBounces: this.maxBounces,
       sourcePosition: this.sourcePosition,
       sourceDirection: this.sourceDirection,
       receivers: this.receivers,
@@ -144,7 +148,6 @@ let state = {
   loadFromSaved: async function (saved: SavedState) {
     state.rayCount = saved.rayCount;
     state.audioDuration = saved.audioDuration;
-    state.maxBounces = saved.maxBounces;
     state.sourcePosition = saved.sourcePosition;
     state.sourceDirection = saved.sourceDirection;
     state.receivers = saved.receivers;
@@ -245,27 +248,31 @@ let state = {
   },
 
   runRaytracing: async function () {
-    state.running = true;
-    const rayTraceOutput = await rayTrace(
-      {
-        sourcePosition: state.sourcePosition,
-        sourceDirection: state.sourceDirection,
-        receivers: state.receivers,
-        geometry: state.geometry.triangles(),
-        materials: state.materials,
-        rayCount: state.rayCount,
-        throttle: state.throttle,
-        maxBounces: state.maxBounces,
-        rayPlotCount: state.rayPlotCount,
-        bouncePlotCount: state.bouncePlotCount,
-        audioDuration: state.audioDuration,
-      },
-      state.rayTraceUpdate,
-    );
-    state.raytracedAudio = rayTraceOutput?.audio || [];
-    state.bounceCoordinates = rayTraceOutput?.bounceCoordinates || [];
-    state.running = false;
-    ThreeView.updatePlot();
+    if (state.running) {
+      state.rayTrace.cancel();
+      state.running = false;
+    } else {
+      state.running = true;
+      const rayTraceOutput = await state.rayTrace.run(
+        {
+          sourcePosition: state.sourcePosition,
+          sourceDirection: state.sourceDirection,
+          receivers: state.receivers,
+          geometry: state.geometry.triangles(),
+          materials: state.materials,
+          rayCount: state.rayCount,
+          throttle: state.throttle,
+          rayPlotCount: state.rayPlotCount,
+          bouncePlotCount: state.bouncePlotCount,
+          audioDuration: state.audioDuration,
+        },
+        state.rayTraceUpdate,
+      );
+      state.raytracedAudio = rayTraceOutput?.audio || [];
+      state.bounceCoordinates = rayTraceOutput?.bounceCoordinates || [];
+      state.running = false;
+      ThreeView.updatePlot();
+    }
   },
 
   audioChannelsToPlay: function () {
@@ -278,8 +285,8 @@ let state = {
     return channels;
   },
 
-  rayTraceUpdate: async function (bounces: number, totalBounces: number) {
-    state.rayTracingProgress = [bounces, totalBounces];
+  rayTraceUpdate: async function (progress: RayTraceProgress) {
+    state.progress = progress;
     m.redraw();
   },
 
@@ -1297,22 +1304,6 @@ function raytracingMenu() {
         }),
       ]),
       m("label", [
-        "Maximum number of bounces:",
-        m("input", {
-          type: "number",
-          min: 0,
-          step: 100,
-          value: state.maxBounces,
-          onchange: function (e: InputEvent) {
-            const val = parseInt((e.target as HTMLInputElement).value);
-
-            if (val !== undefined && val >= 0) {
-              state.maxBounces = val;
-            }
-          },
-        }),
-      ]),
-      m("label", [
         "Number of rays to plot:",
         m("input", {
           type: "number",
@@ -1348,18 +1339,35 @@ function raytracingMenu() {
     m("section", [
       m(
         "button",
-        { disabled: state.running, onclick: state.runRaytracing },
-        "Run raytracing",
+        { class: state.running ? "stop" : "", onclick: state.runRaytracing },
+        state.running ? "Stop raytracing" : "Run raytracing",
       ),
       m(
         "div.progress-bar-holder",
         m("div.progress-bar", {
-          style: `width: ${(100 * state.rayTracingProgress[0]) / state.rayTracingProgress[1]}%;`,
+          style: `width: ${(100 * state.progress.secondsElapsed) / state.progress.totalSeconds}%;`,
         }),
       ),
-      " ",
-      state.rayTracingProgress[0],
-      " bounces",
+      m("span", [
+        " ",
+        state.progress.secondsElapsed.toFixed(2),
+        "s / ",
+        state.progress.totalSeconds.toFixed(2),
+        "s, ",
+        state.progress.bounceCount,
+        " bounces ",
+      ]),
+      m("span", { style: "display: block;" }, [
+        "Escaped rays: ",
+        state.progress.escapedRayCount,
+        " (",
+        // || 0 so that division by 0 does not result in NaN being displayed.
+        (
+          (100 * state.progress.escapedRayCount) /
+            state.progress.totalRayCount || 0
+        ).toFixed(2),
+        "%)",
+      ]),
     ]),
     m("section", [
       state.raytracedAudio.length > 0

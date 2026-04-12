@@ -449,7 +449,7 @@
   var<storage, read> triangleBuffer: array<Triangle>;
 
   @group(0) @binding(2)
-  var<storage, read_write> distances: array<f32>;
+  var<storage, read_write> distances_and_ray_escaped_flags: array<f32>;
 
   @group(0) @binding(3)
   var<storage, read_write> band_125_and_250: array<f32>;
@@ -561,8 +561,8 @@
       ${receivers.map((_, i) => "directionToReceivers[" + i + "] = normalize(vecToReceivers[" + i + "]);").join("")}
       ${receivers.map((_, i) => "distanceToReceivers[" + i + "] = length(vecToReceivers[" + i + "]);").join("")}
 
-      let lowerIndex = rayIndex * ${bounceCount * receivers.length} + n * ${receivers.length};
-      let upperIndex = arrayLength(&distances) + lowerIndex;
+      let lowerIndex: u32 = rayIndex * ${bounceCount * receivers.length} + n * ${receivers.length};
+      let upperIndex: u32 = arrayLength(&distances_and_ray_escaped_flags)/2 + lowerIndex;
 
       var rayTriangleDistance = INFINITY;
       var closestTriangleIndex = triangleCount;
@@ -643,6 +643,7 @@
       }
 
       for (var j: u32 = 0; j < ${receivers.length}; j++) {
+        distances_and_ray_escaped_flags[upperIndex + j] = ${FLAG_ESCAPED};
         band_125_and_250[lowerIndex + j] = 0;
         band_125_and_250[upperIndex + j] = 0;
         band_500_and_1000[lowerIndex + j] = 0;
@@ -658,6 +659,9 @@
 
         // TODO: unroll this loop (and all the other receivers loops).
         for (var j: u32 = 0; j < ${receivers.length}; j++) {
+          distances_and_ray_escaped_flags[upperIndex + j] = ${FLAG_ALIVE};
+          distances_and_ray_escaped_flags[lowerIndex + j] = raydistancetravelled + distanceToReceivers[j];
+
           // If the ray to the receiver did not hit a triangle before hitting the receiver,
           // add the contribution to the output.
           if (receiverRayTriangleDistances[j] >= distanceToReceivers[j]) {
@@ -665,7 +669,6 @@
 
             // Only count if the ray is not intersecting the last surface.
             if (cosNormalAngleToReceiver >= 0) {
-              let rayTriangleDistance = raydistancetravelled + distanceToReceivers[j];
               let rayVecToClosestReceiverPoint = dot(vecToReceivers[j], raydirection) * raydirection;
               let distanceFromRayToReceiver = length(vecToReceivers[j] - rayVecToClosestReceiverPoint);
 
@@ -678,8 +681,6 @@
               let totalCoefficient = specularCoefficient + diffuseCoefficient;
 
               
-              distances[lowerIndex + j] = rayTriangleDistance;
-
               band_125_and_250[lowerIndex + j] = intensity_125 * totalCoefficient;
               band_125_and_250[upperIndex + j] = intensity_250 * totalCoefficient;
               band_500_and_1000[lowerIndex + j] = intensity_500 * totalCoefficient;
@@ -764,184 +765,7 @@
 `
     );
   }
-  async function rayTrace(settings, update) {
-    update(0, 1);
-    console.time("Total (including setup)");
-    console.log("Creating geometry");
-    const rays = [];
-    const triangles = settings.geometry;
-    const direction = settings.sourceDirection?.slice() || null;
-    if (direction !== null) {
-      const length = Math.sqrt(
-        direction[0] ** 2 + direction[1] ** 2 + direction[2] ** 2
-      );
-      direction[0] /= length;
-      direction[1] /= length;
-      direction[2] /= length;
-    }
-    const goldenRatio = (1 + Math.sqrt(5)) / 2;
-    for (let i = 0; i < settings.rayCount; ++i) {
-      const theta = 2 * Math.PI * i / goldenRatio;
-      const phi = Math.acos(1 - 2 * i / settings.rayCount);
-      const ray = [
-        Math.cos(theta) * Math.sin(phi),
-        Math.sin(theta) * Math.sin(phi),
-        Math.cos(phi)
-      ];
-      let intensity = 1;
-      if (direction !== null) {
-        const rayDotDirection = ray[0] * direction[0] + ray[1] * direction[1] + ray[2] * direction[2];
-        intensity = (rayDotDirection + 1) / 2;
-      }
-      rays.push({
-        position: settings.sourcePosition,
-        direction: normalize(ray),
-        intensity
-      });
-    }
-    const gpuDevice = await getGPUDevice();
-    if (!gpuDevice) {
-      throw new Error("Aborted due to null GPU device");
-    }
-    const maxStorageBufferSize = gpuDevice.limits.maxStorageBufferBindingSize || STANDARD_MAX_STORAGE_BUFFER_SIZE;
-    const bouncesPerPass = Math.max(
-      1,
-      Math.floor(
-        (1 - settings.throttle) * maxStorageBufferSize / (2 * FLOAT32_SIZE * settings.rayCount * settings.receivers.length)
-      )
-    );
-    console.log("bouncesPerPass", bouncesPerPass);
-    const outputSize = 2 * bouncesPerPass * settings.rayCount * settings.receivers.length;
-    if (outputSize > maxStorageBufferSize) {
-      console.log("Output buffer is too large, will not work");
-    }
-    const rayTracer = new SpecularRayTracer(
-      gpuDevice,
-      new Float32Array(
-        rays.flatMap((ray) => [
-          ...ray.position,
-          ...ray.direction,
-          ...[0, 0, 0],
-          0,
-          ray.intensity,
-          ray.intensity,
-          ray.intensity,
-          ray.intensity,
-          ray.intensity,
-          ray.intensity
-        ])
-      ),
-      trianglesToFloatArray(triangles, settings.materials),
-      materialsToFloatArray(settings.materials),
-      [
-        new Float32Array(outputSize / 2),
-        // distance
-        new Float32Array(outputSize),
-        // band 125 and 250
-        new Float32Array(outputSize),
-        // band 500 and 1000
-        new Float32Array(outputSize),
-        // band 2000a and 4000
-        new Float32Array(outputSize),
-        // x and y
-        new Float32Array(outputSize)
-        // z and ray intensity
-      ],
-      specularRayIntersectionShaderCode(
-        settings.receivers,
-        settings.materials,
-        bouncesPerPass
-      )
-    );
-    const receiversCount = settings.receivers.length;
-    const outputs = [];
-    for (let i = 0; i < receiversCount; ++i) {
-      outputs.push([
-        new Float32Array(SAMPLE_RATE * settings.audioDuration),
-        // 125Hz
-        new Float32Array(SAMPLE_RATE * settings.audioDuration),
-        // 250Hz
-        new Float32Array(SAMPLE_RATE * settings.audioDuration),
-        // 500Hz
-        new Float32Array(SAMPLE_RATE * settings.audioDuration),
-        // 1kHz
-        new Float32Array(SAMPLE_RATE * settings.audioDuration),
-        // 2kHz
-        new Float32Array(SAMPLE_RATE * settings.audioDuration)
-        // 4kHz
-      ]);
-    }
-    const THRESHOLD = 1e-12;
-    let averageValue = 0;
-    const gapBetweenIndicesToCount = Math.floor(
-      settings.rayCount / settings.rayPlotCount
-    );
-    const plottedRayCoordinates = [];
-    for (let i = 0; i < settings.rayPlotCount; ++i) {
-      plottedRayCoordinates.push(new Float32Array(4 * settings.bouncePlotCount));
-      plottedRayCoordinates[i][0] = rays[gapBetweenIndicesToCount * i].intensity;
-      plottedRayCoordinates[i][1] = settings.sourcePosition[0];
-      plottedRayCoordinates[i][2] = settings.sourcePosition[1];
-      plottedRayCoordinates[i][3] = settings.sourcePosition[2];
-    }
-    console.time("Total (excluding setup)");
-    const maxPasses = Math.ceil(settings.maxBounces / bouncesPerPass);
-    for (let i = 0; i < maxPasses; i++) {
-      update((i + 1) * bouncesPerPass, maxPasses * bouncesPerPass);
-      const result = await rayTracer.runPass(settings.rayCount);
-      let thisPassAverageValue = 0;
-      let thisPassMaxValue = 0;
-      for (let k = 0; k < receiversCount; ++k) {
-        const output = outputs[k];
-        for (let j = k; j < result[0].length; j += receiversCount) {
-          const index = Math.round(SAMPLE_RATE * (result[0][j] / SPEED_OF_SOUND));
-          const air_absorption = Math.exp(-result[0][j] * AIR_ABSORPTION_COEFF);
-          const lowerIndex = j;
-          const upperIndex = result[0].length + j;
-          output[0][index] += result[1][lowerIndex] * air_absorption;
-          output[1][index] += result[1][upperIndex] * air_absorption;
-          output[2][index] += result[2][lowerIndex] * air_absorption;
-          output[3][index] += result[2][upperIndex] * air_absorption;
-          output[4][index] += result[3][lowerIndex] * air_absorption;
-          output[5][index] += result[3][upperIndex] * air_absorption;
-          const avg = (result[1][lowerIndex] + result[1][upperIndex] + result[2][lowerIndex] + result[2][upperIndex] + result[3][lowerIndex] + result[3][upperIndex]) * air_absorption;
-          thisPassAverageValue += Math.abs(avg);
-          thisPassMaxValue = Math.max(Math.abs(avg), thisPassMaxValue);
-          const rayIndex = Math.floor(j / (bouncesPerPass * receiversCount));
-          const bounceIndex = bouncesPerPass * i + (j - bouncesPerPass * receiversCount * rayIndex) / receiversCount;
-          if (k === 0 && rayIndex % gapBetweenIndicesToCount === 0 && rayIndex / gapBetweenIndicesToCount < plottedRayCoordinates.length && bounceIndex < settings.bouncePlotCount) {
-            const pointIndex = (bounceIndex + 1) * 4;
-            plottedRayCoordinates[rayIndex / gapBetweenIndicesToCount][pointIndex] = result[5][upperIndex];
-            plottedRayCoordinates[rayIndex / gapBetweenIndicesToCount][pointIndex + 1] = result[4][lowerIndex];
-            plottedRayCoordinates[rayIndex / gapBetweenIndicesToCount][pointIndex + 2] = result[4][upperIndex];
-            plottedRayCoordinates[rayIndex / gapBetweenIndicesToCount][pointIndex + 3] = result[5][lowerIndex];
-          }
-        }
-      }
-      if (i === 0) {
-        averageValue = thisPassAverageValue;
-        console.log("average", thisPassAverageValue, averageValue);
-      } else {
-        if (thisPassAverageValue > averageValue) {
-          averageValue = thisPassAverageValue;
-        } else if (thisPassMaxValue < THRESHOLD * averageValue) {
-          console.log("below threshold on pass", i);
-          update((i + 1) * bouncesPerPass, (i + 1) * bouncesPerPass);
-          break;
-        }
-      }
-    }
-    const outputAudio = outputs.map((output) => combineFilteredAudio(...output));
-    console.timeEnd("Total (excluding setup)");
-    console.timeEnd("Total (including setup)");
-    console.log(outputAudio.join(","));
-    gpuDevice.destroy();
-    return {
-      audio: outputAudio,
-      bounceCoordinates: plottedRayCoordinates
-    };
-  }
-  var STANDARD_MAX_STORAGE_BUFFER_SIZE, AIR_ABSORPTION_COEFF, SpecularRayTracer;
+  var STANDARD_MAX_STORAGE_BUFFER_SIZE, AIR_ABSORPTION_COEFF, FLAG_ESCAPED, FLAG_ALIVE, SpecularRayTracer, RayTrace;
   var init_ray_tracing = __esm({
     "src/ray_tracing.ts"() {
       "use strict";
@@ -951,6 +775,8 @@
       init_dsp();
       STANDARD_MAX_STORAGE_BUFFER_SIZE = 134217728;
       AIR_ABSORPTION_COEFF = 13e-4;
+      FLAG_ESCAPED = 0;
+      FLAG_ALIVE = 1;
       SpecularRayTracer = class {
         device;
         computePipeline;
@@ -1096,6 +922,219 @@
           );
           this.stagingBuffers.forEach((buffer) => buffer.unmap());
           return arrayDataOutput.map((buffer) => new Float32Array(buffer));
+        }
+      };
+      RayTrace = class {
+        cancelled = false;
+        async cancel() {
+          this.cancelled = true;
+        }
+        async run(settings, update) {
+          this.cancelled = false;
+          update({
+            bounceCount: 0,
+            secondsElapsed: 0,
+            totalSeconds: settings.audioDuration,
+            escapedRayCount: 0,
+            totalRayCount: settings.rayCount
+          });
+          console.time("Total (including setup)");
+          console.log("Creating geometry");
+          const rays = [];
+          const triangles = settings.geometry;
+          const direction = settings.sourceDirection?.slice() || null;
+          if (direction !== null) {
+            const length = Math.sqrt(
+              direction[0] ** 2 + direction[1] ** 2 + direction[2] ** 2
+            );
+            direction[0] /= length;
+            direction[1] /= length;
+            direction[2] /= length;
+          }
+          const goldenRatio = (1 + Math.sqrt(5)) / 2;
+          for (let i = 0; i < settings.rayCount; ++i) {
+            const theta = 2 * Math.PI * i / goldenRatio;
+            const phi = Math.acos(1 - 2 * i / settings.rayCount);
+            const ray = [
+              Math.cos(theta) * Math.sin(phi),
+              Math.sin(theta) * Math.sin(phi),
+              Math.cos(phi)
+            ];
+            let intensity = 1;
+            if (direction !== null) {
+              const rayDotDirection = ray[0] * direction[0] + ray[1] * direction[1] + ray[2] * direction[2];
+              intensity = (rayDotDirection + 1) / 2;
+            }
+            rays.push({
+              position: settings.sourcePosition,
+              direction: normalize(ray),
+              intensity
+            });
+          }
+          const gpuDevice = await getGPUDevice();
+          if (!gpuDevice) {
+            throw new Error("Aborted due to null GPU device");
+          }
+          const maxStorageBufferSize = gpuDevice.limits.maxStorageBufferBindingSize || STANDARD_MAX_STORAGE_BUFFER_SIZE;
+          const bouncesPerPass = Math.max(
+            1,
+            Math.floor(
+              (1 - settings.throttle) * maxStorageBufferSize / (2 * FLOAT32_SIZE * settings.rayCount * settings.receivers.length)
+            )
+          );
+          console.log("bouncesPerPass", bouncesPerPass);
+          const outputSize = 2 * bouncesPerPass * settings.rayCount * settings.receivers.length;
+          if (outputSize > maxStorageBufferSize) {
+            console.log("Output buffer is too large, will not work");
+          }
+          const rayTracer = new SpecularRayTracer(
+            gpuDevice,
+            new Float32Array(
+              rays.flatMap((ray) => [
+                ...ray.position,
+                ...ray.direction,
+                ...[0, 0, 0],
+                0,
+                ray.intensity,
+                ray.intensity,
+                ray.intensity,
+                ray.intensity,
+                ray.intensity,
+                ray.intensity
+              ])
+            ),
+            trianglesToFloatArray(triangles, settings.materials),
+            materialsToFloatArray(settings.materials),
+            [
+              new Float32Array(outputSize),
+              // distance and ray escaped flag
+              new Float32Array(outputSize),
+              // band 125 and 250
+              new Float32Array(outputSize),
+              // band 500 and 1000
+              new Float32Array(outputSize),
+              // band 2000a and 4000
+              new Float32Array(outputSize),
+              // x and y
+              new Float32Array(outputSize)
+              // z and ray intensity
+            ],
+            specularRayIntersectionShaderCode(
+              settings.receivers,
+              settings.materials,
+              bouncesPerPass
+            )
+          );
+          const receiversCount = settings.receivers.length;
+          const sampleCount = Math.ceil(SAMPLE_RATE * settings.audioDuration);
+          const outputs = [];
+          for (let i = 0; i < receiversCount; ++i) {
+            outputs.push([
+              new Float32Array(sampleCount),
+              // 125Hz
+              new Float32Array(sampleCount),
+              // 250Hz
+              new Float32Array(sampleCount),
+              // 500Hz
+              new Float32Array(sampleCount),
+              // 1kHz
+              new Float32Array(sampleCount),
+              // 2kHz
+              new Float32Array(sampleCount)
+              // 4kHz
+            ]);
+          }
+          const gapBetweenIndicesToCount = Math.floor(
+            settings.rayCount / settings.rayPlotCount
+          );
+          const plottedRayCoordinates = [];
+          for (let i = 0; i < settings.rayPlotCount; ++i) {
+            plottedRayCoordinates.push(
+              new Float32Array(4 * settings.bouncePlotCount)
+            );
+            plottedRayCoordinates[i][0] = rays[gapBetweenIndicesToCount * i].intensity;
+            plottedRayCoordinates[i][1] = settings.sourcePosition[0];
+            plottedRayCoordinates[i][2] = settings.sourcePosition[1];
+            plottedRayCoordinates[i][3] = settings.sourcePosition[2];
+          }
+          console.time("Total (excluding setup)");
+          let minIndex = 0;
+          let bounceCount = 0;
+          let escapedRayCount = 0;
+          while (!this.cancelled && minIndex < sampleCount) {
+            bounceCount += bouncesPerPass;
+            update({
+              bounceCount,
+              secondsElapsed: minIndex / SAMPLE_RATE,
+              totalSeconds: settings.audioDuration,
+              escapedRayCount,
+              totalRayCount: settings.rayCount
+            });
+            const result = await rayTracer.runPass(settings.rayCount);
+            minIndex = sampleCount;
+            const halfBufferLength = outputSize / 2;
+            escapedRayCount = 0;
+            for (let k = 0; k < receiversCount; ++k) {
+              let npp = 10;
+              const output = outputs[k];
+              for (let j = k; j < halfBufferLength; j += receiversCount) {
+                const index = Math.round(
+                  SAMPLE_RATE * (result[0][j] / SPEED_OF_SOUND)
+                );
+                const air_absorption = Math.exp(-result[0][j] * AIR_ABSORPTION_COEFF);
+                const lowerIndex = j;
+                const upperIndex = halfBufferLength + j;
+                output[0][index] += result[1][lowerIndex] * air_absorption;
+                output[1][index] += result[1][upperIndex] * air_absorption;
+                output[2][index] += result[2][lowerIndex] * air_absorption;
+                output[3][index] += result[2][upperIndex] * air_absorption;
+                output[4][index] += result[3][lowerIndex] * air_absorption;
+                output[5][index] += result[3][upperIndex] * air_absorption;
+                const escaped = result[0][upperIndex] === FLAG_ESCAPED;
+                if (escaped && lowerIndex % (bouncesPerPass * receiversCount) === 0) {
+                  escapedRayCount++;
+                } else {
+                }
+                if (!escaped && (lowerIndex + receiversCount - k) % (bouncesPerPass * receiversCount) === 0) {
+                  if (npp-- > 0) {
+                    console.log(lowerIndex, bouncesPerPass, index / SAMPLE_RATE);
+                  }
+                  minIndex = Math.min(minIndex, index);
+                }
+                const rayIndex = Math.floor(j / (bouncesPerPass * receiversCount));
+                const bounceIndex = bounceCount - bouncesPerPass + (j - bouncesPerPass * receiversCount * rayIndex) / receiversCount;
+                if (k === 0 && rayIndex % gapBetweenIndicesToCount === 0 && rayIndex / gapBetweenIndicesToCount < plottedRayCoordinates.length && bounceIndex < settings.bouncePlotCount) {
+                  const pointIndex = (bounceIndex + 1) * 4;
+                  plottedRayCoordinates[rayIndex / gapBetweenIndicesToCount][pointIndex] = result[5][upperIndex];
+                  plottedRayCoordinates[rayIndex / gapBetweenIndicesToCount][pointIndex + 1] = result[4][lowerIndex];
+                  plottedRayCoordinates[rayIndex / gapBetweenIndicesToCount][pointIndex + 2] = result[4][upperIndex];
+                  plottedRayCoordinates[rayIndex / gapBetweenIndicesToCount][pointIndex + 3] = result[5][lowerIndex];
+                }
+              }
+            }
+            console.log(minIndex);
+            console.log(
+              `Escaped rays: ${escapedRayCount} (${100 * escapedRayCount / settings.rayCount}%)`
+            );
+          }
+          update({
+            bounceCount,
+            secondsElapsed: minIndex / SAMPLE_RATE,
+            totalSeconds: settings.audioDuration,
+            escapedRayCount,
+            totalRayCount: settings.rayCount
+          });
+          const outputAudio = outputs.map(
+            (output) => combineFilteredAudio(...output)
+          );
+          console.timeEnd("Total (excluding setup)");
+          console.timeEnd("Total (including setup)");
+          console.log(outputAudio.join(","));
+          gpuDevice.destroy();
+          return {
+            audio: outputAudio,
+            bounceCoordinates: plottedRayCoordinates
+          };
         }
       };
     }
@@ -304584,8 +304623,7 @@ void main() {
       var defaultSavedState = {
         type: "webgpu-raytracing-project-state",
         rayCount: 2e4,
-        audioDuration: 10,
-        maxBounces: 1e4,
+        audioDuration: 4,
         sourcePosition: [0, 0, 0],
         sourceDirection: null,
         receivers: [
@@ -304638,8 +304676,15 @@ void main() {
         raytracedAudio: [],
         ctx: null,
         running: false,
-        rayTracingProgress: [0, 0],
+        progress: {
+          bounceCount: 0,
+          secondsElapsed: 0,
+          totalSeconds: 0,
+          escapedRayCount: 0,
+          totalRayCount: 0
+        },
         source: null,
+        rayTrace: new RayTrace(),
         initialise: async function() {
           await state.geometry.initialise();
         },
@@ -304664,7 +304709,6 @@ void main() {
             type: "webgpu-raytracing-project-state",
             rayCount: this.rayCount,
             audioDuration: this.audioDuration,
-            maxBounces: this.maxBounces,
             sourcePosition: this.sourcePosition,
             sourceDirection: this.sourceDirection,
             receivers: this.receivers,
@@ -304678,7 +304722,6 @@ void main() {
         loadFromSaved: async function(saved) {
           state.rayCount = saved.rayCount;
           state.audioDuration = saved.audioDuration;
-          state.maxBounces = saved.maxBounces;
           state.sourcePosition = saved.sourcePosition;
           state.sourceDirection = saved.sourceDirection;
           state.receivers = saved.receivers;
@@ -304760,27 +304803,31 @@ void main() {
           state.menu = menu;
         },
         runRaytracing: async function() {
-          state.running = true;
-          const rayTraceOutput = await rayTrace(
-            {
-              sourcePosition: state.sourcePosition,
-              sourceDirection: state.sourceDirection,
-              receivers: state.receivers,
-              geometry: state.geometry.triangles(),
-              materials: state.materials,
-              rayCount: state.rayCount,
-              throttle: state.throttle,
-              maxBounces: state.maxBounces,
-              rayPlotCount: state.rayPlotCount,
-              bouncePlotCount: state.bouncePlotCount,
-              audioDuration: state.audioDuration
-            },
-            state.rayTraceUpdate
-          );
-          state.raytracedAudio = rayTraceOutput?.audio || [];
-          state.bounceCoordinates = rayTraceOutput?.bounceCoordinates || [];
-          state.running = false;
-          ThreeView.updatePlot();
+          if (state.running) {
+            state.rayTrace.cancel();
+            state.running = false;
+          } else {
+            state.running = true;
+            const rayTraceOutput = await state.rayTrace.run(
+              {
+                sourcePosition: state.sourcePosition,
+                sourceDirection: state.sourceDirection,
+                receivers: state.receivers,
+                geometry: state.geometry.triangles(),
+                materials: state.materials,
+                rayCount: state.rayCount,
+                throttle: state.throttle,
+                rayPlotCount: state.rayPlotCount,
+                bouncePlotCount: state.bouncePlotCount,
+                audioDuration: state.audioDuration
+              },
+              state.rayTraceUpdate
+            );
+            state.raytracedAudio = rayTraceOutput?.audio || [];
+            state.bounceCoordinates = rayTraceOutput?.bounceCoordinates || [];
+            state.running = false;
+            ThreeView.updatePlot();
+          }
         },
         audioChannelsToPlay: function() {
           const channels = [];
@@ -304791,8 +304838,8 @@ void main() {
           }
           return channels;
         },
-        rayTraceUpdate: async function(bounces, totalBounces) {
-          state.rayTracingProgress = [bounces, totalBounces];
+        rayTraceUpdate: async function(progress) {
+          state.progress = progress;
           import_mithril2.default.redraw();
         },
         playAudio: function() {
@@ -305621,21 +305668,6 @@ void main() {
               })
             ]),
             (0, import_mithril2.default)("label", [
-              "Maximum number of bounces:",
-              (0, import_mithril2.default)("input", {
-                type: "number",
-                min: 0,
-                step: 100,
-                value: state.maxBounces,
-                onchange: function(e) {
-                  const val = parseInt(e.target.value);
-                  if (val !== void 0 && val >= 0) {
-                    state.maxBounces = val;
-                  }
-                }
-              })
-            ]),
-            (0, import_mithril2.default)("label", [
               "Number of rays to plot:",
               (0, import_mithril2.default)("input", {
                 type: "number",
@@ -305671,18 +305703,32 @@ void main() {
           (0, import_mithril2.default)("section", [
             (0, import_mithril2.default)(
               "button",
-              { disabled: state.running, onclick: state.runRaytracing },
-              "Run raytracing"
+              { class: state.running ? "stop" : "", onclick: state.runRaytracing },
+              state.running ? "Stop raytracing" : "Run raytracing"
             ),
             (0, import_mithril2.default)(
               "div.progress-bar-holder",
               (0, import_mithril2.default)("div.progress-bar", {
-                style: `width: ${100 * state.rayTracingProgress[0] / state.rayTracingProgress[1]}%;`
+                style: `width: ${100 * state.progress.secondsElapsed / state.progress.totalSeconds}%;`
               })
             ),
-            " ",
-            state.rayTracingProgress[0],
-            " bounces"
+            (0, import_mithril2.default)("span", [
+              " ",
+              state.progress.secondsElapsed.toFixed(2),
+              "s / ",
+              state.progress.totalSeconds.toFixed(2),
+              "s, ",
+              state.progress.bounceCount,
+              " bounces "
+            ]),
+            (0, import_mithril2.default)("span", { style: "display: block;" }, [
+              "Escaped rays: ",
+              state.progress.escapedRayCount,
+              " (",
+              // || 0 so that division by 0 does not result in NaN being displayed.
+              (100 * state.progress.escapedRayCount / state.progress.totalRayCount || 0).toFixed(2),
+              "%)"
+            ])
           ]),
           (0, import_mithril2.default)("section", [
             state.raytracedAudio.length > 0 ? (0, import_mithril2.default)(
