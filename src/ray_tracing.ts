@@ -7,6 +7,7 @@ import {
   SPEED_OF_SOUND,
   Triangle,
   Vec3,
+  vNormalise,
   WORKGROUP_SIZE,
 } from "./constants";
 import { materialsToFloatArray, trianglesToFloatArray } from "./floatarrays";
@@ -607,15 +608,8 @@ export class RayTrace {
     const rays: Ray[] = [];
     const triangles = settings.geometry;
 
-    const direction = settings.sourceDirection?.slice() || null;
-    if (direction !== null) {
-      const length = Math.sqrt(
-        direction[0] ** 2 + direction[1] ** 2 + direction[2] ** 2,
-      );
-      direction[0] /= length;
-      direction[1] /= length;
-      direction[2] /= length;
-    }
+    const directionUnnormalised = settings.sourceDirection?.slice() as Vec3 || null;
+    const direction = directionUnnormalised && vNormalise(directionUnnormalised);
 
     // Create the rays.
     const goldenRatio = (1 + Math.sqrt(5)) / 2;

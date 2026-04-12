@@ -228,6 +228,15 @@ export class LoadedGeometry extends Geometry {
     this.updateScaledGeometry();
   }
 
+  flipNormal(index: number) {
+    if (this.geometry[index] !== undefined) {
+      const p2 = this.geometry[index].p2;
+      this.geometry[index].p2 = this.geometry[index].p3;
+      this.geometry[index].p3 = p2;
+      this.updateScaledGeometry();
+    }
+  }
+
   view(): m.Children {
     return m("section", [
       m("label", [

@@ -30,6 +30,19 @@
   ));
 
   // src/constants.ts
+  function vAdd(a, b) {
+    return [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+  }
+  function vSubtract(b, a) {
+    return [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+  }
+  function vCross(a, b) {
+    return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  }
+  function vNormalise(a) {
+    const length = Math.sqrt(a[0] ** 2 + a[1] ** 2 + a[2] ** 2);
+    return [a[0] / length, a[1] / length, a[2] / length];
+  }
   function materialNameToIndex(materials, name2) {
     const index = materials.findIndex((material) => material.name === name2);
     if (index === -1) {
@@ -942,15 +955,8 @@
           console.log("Creating geometry");
           const rays = [];
           const triangles = settings.geometry;
-          const direction = settings.sourceDirection?.slice() || null;
-          if (direction !== null) {
-            const length = Math.sqrt(
-              direction[0] ** 2 + direction[1] ** 2 + direction[2] ** 2
-            );
-            direction[0] /= length;
-            direction[1] /= length;
-            direction[2] /= length;
-          }
+          const directionUnnormalised = settings.sourceDirection?.slice() || null;
+          const direction = directionUnnormalised && vNormalise(directionUnnormalised);
           const goldenRatio = (1 + Math.sqrt(5)) / 2;
           for (let i = 0; i < settings.rayCount; ++i) {
             const theta = 2 * Math.PI * i / goldenRatio;
@@ -267506,7 +267512,7 @@ uniform ${i3} ${a3} u_${s3};
     }
     throw new Error(`Unknown texture type ${type}.`);
   }
-  var REVISION, MOUSE, TOUCH, CullFaceNone, CullFaceBack, CullFaceFront, PCFShadowMap, PCFSoftShadowMap, VSMShadowMap, FrontSide, BackSide, DoubleSide, NoBlending, NormalBlending, AdditiveBlending, SubtractiveBlending, MultiplyBlending, CustomBlending, AddEquation, SubtractEquation, ReverseSubtractEquation, MinEquation, MaxEquation, ZeroFactor, OneFactor, SrcColorFactor, OneMinusSrcColorFactor, SrcAlphaFactor, OneMinusSrcAlphaFactor, DstAlphaFactor, OneMinusDstAlphaFactor, DstColorFactor, OneMinusDstColorFactor, SrcAlphaSaturateFactor, ConstantColorFactor, OneMinusConstantColorFactor, ConstantAlphaFactor, OneMinusConstantAlphaFactor, NeverDepth, AlwaysDepth, LessDepth, LessEqualDepth, EqualDepth, GreaterEqualDepth, GreaterDepth, NotEqualDepth, MultiplyOperation, MixOperation, AddOperation, NoToneMapping, LinearToneMapping, ReinhardToneMapping, CineonToneMapping, ACESFilmicToneMapping, CustomToneMapping, AgXToneMapping, NeutralToneMapping, AttachedBindMode, DetachedBindMode, UVMapping, CubeReflectionMapping, CubeRefractionMapping, EquirectangularReflectionMapping, EquirectangularRefractionMapping, CubeUVReflectionMapping, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter, NearestMipmapNearestFilter, NearestMipmapLinearFilter, LinearFilter, LinearMipmapNearestFilter, LinearMipmapLinearFilter, UnsignedByteType, ByteType, ShortType, UnsignedShortType, IntType, UnsignedIntType, FloatType, HalfFloatType, UnsignedShort4444Type, UnsignedShort5551Type, UnsignedInt248Type, UnsignedInt5999Type, UnsignedInt101111Type, AlphaFormat, RGBFormat, RGBAFormat, DepthFormat, DepthStencilFormat, RedFormat, RedIntegerFormat, RGFormat, RGIntegerFormat, RGBAIntegerFormat, RGB_S3TC_DXT1_Format, RGBA_S3TC_DXT1_Format, RGBA_S3TC_DXT3_Format, RGBA_S3TC_DXT5_Format, RGB_PVRTC_4BPPV1_Format, RGB_PVRTC_2BPPV1_Format, RGBA_PVRTC_4BPPV1_Format, RGBA_PVRTC_2BPPV1_Format, RGB_ETC1_Format, RGB_ETC2_Format, RGBA_ETC2_EAC_Format, R11_EAC_Format, SIGNED_R11_EAC_Format, RG11_EAC_Format, SIGNED_RG11_EAC_Format, RGBA_ASTC_4x4_Format, RGBA_ASTC_5x4_Format, RGBA_ASTC_5x5_Format, RGBA_ASTC_6x5_Format, RGBA_ASTC_6x6_Format, RGBA_ASTC_8x5_Format, RGBA_ASTC_8x6_Format, RGBA_ASTC_8x8_Format, RGBA_ASTC_10x5_Format, RGBA_ASTC_10x6_Format, RGBA_ASTC_10x8_Format, RGBA_ASTC_10x10_Format, RGBA_ASTC_12x10_Format, RGBA_ASTC_12x12_Format, RGBA_BPTC_Format, RGB_BPTC_SIGNED_Format, RGB_BPTC_UNSIGNED_Format, RED_RGTC1_Format, SIGNED_RED_RGTC1_Format, RED_GREEN_RGTC2_Format, SIGNED_RED_GREEN_RGTC2_Format, InterpolateDiscrete, InterpolateLinear, InterpolateSmooth, ZeroCurvatureEnding, ZeroSlopeEnding, WrapAroundEnding, NormalAnimationBlendMode, TrianglesDrawMode, TriangleStripDrawMode, TriangleFanDrawMode, BasicDepthPacking, TangentSpaceNormalMap, ObjectSpaceNormalMap, NoColorSpace, SRGBColorSpace, LinearSRGBColorSpace, LinearTransfer, SRGBTransfer, KeepStencilOp, AlwaysStencilFunc, NeverCompare, LessCompare, EqualCompare, LessEqualCompare, GreaterCompare, NotEqualCompare, GreaterEqualCompare, AlwaysCompare, StaticDrawUsage, GLSL3, WebGLCoordinateSystem, WebGPUCoordinateSystem, TYPED_ARRAYS, _cache, _setConsoleFunction, EventDispatcher, _lut, _seed, DEG2RAD, RAD2DEG, MathUtils, Vector2, Quaternion, Vector3, _vector$c, _quaternion$4, Matrix3, _m3, LINEAR_REC709_TO_XYZ, XYZ_TO_LINEAR_REC709, ColorManagement, _canvas, ImageUtils, _sourceId, Source, _textureId, _tempVec3, Texture, Vector4, RenderTarget, WebGLRenderTarget, DataArrayTexture, Data3DTexture, Box3, _points, _vector$b, _box$4, _v0$2, _v1$7, _v2$4, _f0, _f1, _f2, _center, _extents, _triangleNormal, _testAxis, _box$3, _v1$6, _v2$3, Sphere, _vector$a, _segCenter, _segDir, _diff, _edge1, _edge2, _normal$1, Ray2, Matrix4, _v1$5, _m1$2, _zero, _one, _x, _y, _z, _matrix$2, _quaternion$3, Euler, Layers, _object3DId, _v1$4, _q1, _m1$1, _target, _position$3, _scale$2, _quaternion$2, _xAxis, _yAxis, _zAxis, _addedEvent, _removedEvent, _childaddedEvent, _childremovedEvent, Object3D, _v0$1, _v1$3, _v2$2, _v3$2, _vab, _vac, _vbc, _vap, _vbp, _vcp, _v40, _v41, _v42, Triangle3, _colorKeywords, _hslA, _hslB, Color, _color, _materialId, Material3, MeshBasicMaterial, _tables, DataUtils, _vector$9, _vector2$1, _id$2, BufferAttribute, Uint16BufferAttribute, Uint32BufferAttribute, Float32BufferAttribute, _id$1, _m1, _obj, _offset, _box$2, _boxMorphTargets, _vector$8, BufferGeometry, _inverseMatrix$3, _ray$3, _sphere$6, _sphereHitAt, _vA$1, _vB$1, _vC$1, _tempA, _morphA, _intersectionPoint, _intersectionPointWorld, Mesh, BoxGeometry, UniformsUtils, default_vertex, default_fragment, ShaderMaterial, Camera, _v3$1, _minTarget, _maxTarget, PerspectiveCamera, fov, aspect, CubeCamera, CubeTexture, WebGLCubeRenderTarget, Group, _moveEvent, WebXRController, Scene, InterleavedBuffer, _vector$7, InterleavedBufferAttribute, SpriteMaterial, _geometry, _intersectPoint, _worldScale, _mvPosition, _alignedPosition, _rotatedPosition, _viewWorldMatrix, _vA, _vB, _vC, _uvA, _uvB, _uvC, Sprite, _basePosition, _skinIndex, _skinWeight, _vector3, _matrix4, _vertex, _sphere$5, _inverseMatrix$2, _ray$2, SkinnedMesh, Bone, DataTexture, _offsetMatrix, _identityMatrix, Skeleton, InstancedBufferAttribute, _instanceLocalMatrix, _instanceWorldMatrix, _instanceIntersects, _box3, _identity, _mesh$1, _sphere$4, InstancedMesh, _vector1, _vector2, _normalMatrix, Plane, _sphere$3, _defaultSpriteCenter, _vector$6, Frustum, LineBasicMaterial, _vStart, _vEnd, _inverseMatrix$1, _ray$1, _sphere$1, _intersectPointOnRay, _intersectPointOnSegment, Line, _start, _end, LineSegments, LineLoop, PointsMaterial, _inverseMatrix, _ray, _sphere, _position$2, Points, CanvasTexture, DepthTexture, CubeDepthTexture, ExternalTexture, PlaneGeometry, SphereGeometry, RawShaderMaterial, MeshStandardMaterial, MeshPhysicalMaterial, MeshDepthMaterial, MeshDistanceMaterial, Interpolant, CubicInterpolant, LinearInterpolant, DiscreteInterpolant, KeyframeTrack, BooleanKeyframeTrack, ColorKeyframeTrack, NumberKeyframeTrack, QuaternionLinearInterpolant, QuaternionKeyframeTrack, StringKeyframeTrack, VectorKeyframeTrack, AnimationClip, Cache, LoadingManager, DefaultLoadingManager, Loader, loading, HttpError, FileLoader, _loading, ImageLoader, DataTextureLoader, TextureLoader, Light, _projScreenMatrix, _lightPositionWorld, _lookTarget, LightShadow, SpotLightShadow, SpotLight, PointLightShadow, PointLight, OrthographicCamera, DirectionalLightShadow, DirectionalLight, RectAreaLight, LoaderUtils, InstancedBufferGeometry, BufferGeometryLoader, _errorMap, ImageBitmapLoader, ArrayCamera, _RESERVED_CHARS_RE, _reservedRe, _wordChar, _wordCharOrDot, _directoryRe, _nodeRe, _objectRe, _propertyRe, _trackRe, _supportedObjectNames, Composite, PropertyBinding, _controlInterpolantsResultBuffer, _matrix, Raycaster, Spherical, Controls;
+  var REVISION, MOUSE, TOUCH, CullFaceNone, CullFaceBack, CullFaceFront, PCFShadowMap, PCFSoftShadowMap, VSMShadowMap, FrontSide, BackSide, DoubleSide, NoBlending, NormalBlending, AdditiveBlending, SubtractiveBlending, MultiplyBlending, CustomBlending, AddEquation, SubtractEquation, ReverseSubtractEquation, MinEquation, MaxEquation, ZeroFactor, OneFactor, SrcColorFactor, OneMinusSrcColorFactor, SrcAlphaFactor, OneMinusSrcAlphaFactor, DstAlphaFactor, OneMinusDstAlphaFactor, DstColorFactor, OneMinusDstColorFactor, SrcAlphaSaturateFactor, ConstantColorFactor, OneMinusConstantColorFactor, ConstantAlphaFactor, OneMinusConstantAlphaFactor, NeverDepth, AlwaysDepth, LessDepth, LessEqualDepth, EqualDepth, GreaterEqualDepth, GreaterDepth, NotEqualDepth, MultiplyOperation, MixOperation, AddOperation, NoToneMapping, LinearToneMapping, ReinhardToneMapping, CineonToneMapping, ACESFilmicToneMapping, CustomToneMapping, AgXToneMapping, NeutralToneMapping, AttachedBindMode, DetachedBindMode, UVMapping, CubeReflectionMapping, CubeRefractionMapping, EquirectangularReflectionMapping, EquirectangularRefractionMapping, CubeUVReflectionMapping, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter, NearestMipmapNearestFilter, NearestMipmapLinearFilter, LinearFilter, LinearMipmapNearestFilter, LinearMipmapLinearFilter, UnsignedByteType, ByteType, ShortType, UnsignedShortType, IntType, UnsignedIntType, FloatType, HalfFloatType, UnsignedShort4444Type, UnsignedShort5551Type, UnsignedInt248Type, UnsignedInt5999Type, UnsignedInt101111Type, AlphaFormat, RGBFormat, RGBAFormat, DepthFormat, DepthStencilFormat, RedFormat, RedIntegerFormat, RGFormat, RGIntegerFormat, RGBAIntegerFormat, RGB_S3TC_DXT1_Format, RGBA_S3TC_DXT1_Format, RGBA_S3TC_DXT3_Format, RGBA_S3TC_DXT5_Format, RGB_PVRTC_4BPPV1_Format, RGB_PVRTC_2BPPV1_Format, RGBA_PVRTC_4BPPV1_Format, RGBA_PVRTC_2BPPV1_Format, RGB_ETC1_Format, RGB_ETC2_Format, RGBA_ETC2_EAC_Format, R11_EAC_Format, SIGNED_R11_EAC_Format, RG11_EAC_Format, SIGNED_RG11_EAC_Format, RGBA_ASTC_4x4_Format, RGBA_ASTC_5x4_Format, RGBA_ASTC_5x5_Format, RGBA_ASTC_6x5_Format, RGBA_ASTC_6x6_Format, RGBA_ASTC_8x5_Format, RGBA_ASTC_8x6_Format, RGBA_ASTC_8x8_Format, RGBA_ASTC_10x5_Format, RGBA_ASTC_10x6_Format, RGBA_ASTC_10x8_Format, RGBA_ASTC_10x10_Format, RGBA_ASTC_12x10_Format, RGBA_ASTC_12x12_Format, RGBA_BPTC_Format, RGB_BPTC_SIGNED_Format, RGB_BPTC_UNSIGNED_Format, RED_RGTC1_Format, SIGNED_RED_RGTC1_Format, RED_GREEN_RGTC2_Format, SIGNED_RED_GREEN_RGTC2_Format, InterpolateDiscrete, InterpolateLinear, InterpolateSmooth, ZeroCurvatureEnding, ZeroSlopeEnding, WrapAroundEnding, NormalAnimationBlendMode, TrianglesDrawMode, TriangleStripDrawMode, TriangleFanDrawMode, BasicDepthPacking, TangentSpaceNormalMap, ObjectSpaceNormalMap, NoColorSpace, SRGBColorSpace, LinearSRGBColorSpace, LinearTransfer, SRGBTransfer, KeepStencilOp, AlwaysStencilFunc, NeverCompare, LessCompare, EqualCompare, LessEqualCompare, GreaterCompare, NotEqualCompare, GreaterEqualCompare, AlwaysCompare, StaticDrawUsage, GLSL3, WebGLCoordinateSystem, WebGPUCoordinateSystem, TYPED_ARRAYS, _cache, _setConsoleFunction, EventDispatcher, _lut, _seed, DEG2RAD, RAD2DEG, MathUtils, Vector2, Quaternion, Vector3, _vector$c, _quaternion$4, Matrix3, _m3, LINEAR_REC709_TO_XYZ, XYZ_TO_LINEAR_REC709, ColorManagement, _canvas, ImageUtils, _sourceId, Source, _textureId, _tempVec3, Texture, Vector4, RenderTarget, WebGLRenderTarget, DataArrayTexture, Data3DTexture, Box3, _points, _vector$b, _box$4, _v0$2, _v1$7, _v2$4, _f0, _f1, _f2, _center, _extents, _triangleNormal, _testAxis, _box$3, _v1$6, _v2$3, Sphere, _vector$a, _segCenter, _segDir, _diff, _edge1, _edge2, _normal$1, Ray2, Matrix4, _v1$5, _m1$2, _zero, _one, _x, _y, _z, _matrix$2, _quaternion$3, Euler, Layers, _object3DId, _v1$4, _q1, _m1$1, _target, _position$3, _scale$2, _quaternion$2, _xAxis, _yAxis, _zAxis, _addedEvent, _removedEvent, _childaddedEvent, _childremovedEvent, Object3D, _v0$1, _v1$3, _v2$2, _v3$2, _vab, _vac, _vbc, _vap, _vbp, _vcp, _v40, _v41, _v42, Triangle3, _colorKeywords, _hslA, _hslB, Color, _color, _materialId, Material3, MeshBasicMaterial, _tables, DataUtils, _vector$9, _vector2$1, _id$2, BufferAttribute, Uint16BufferAttribute, Uint32BufferAttribute, Float32BufferAttribute, _id$1, _m1, _obj, _offset, _box$2, _boxMorphTargets, _vector$8, BufferGeometry, _inverseMatrix$3, _ray$3, _sphere$6, _sphereHitAt, _vA$1, _vB$1, _vC$1, _tempA, _morphA, _intersectionPoint, _intersectionPointWorld, Mesh, BoxGeometry, UniformsUtils, default_vertex, default_fragment, ShaderMaterial, Camera, _v3$1, _minTarget, _maxTarget, PerspectiveCamera, fov, aspect, CubeCamera, CubeTexture, WebGLCubeRenderTarget, Group, _moveEvent, WebXRController, Scene, InterleavedBuffer, _vector$7, InterleavedBufferAttribute, SpriteMaterial, _geometry, _intersectPoint, _worldScale, _mvPosition, _alignedPosition, _rotatedPosition, _viewWorldMatrix, _vA, _vB, _vC, _uvA, _uvB, _uvC, Sprite, _basePosition, _skinIndex, _skinWeight, _vector3, _matrix4, _vertex, _sphere$5, _inverseMatrix$2, _ray$2, SkinnedMesh, Bone, DataTexture, _offsetMatrix, _identityMatrix, Skeleton, InstancedBufferAttribute, _instanceLocalMatrix, _instanceWorldMatrix, _instanceIntersects, _box3, _identity, _mesh$1, _sphere$4, InstancedMesh, _vector1, _vector2, _normalMatrix, Plane, _sphere$3, _defaultSpriteCenter, _vector$6, Frustum, LineBasicMaterial, _vStart, _vEnd, _inverseMatrix$1, _ray$1, _sphere$1, _intersectPointOnRay, _intersectPointOnSegment, Line, _start, _end, LineSegments, LineLoop, PointsMaterial, _inverseMatrix, _ray, _sphere, _position$2, Points, CanvasTexture, DepthTexture, CubeDepthTexture, ExternalTexture, CylinderGeometry, ConeGeometry, PlaneGeometry, SphereGeometry, RawShaderMaterial, MeshStandardMaterial, MeshPhysicalMaterial, MeshDepthMaterial, MeshDistanceMaterial, Interpolant, CubicInterpolant, LinearInterpolant, DiscreteInterpolant, KeyframeTrack, BooleanKeyframeTrack, ColorKeyframeTrack, NumberKeyframeTrack, QuaternionLinearInterpolant, QuaternionKeyframeTrack, StringKeyframeTrack, VectorKeyframeTrack, AnimationClip, Cache, LoadingManager, DefaultLoadingManager, Loader, loading, HttpError, FileLoader, _loading, ImageLoader, DataTextureLoader, TextureLoader, Light, _projScreenMatrix, _lightPositionWorld, _lookTarget, LightShadow, SpotLightShadow, SpotLight, PointLightShadow, PointLight, OrthographicCamera, DirectionalLightShadow, DirectionalLight, RectAreaLight, LoaderUtils, InstancedBufferGeometry, BufferGeometryLoader, _errorMap, ImageBitmapLoader, ArrayCamera, _RESERVED_CHARS_RE, _reservedRe, _wordChar, _wordCharOrDot, _directoryRe, _nodeRe, _objectRe, _propertyRe, _trackRe, _supportedObjectNames, Composite, PropertyBinding, _controlInterpolantsResultBuffer, _matrix, Raycaster, Spherical, _axis, _lineGeometry, _coneGeometry, ArrowHelper, Controls;
   var init_three_core = __esm({
     "node_modules/three/build/three.core.js"() {
       REVISION = "182";
@@ -281942,6 +281948,193 @@ uniform ${i3} ${a3} u_${s3};
           return this;
         }
       };
+      CylinderGeometry = class _CylinderGeometry extends BufferGeometry {
+        /**
+         * Constructs a new cylinder geometry.
+         *
+         * @param {number} [radiusTop=1] - Radius of the cylinder at the top.
+         * @param {number} [radiusBottom=1] - Radius of the cylinder at the bottom.
+         * @param {number} [height=1] - Height of the cylinder.
+         * @param {number} [radialSegments=32] - Number of segmented faces around the circumference of the cylinder.
+         * @param {number} [heightSegments=1] - Number of rows of faces along the height of the cylinder.
+         * @param {boolean} [openEnded=false] - Whether the base of the cylinder is open or capped.
+         * @param {number} [thetaStart=0] - Start angle for first segment, in radians.
+         * @param {number} [thetaLength=Math.PI*2] - The central angle, often called theta, of the circular sector, in radians.
+         * The default value results in a complete cylinder.
+         */
+        constructor(radiusTop = 1, radiusBottom = 1, height = 1, radialSegments = 32, heightSegments = 1, openEnded = false, thetaStart = 0, thetaLength = Math.PI * 2) {
+          super();
+          this.type = "CylinderGeometry";
+          this.parameters = {
+            radiusTop,
+            radiusBottom,
+            height,
+            radialSegments,
+            heightSegments,
+            openEnded,
+            thetaStart,
+            thetaLength
+          };
+          const scope = this;
+          radialSegments = Math.floor(radialSegments);
+          heightSegments = Math.floor(heightSegments);
+          const indices = [];
+          const vertices = [];
+          const normals = [];
+          const uvs = [];
+          let index = 0;
+          const indexArray = [];
+          const halfHeight = height / 2;
+          let groupStart = 0;
+          generateTorso();
+          if (openEnded === false) {
+            if (radiusTop > 0) generateCap(true);
+            if (radiusBottom > 0) generateCap(false);
+          }
+          this.setIndex(indices);
+          this.setAttribute("position", new Float32BufferAttribute(vertices, 3));
+          this.setAttribute("normal", new Float32BufferAttribute(normals, 3));
+          this.setAttribute("uv", new Float32BufferAttribute(uvs, 2));
+          function generateTorso() {
+            const normal = new Vector3();
+            const vertex2 = new Vector3();
+            let groupCount = 0;
+            const slope = (radiusBottom - radiusTop) / height;
+            for (let y = 0; y <= heightSegments; y++) {
+              const indexRow = [];
+              const v = y / heightSegments;
+              const radius = v * (radiusBottom - radiusTop) + radiusTop;
+              for (let x = 0; x <= radialSegments; x++) {
+                const u = x / radialSegments;
+                const theta = u * thetaLength + thetaStart;
+                const sinTheta = Math.sin(theta);
+                const cosTheta = Math.cos(theta);
+                vertex2.x = radius * sinTheta;
+                vertex2.y = -v * height + halfHeight;
+                vertex2.z = radius * cosTheta;
+                vertices.push(vertex2.x, vertex2.y, vertex2.z);
+                normal.set(sinTheta, slope, cosTheta).normalize();
+                normals.push(normal.x, normal.y, normal.z);
+                uvs.push(u, 1 - v);
+                indexRow.push(index++);
+              }
+              indexArray.push(indexRow);
+            }
+            for (let x = 0; x < radialSegments; x++) {
+              for (let y = 0; y < heightSegments; y++) {
+                const a = indexArray[y][x];
+                const b = indexArray[y + 1][x];
+                const c = indexArray[y + 1][x + 1];
+                const d = indexArray[y][x + 1];
+                if (radiusTop > 0 || y !== 0) {
+                  indices.push(a, b, d);
+                  groupCount += 3;
+                }
+                if (radiusBottom > 0 || y !== heightSegments - 1) {
+                  indices.push(b, c, d);
+                  groupCount += 3;
+                }
+              }
+            }
+            scope.addGroup(groupStart, groupCount, 0);
+            groupStart += groupCount;
+          }
+          function generateCap(top) {
+            const centerIndexStart = index;
+            const uv = new Vector2();
+            const vertex2 = new Vector3();
+            let groupCount = 0;
+            const radius = top === true ? radiusTop : radiusBottom;
+            const sign = top === true ? 1 : -1;
+            for (let x = 1; x <= radialSegments; x++) {
+              vertices.push(0, halfHeight * sign, 0);
+              normals.push(0, sign, 0);
+              uvs.push(0.5, 0.5);
+              index++;
+            }
+            const centerIndexEnd = index;
+            for (let x = 0; x <= radialSegments; x++) {
+              const u = x / radialSegments;
+              const theta = u * thetaLength + thetaStart;
+              const cosTheta = Math.cos(theta);
+              const sinTheta = Math.sin(theta);
+              vertex2.x = radius * sinTheta;
+              vertex2.y = halfHeight * sign;
+              vertex2.z = radius * cosTheta;
+              vertices.push(vertex2.x, vertex2.y, vertex2.z);
+              normals.push(0, sign, 0);
+              uv.x = cosTheta * 0.5 + 0.5;
+              uv.y = sinTheta * 0.5 * sign + 0.5;
+              uvs.push(uv.x, uv.y);
+              index++;
+            }
+            for (let x = 0; x < radialSegments; x++) {
+              const c = centerIndexStart + x;
+              const i = centerIndexEnd + x;
+              if (top === true) {
+                indices.push(i, i + 1, c);
+              } else {
+                indices.push(i + 1, i, c);
+              }
+              groupCount += 3;
+            }
+            scope.addGroup(groupStart, groupCount, top === true ? 1 : 2);
+            groupStart += groupCount;
+          }
+        }
+        copy(source) {
+          super.copy(source);
+          this.parameters = Object.assign({}, source.parameters);
+          return this;
+        }
+        /**
+         * Factory method for creating an instance of this class from the given
+         * JSON object.
+         *
+         * @param {Object} data - A JSON object representing the serialized geometry.
+         * @return {CylinderGeometry} A new instance.
+         */
+        static fromJSON(data) {
+          return new _CylinderGeometry(data.radiusTop, data.radiusBottom, data.height, data.radialSegments, data.heightSegments, data.openEnded, data.thetaStart, data.thetaLength);
+        }
+      };
+      ConeGeometry = class _ConeGeometry extends CylinderGeometry {
+        /**
+         * Constructs a new cone geometry.
+         *
+         * @param {number} [radius=1] - Radius of the cone base.
+         * @param {number} [height=1] - Height of the cone.
+         * @param {number} [radialSegments=32] - Number of segmented faces around the circumference of the cone.
+         * @param {number} [heightSegments=1] - Number of rows of faces along the height of the cone.
+         * @param {boolean} [openEnded=false] - Whether the base of the cone is open or capped.
+         * @param {number} [thetaStart=0] - Start angle for first segment, in radians.
+         * @param {number} [thetaLength=Math.PI*2] - The central angle, often called theta, of the circular sector, in radians.
+         * The default value results in a complete cone.
+         */
+        constructor(radius = 1, height = 1, radialSegments = 32, heightSegments = 1, openEnded = false, thetaStart = 0, thetaLength = Math.PI * 2) {
+          super(0, radius, height, radialSegments, heightSegments, openEnded, thetaStart, thetaLength);
+          this.type = "ConeGeometry";
+          this.parameters = {
+            radius,
+            height,
+            radialSegments,
+            heightSegments,
+            openEnded,
+            thetaStart,
+            thetaLength
+          };
+        }
+        /**
+         * Factory method for creating an instance of this class from the given
+         * JSON object.
+         *
+         * @param {Object} data - A JSON object representing the serialized geometry.
+         * @return {ConeGeometry} A new instance.
+         */
+        static fromJSON(data) {
+          return new _ConeGeometry(data.radius, data.height, data.radialSegments, data.heightSegments, data.openEnded, data.thetaStart, data.thetaLength);
+        }
+      };
       PlaneGeometry = class _PlaneGeometry extends BufferGeometry {
         /**
          * Constructs a new plane geometry.
@@ -285625,6 +285818,93 @@ uniform ${i3} ${a3} u_${s3};
          */
         clone() {
           return new this.constructor().copy(this);
+        }
+      };
+      _axis = /* @__PURE__ */ new Vector3();
+      ArrowHelper = class extends Object3D {
+        /**
+         * Constructs a new arrow helper.
+         *
+         * @param {Vector3} [dir=(0, 0, 1)] - The (normalized) direction vector.
+         * @param {Vector3} [origin=(0, 0, 0)] - Point at which the arrow starts.
+         * @param {number} [length=1] - Length of the arrow in world units.
+         * @param {(number|Color|string)} [color=0xffff00] - Color of the arrow.
+         * @param {number} [headLength=length*0.2] - The length of the head of the arrow.
+         * @param {number} [headWidth=headLength*0.2] - The width of the head of the arrow.
+         */
+        constructor(dir = new Vector3(0, 0, 1), origin = new Vector3(0, 0, 0), length = 1, color = 16776960, headLength = length * 0.2, headWidth = headLength * 0.2) {
+          super();
+          this.type = "ArrowHelper";
+          if (_lineGeometry === void 0) {
+            _lineGeometry = new BufferGeometry();
+            _lineGeometry.setAttribute("position", new Float32BufferAttribute([0, 0, 0, 0, 1, 0], 3));
+            _coneGeometry = new ConeGeometry(0.5, 1, 5, 1);
+            _coneGeometry.translate(0, -0.5, 0);
+          }
+          this.position.copy(origin);
+          this.line = new Line(_lineGeometry, new LineBasicMaterial({ color, toneMapped: false }));
+          this.line.matrixAutoUpdate = false;
+          this.add(this.line);
+          this.cone = new Mesh(_coneGeometry, new MeshBasicMaterial({ color, toneMapped: false }));
+          this.cone.matrixAutoUpdate = false;
+          this.add(this.cone);
+          this.setDirection(dir);
+          this.setLength(length, headLength, headWidth);
+        }
+        /**
+         * Sets the direction of the helper.
+         *
+         * @param {Vector3} dir - The normalized direction vector.
+         */
+        setDirection(dir) {
+          if (dir.y > 0.99999) {
+            this.quaternion.set(0, 0, 0, 1);
+          } else if (dir.y < -0.99999) {
+            this.quaternion.set(1, 0, 0, 0);
+          } else {
+            _axis.set(dir.z, 0, -dir.x).normalize();
+            const radians = Math.acos(dir.y);
+            this.quaternion.setFromAxisAngle(_axis, radians);
+          }
+        }
+        /**
+         * Sets the length of the helper.
+         *
+         * @param {number} length - Length of the arrow in world units.
+         * @param {number} [headLength=length*0.2] - The length of the head of the arrow.
+         * @param {number} [headWidth=headLength*0.2] - The width of the head of the arrow.
+         */
+        setLength(length, headLength = length * 0.2, headWidth = headLength * 0.2) {
+          this.line.scale.set(1, Math.max(1e-4, length - headLength), 1);
+          this.line.updateMatrix();
+          this.cone.scale.set(headWidth, headLength, headWidth);
+          this.cone.position.y = length;
+          this.cone.updateMatrix();
+        }
+        /**
+         * Sets the color of the helper.
+         *
+         * @param {number|Color|string} color - The color to set.
+         */
+        setColor(color) {
+          this.line.material.color.set(color);
+          this.cone.material.color.set(color);
+        }
+        copy(source) {
+          super.copy(source, false);
+          this.line.copy(source.line);
+          this.cone.copy(source.cone);
+          return this;
+        }
+        /**
+         * Frees the GPU-related resources allocated by this instance. Call this
+         * method whenever this instance is no longer used in your app.
+         */
+        dispose() {
+          this.line.geometry.dispose();
+          this.line.material.dispose();
+          this.cone.geometry.dispose();
+          this.cone.material.dispose();
         }
       };
       Controls = class extends EventDispatcher {
@@ -303888,7 +304168,7 @@ void main() {
       trgtTriangle.z * 3 + (trgtTriangle.u3 + trgtTriangle.v3)
     ) / 3;
 
-    var origin = vec3(0.0, 0.0, 0.0);
+    var origin = vec3(0.0000001, -0.00001, 0.0000003);
     var ray = normalize(targetCentre - origin);
     var targetDistance = distanceTo(origin, ray, trgtTriangle);
 
@@ -304403,6 +304683,14 @@ void main() {
           this.geometry[index].material = material;
           this.updateScaledGeometry();
         }
+        flipNormal(index) {
+          if (this.geometry[index] !== void 0) {
+            const p2 = this.geometry[index].p2;
+            this.geometry[index].p2 = this.geometry[index].p3;
+            this.geometry[index].p3 = p2;
+            this.updateScaledGeometry();
+          }
+        }
         view() {
           return (0, import_mithril.default)("section", [
             (0, import_mithril.default)("label", [
@@ -304685,6 +304973,7 @@ void main() {
         },
         source: null,
         rayTrace: new RayTrace(),
+        showNormals: false,
         initialise: async function() {
           await state.geometry.initialise();
         },
@@ -304707,16 +304996,16 @@ void main() {
         toSavedState: function() {
           return {
             type: "webgpu-raytracing-project-state",
-            rayCount: this.rayCount,
-            audioDuration: this.audioDuration,
-            sourcePosition: this.sourcePosition,
-            sourceDirection: this.sourceDirection,
-            receivers: this.receivers,
-            rayPlotCount: this.rayPlotCount,
-            bouncePlotCount: this.bouncePlotCount,
-            triangles: this.geometry.savedGeometry(),
-            materials: this.materials,
-            selectedChannels: this.selectedChannels
+            rayCount: state.rayCount,
+            audioDuration: state.audioDuration,
+            sourcePosition: state.sourcePosition,
+            sourceDirection: state.sourceDirection,
+            receivers: state.receivers,
+            rayPlotCount: state.rayPlotCount,
+            bouncePlotCount: state.bouncePlotCount,
+            triangles: state.geometry.savedGeometry(),
+            materials: state.materials,
+            selectedChannels: state.selectedChannels
           };
         },
         loadFromSaved: async function(saved) {
@@ -304993,6 +305282,11 @@ void main() {
             console.error("Unknown material", newMaterial);
           }
         },
+        flipNormal: function() {
+          if (state.geometry instanceof LoadedGeometry) {
+            state.geometry.flipNormal(state.geometry.selectedIndex);
+          }
+        },
         setMaterialBand: function(e, material, band) {
           const el = e.target;
           const value = parseFloat(el.value);
@@ -305103,6 +305397,7 @@ void main() {
         mesh: null,
         wireframeMesh: null,
         selectedMesh: null,
+        normals: [],
         source: null,
         sourceDirection: null,
         receivers: [],
@@ -305117,11 +305412,11 @@ void main() {
         geometryData: [],
         selectedTriangle: -1,
         updatePlot: async function() {
-          this.rays.forEach((ray) => {
-            this.scene?.remove(ray);
+          ThreeView.rays.forEach((ray) => {
+            ThreeView.scene?.remove(ray);
             dispose(ray);
           });
-          this.rays = [];
+          ThreeView.rays = [];
           for (const ray of state.bounceCoordinates) {
             for (let i = 0; i < ray.length - 4; i += 4) {
               const points = [
@@ -305136,11 +305431,41 @@ void main() {
               const geometry = new BufferGeometry().setFromPoints(points);
               const line = new Line(geometry, material);
               line.renderOrder = -1;
-              this.rays.push(line);
+              ThreeView.rays.push(line);
             }
           }
-          this.rays.forEach((ray) => {
-            this.scene?.add(ray);
+          ThreeView.rays.forEach((ray) => {
+            ThreeView.scene?.add(ray);
+          });
+        },
+        updateNormals: async function() {
+          ThreeView.normals.forEach((n) => {
+            ThreeView.scene?.remove(n);
+            dispose(n);
+          });
+          ThreeView.normals = [];
+          const makeNormalArrow = (triangle, isSelected) => {
+            const e1 = vSubtract(triangle.p2, triangle.p1);
+            const e2 = vSubtract(triangle.p3, triangle.p1);
+            const normal = vNormalise(vCross(e1, e2));
+            const centroid = vAdd(vAdd(triangle.p1, triangle.p2), triangle.p3).map((p) => p / 3);
+            const origin = new Vector3(...centroid);
+            const dir = new Vector3(...normal);
+            const colour = isSelected ? 65280 : 16711680;
+            return new ArrowHelper(dir, origin, 1, colour, 0.2, 0.3);
+          };
+          const triangles = state.geometry.triangles();
+          if (state.showNormals) {
+            for (let i = 0; i < triangles.length; ++i) {
+              const triangle = triangles[i];
+              const arrow = makeNormalArrow(triangle, i === ThreeView.selectedTriangle);
+              ThreeView.normals.push(arrow);
+            }
+          } else if (triangles[ThreeView.selectedTriangle] !== void 0) {
+            ThreeView.normals.push(makeNormalArrow(triangles[ThreeView.selectedTriangle], true));
+          }
+          ThreeView.normals.forEach((n) => {
+            ThreeView.scene?.add(n);
           });
         },
         updateMesh: async function() {
@@ -305275,6 +305600,7 @@ void main() {
             ThreeView.scene?.add(mesh);
             return mesh;
           });
+          ThreeView.updateNormals();
           ThreeView.updatingMesh = false;
         },
         oncreate: async function(vnode) {
@@ -305514,6 +305840,19 @@ void main() {
               { onclick: () => state.resetSettings() },
               "Reset all settings"
             )
+          ]),
+          (0, import_mithril2.default)("section", [
+            (0, import_mithril2.default)("label", [
+              (0, import_mithril2.default)("input", {
+                type: "checkbox",
+                checked: state.showNormals,
+                onchange: () => {
+                  state.showNormals = !state.showNormals;
+                }
+              }),
+              "Show normals"
+            ]),
+            state.geometry instanceof LoadedGeometry && state.geometry.selectedTriangle() ? (0, import_mithril2.default)("button", { onclick: state.flipNormal }, "Flip normal") : null
           ])
         ];
       }

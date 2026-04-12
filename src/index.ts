@@ -6,7 +6,11 @@ import {
   SAMPLE_RATE,
   saveFile,
   Triangle,
+  vAdd,
+  vCross,
   Vec3,
+  vNormalise,
+  vSubtract,
 } from "./constants";
 import m from "mithril";
 import Plotly, { Data } from "plotly.js-dist";
@@ -107,6 +111,7 @@ let state = {
   } as RayTraceProgress,
   source: null as AudioBufferSourceNode | null,
   rayTrace: new RayTrace(),
+  showNormals: false,
 
   initialise: async function () {
     await state.geometry.initialise();
@@ -132,16 +137,16 @@ let state = {
   toSavedState: function (): SavedState {
     return {
       type: "webgpu-raytracing-project-state",
-      rayCount: this.rayCount,
-      audioDuration: this.audioDuration,
-      sourcePosition: this.sourcePosition,
-      sourceDirection: this.sourceDirection,
-      receivers: this.receivers,
-      rayPlotCount: this.rayPlotCount,
-      bouncePlotCount: this.bouncePlotCount,
-      triangles: this.geometry.savedGeometry(),
-      materials: this.materials,
-      selectedChannels: this.selectedChannels,
+      rayCount: state.rayCount,
+      audioDuration: state.audioDuration,
+      sourcePosition: state.sourcePosition,
+      sourceDirection: state.sourceDirection,
+      receivers: state.receivers,
+      rayPlotCount: state.rayPlotCount,
+      bouncePlotCount: state.bouncePlotCount,
+      triangles: state.geometry.savedGeometry(),
+      materials: state.materials,
+      selectedChannels: state.selectedChannels,
     };
   },
 
@@ -508,6 +513,12 @@ let state = {
     }
   },
 
+  flipNormal: function () {
+    if (state.geometry instanceof LoadedGeometry) {
+      state.geometry.flipNormal(state.geometry.selectedIndex)
+    }
+  },
+
   setMaterialBand: function (
     e: InputEvent,
     material: Material,
@@ -647,6 +658,7 @@ let ThreeView = {
   mesh: null as THREE.Mesh | null,
   wireframeMesh: null as THREE.Mesh | null,
   selectedMesh: null as THREE.Mesh | null,
+  normals: [] as THREE.ArrowHelper[],
   source: null as THREE.Mesh | null,
   sourceDirection: null as THREE.Line | null,
   receivers: [] as THREE.Mesh[],
@@ -664,11 +676,11 @@ let ThreeView = {
   selectedTriangle: -1,
 
   updatePlot: async function () {
-    this.rays.forEach((ray) => {
-      this.scene?.remove(ray);
+    ThreeView.rays.forEach((ray) => {
+      ThreeView.scene?.remove(ray);
       dispose(ray);
     });
-    this.rays = [];
+    ThreeView.rays = [];
 
     for (const ray of state.bounceCoordinates) {
       for (let i = 0; i < ray.length - 4; i += 4) {
@@ -685,13 +697,52 @@ let ThreeView = {
         const line = new THREE.Line(geometry, material);
         // Required to prevent issues with lines randomly disappearing.
         line.renderOrder = -1;
-        this.rays.push(line);
+        ThreeView.rays.push(line);
       }
     }
 
-    this.rays.forEach((ray) => {
-      this.scene?.add(ray);
+    ThreeView.rays.forEach((ray) => {
+      ThreeView.scene?.add(ray);
     });
+  },
+
+  updateNormals: async function() {
+    ThreeView.normals.forEach(n => {
+      ThreeView.scene?.remove(n);
+      dispose(n);
+    });
+
+    ThreeView.normals = [];
+
+    const makeNormalArrow = (triangle: Triangle, isSelected: boolean) => {
+        const e1 = vSubtract(triangle.p2, triangle.p1);
+        const e2 = vSubtract(triangle.p3, triangle.p1);
+        const normal = vNormalise(vCross(e1, e2));
+        const centroid = vAdd(vAdd(triangle.p1, triangle.p2), triangle.p3).map(p => p / 3) as Vec3;
+        
+        const origin = new THREE.Vector3(...centroid);
+        const dir = new THREE.Vector3(...normal);
+
+        const colour = isSelected ? 0x00ff00 : 0xff0000;
+        return new THREE.ArrowHelper(dir, origin, 1, colour, 0.2, 0.3);
+    }
+
+    const triangles = state.geometry.triangles();
+
+    if (state.showNormals) {
+      for (let i = 0; i < triangles.length; ++i) {
+        const triangle = triangles[i];
+        const arrow = makeNormalArrow(triangle, i === ThreeView.selectedTriangle)
+        ThreeView.normals.push(arrow);
+      }
+    } else if (triangles[ThreeView.selectedTriangle] !== undefined) {
+      ThreeView.normals.push(makeNormalArrow(triangles[ThreeView.selectedTriangle], true))
+    }
+
+    ThreeView.normals.forEach(n => {
+      ThreeView.scene?.add(n);
+    })
+
   },
 
   updateMesh: async function () {
@@ -862,6 +913,8 @@ let ThreeView = {
       ThreeView.scene?.add(mesh);
       return mesh;
     });
+
+    ThreeView.updateNormals();
 
     ThreeView.updatingMesh = false;
   },
@@ -1137,6 +1190,21 @@ function geometryMenu() {
         "Reset all settings",
       ),
     ]),
+    m("section", [
+      m("label", [
+      m("input", {
+        type: "checkbox",
+        checked: state.showNormals,
+        onchange: () => {
+          state.showNormals = !state.showNormals;
+        }
+      }),
+      "Show normals"
+      ]),
+
+      (state.geometry instanceof LoadedGeometry && state.geometry.selectedTriangle()) ? 
+          m("button", { onclick: state.flipNormal }, "Flip normal") : null,
+    ])
   ];
 }
 

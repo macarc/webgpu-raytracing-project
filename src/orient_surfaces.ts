@@ -72,7 +72,7 @@ const shaderCode = /* wgsl */ `
       trgtTriangle.z * 3 + (trgtTriangle.u3 + trgtTriangle.v3)
     ) / 3;
 
-    var origin = vec3(0.0, 0.0, 0.0);
+    var origin = vec3(0.0000001, -0.00001, 0.0000003);
     var ray = normalize(targetCentre - origin);
     var targetDistance = distanceTo(origin, ray, trgtTriangle);
 
