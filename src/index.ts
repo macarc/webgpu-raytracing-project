@@ -93,6 +93,15 @@ const defaultSavedState: SavedState = {
   selectedChannels: [0],
 };
 
+const defaultRayTraceProgress: RayTraceProgress = {
+  bounceCount: 0,
+  secondsElapsed: 0,
+  totalSeconds: 0,
+  escapedRayCount: 0,
+  totalRayCount: 0,
+  runTimeMs: 0,
+};
+
 let state = {
   ...defaultSavedState,
   throttle: isOnMobile ? 0.8 : 0,
@@ -102,13 +111,7 @@ let state = {
   raytracedAudio: [] as Float32Array[],
   ctx: null as AudioContext | null,
   running: false,
-  progress: {
-    bounceCount: 0,
-    secondsElapsed: 0,
-    totalSeconds: 0,
-    escapedRayCount: 0,
-    totalRayCount: 0,
-  } as RayTraceProgress,
+  progress: defaultRayTraceProgress,
   source: null as AudioBufferSourceNode | null,
   rayTrace: new RayTrace(),
   showNormals: false,
@@ -515,14 +518,14 @@ let state = {
 
   flipNormal: function () {
     if (state.geometry instanceof LoadedGeometry) {
-      state.geometry.flipNormal(state.geometry.selectedIndex)
+      state.geometry.flipNormal(state.geometry.selectedIndex);
     }
   },
 
   setMaterialBand: function (
     e: InputEvent,
     material: Material,
-    band: "a125" | "a250" | "a500" | "a1000" | "a2000" | "a4000",
+    band: "a125" | "a250" | "a500" | "a1000" | "a2000" | "a4000" | "scatter",
   ) {
     const el = e.target as HTMLInputElement;
     const value = parseFloat(el.value);
@@ -706,8 +709,8 @@ let ThreeView = {
     });
   },
 
-  updateNormals: async function() {
-    ThreeView.normals.forEach(n => {
+  updateNormals: async function () {
+    ThreeView.normals.forEach((n) => {
       ThreeView.scene?.remove(n);
       dispose(n);
     });
@@ -715,34 +718,40 @@ let ThreeView = {
     ThreeView.normals = [];
 
     const makeNormalArrow = (triangle: Triangle, isSelected: boolean) => {
-        const e1 = vSubtract(triangle.p2, triangle.p1);
-        const e2 = vSubtract(triangle.p3, triangle.p1);
-        const normal = vNormalise(vCross(e1, e2));
-        const centroid = vAdd(vAdd(triangle.p1, triangle.p2), triangle.p3).map(p => p / 3) as Vec3;
-        
-        const origin = new THREE.Vector3(...centroid);
-        const dir = new THREE.Vector3(...normal);
+      const e1 = vSubtract(triangle.p2, triangle.p1);
+      const e2 = vSubtract(triangle.p3, triangle.p1);
+      const normal = vNormalise(vCross(e1, e2));
+      const centroid = vAdd(vAdd(triangle.p1, triangle.p2), triangle.p3).map(
+        (p) => p / 3,
+      ) as Vec3;
 
-        const colour = isSelected ? 0x00ff00 : 0xff0000;
-        return new THREE.ArrowHelper(dir, origin, 1, colour, 0.2, 0.3);
-    }
+      const origin = new THREE.Vector3(...centroid);
+      const dir = new THREE.Vector3(...normal);
+
+      const colour = isSelected ? 0x00ff00 : 0xff0000;
+      return new THREE.ArrowHelper(dir, origin, 1, colour, 0.2, 0.3);
+    };
 
     const triangles = state.geometry.triangles();
 
     if (state.showNormals) {
       for (let i = 0; i < triangles.length; ++i) {
         const triangle = triangles[i];
-        const arrow = makeNormalArrow(triangle, i === ThreeView.selectedTriangle)
+        const arrow = makeNormalArrow(
+          triangle,
+          i === ThreeView.selectedTriangle,
+        );
         ThreeView.normals.push(arrow);
       }
     } else if (triangles[ThreeView.selectedTriangle] !== undefined) {
-      ThreeView.normals.push(makeNormalArrow(triangles[ThreeView.selectedTriangle], true))
+      ThreeView.normals.push(
+        makeNormalArrow(triangles[ThreeView.selectedTriangle], true),
+      );
     }
 
-    ThreeView.normals.forEach(n => {
+    ThreeView.normals.forEach((n) => {
       ThreeView.scene?.add(n);
-    })
-
+    });
   },
 
   updateMesh: async function () {
@@ -1192,19 +1201,21 @@ function geometryMenu() {
     ]),
     m("section", [
       m("label", [
-      m("input", {
-        type: "checkbox",
-        checked: state.showNormals,
-        onchange: () => {
-          state.showNormals = !state.showNormals;
-        }
-      }),
-      "Show normals"
+        m("input", {
+          type: "checkbox",
+          checked: state.showNormals,
+          onchange: () => {
+            state.showNormals = !state.showNormals;
+          },
+        }),
+        "Show normals",
       ]),
 
-      (state.geometry instanceof LoadedGeometry && state.geometry.selectedTriangle()) ? 
-          m("button", { onclick: state.flipNormal }, "Flip normal") : null,
-    ])
+      state.geometry instanceof LoadedGeometry &&
+      state.geometry.selectedTriangle()
+        ? m("button", { onclick: state.flipNormal }, "Flip normal")
+        : null,
+    ]),
   ];
 }
 
@@ -1220,6 +1231,7 @@ function materialsMenu() {
           m("th", "1kHz"),
           m("th", "2kHz"),
           m("th", "4kHz"),
+          m("th", "Scatter"),
         ]),
 
         ...state.materials.map((material) =>
@@ -1295,6 +1307,18 @@ function materialsMenu() {
                 value: material.a4000,
                 onchange: (e: InputEvent) =>
                   state.setMaterialBand(e, material, "a4000"),
+              }),
+            ),
+            m(
+              "td",
+              m("input", {
+                type: "number",
+                min: 0,
+                max: 1,
+                step: 0.01,
+                value: material.scatter,
+                onchange: (e: InputEvent) =>
+                  state.setMaterialBand(e, material, "scatter"),
               }),
             ),
           ]),
@@ -1434,7 +1458,15 @@ function raytracingMenu() {
           (100 * state.progress.escapedRayCount) /
             state.progress.totalRayCount || 0
         ).toFixed(2),
-        "%)",
+        "%) Elapsed time: ",
+        (state.progress.runTimeMs / 1000).toFixed(1),
+        " (",
+        // || 0 so that division by 0 does not result in NaN being displayed.
+        (
+          (1000 * state.progress.bounceCount * state.progress.totalRayCount) /
+            state.progress.runTimeMs || 0
+        ).toFixed(0),
+        " bounces per second)",
       ]),
     ]),
     m("section", [

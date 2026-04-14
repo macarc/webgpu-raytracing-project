@@ -1,4 +1,4 @@
-import { runShader } from "./webgpu";
+import { ComputeShaderPipeline } from "./webgpu";
 import { WORKGROUP_SIZE } from "./constants";
 import { Triangle } from "./constants";
 
@@ -166,28 +166,31 @@ export async function orientTriangles(
 ): Promise<Triangle[]> {
   removeZeroTriangles(triangles);
 
-  let result = await runShader(
-    shaderCode,
-    [
-      {
-        data: new Float32Array(
-          triangles.flatMap((tri) => [
-            ...tri.p1,
-            ...tri.p2.map((p, i) => p - tri.p1[i]),
-            ...tri.p3.map((p, i) => p - tri.p1[i]),
-          ]),
-        ),
-        readonly: true,
-        output: false,
-      },
-      {
-        data: new Float32Array(triangles.length),
-        readonly: false,
-        output: true,
-      },
-    ],
-    triangles.length,
-  );
+  const shader = await ComputeShaderPipeline.tryCreate(shaderCode, [
+    {
+      data: new Float32Array(
+        triangles.flatMap((tri) => [
+          ...tri.p1,
+          ...tri.p2.map((p, i) => p - tri.p1[i]),
+          ...tri.p3.map((p, i) => p - tri.p1[i]),
+        ]),
+      ),
+      type: "read-only-storage",
+      output: false,
+    },
+    {
+      data: new Float32Array(triangles.length),
+      type: "storage",
+      output: true,
+    },
+  ]);
+
+  if (!shader) {
+    throw new Error("Could not create shader.");
+  }
+
+  const result = await shader.run(triangles.length);
+  shader.destroy();
 
   let flips = result && result[0];
 

@@ -37,11 +37,18 @@
     return [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
   }
   function vCross(a, b) {
-    return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+    return [
+      a[1] * b[2] - a[2] * b[1],
+      a[2] * b[0] - a[0] * b[2],
+      a[0] * b[1] - a[1] * b[0]
+    ];
+  }
+  function vDot(a, b) {
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
   }
   function vNormalise(a) {
-    const length = Math.sqrt(a[0] ** 2 + a[1] ** 2 + a[2] ** 2);
-    return [a[0] / length, a[1] / length, a[2] / length];
+    const magnitude = Math.sqrt(a[0] ** 2 + a[1] ** 2 + a[2] ** 2);
+    return [a[0] / magnitude, a[1] / magnitude, a[2] / magnitude];
   }
   function materialNameToIndex(materials, name2) {
     const index = materials.findIndex((material) => material.name === name2);
@@ -115,85 +122,135 @@
     });
     return device;
   }
-  async function runShader(code, buffers, instancesCount) {
-    const device = await getGPUDevice();
-    if (!device) {
-      console.log("Aborted due to null GPUDevice.");
-      return null;
-    }
-    const gpuBuffers = buffers.map(
-      (buf) => device.createBuffer({
-        size: buf.data.length * FLOAT32_SIZE,
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
-      })
-    );
-    const bindGroupLayout = device.createBindGroupLayout({
-      entries: buffers.map((buf, i) => ({
-        binding: i,
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: { type: buf.readonly ? "read-only-storage" : "storage" }
-      }))
-    });
-    const bindGroup = device.createBindGroup({
-      layout: bindGroupLayout,
-      entries: gpuBuffers.map((buffer, i) => ({
-        binding: i,
-        resource: { buffer }
-      }))
-    });
-    const shaderModule = device.createShaderModule({ code });
-    const computePipeline = device.createComputePipeline({
-      layout: device.createPipelineLayout({
-        bindGroupLayouts: [bindGroupLayout]
-      }),
-      compute: { module: shaderModule, entryPoint: "main" }
-    });
-    buffers.forEach((buffer, i) => {
-      device.queue.writeBuffer(gpuBuffers[i], 0, buffer.data);
-    });
-    const commandEncoder = device.createCommandEncoder();
-    const passEncoder = commandEncoder.beginComputePass();
-    passEncoder.setPipeline(computePipeline);
-    passEncoder.setBindGroup(0, bindGroup);
-    passEncoder.dispatchWorkgroups(Math.ceil(instancesCount / WORKGROUP_SIZE));
-    passEncoder.end();
-    const stagingBuffers = buffers.map(
-      (buf) => buf.output ? device.createBuffer({
-        size: buf.data.length * FLOAT32_SIZE,
-        usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
-      }) : null
-    );
-    stagingBuffers.forEach((stagingBuffer, i) => {
-      if (stagingBuffer) {
-        commandEncoder.copyBufferToBuffer(
-          gpuBuffers[i],
-          0,
-          stagingBuffer,
-          0,
-          stagingBuffer.size
-        );
+  function bufferUsage(buf) {
+    if (buf.type === "uniform") {
+      return GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST;
+    } else if (buf.type === "read-only-storage") {
+      return GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST;
+    } else if (buf.type === "storage") {
+      if (buf.output) {
+        return GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
+      } else {
+        return GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST;
       }
-    });
-    console.time("run");
-    device.queue.submit([commandEncoder.finish()]);
-    await Promise.all(
-      stagingBuffers.map(
-        (stagingBuffer) => stagingBuffer && stagingBuffer.mapAsync(GPUMapMode.READ, 0, stagingBuffer.size)
-      )
-    );
-    console.timeEnd("run");
-    const dataOutput = stagingBuffers.filter((b) => b !== null).map((stagingBuffer) => {
-      const arrayDataOutput = stagingBuffer.getMappedRange().slice();
-      stagingBuffer.unmap();
-      return new Float32Array(arrayDataOutput);
-    });
-    device.destroy();
-    return dataOutput;
+    }
+    return buf.type;
   }
+  var ComputeShaderPipeline;
   var init_webgpu = __esm({
     "src/webgpu.ts"() {
       "use strict";
       init_constants();
+      ComputeShaderPipeline = class _ComputeShaderPipeline {
+        device;
+        computePipeline;
+        bindGroup;
+        gpuBuffers;
+        stagingBuffers;
+        /**
+         * Create a compute shader pipeline.
+         * @param code shader code.
+         * @param buffers list of GPU buffers that will be passed to the shader.
+         * @returns the shader pipeline.
+         */
+        static async tryCreate(code, buffers) {
+          const device = await getGPUDevice();
+          if (!device) {
+            console.log("Aborted due to null GPUDevice.");
+            return null;
+          }
+          return new _ComputeShaderPipeline(device, code, buffers);
+        }
+        /**
+         * Create a shader pipeline from an existing GPU device.
+         * @param gpuDevice the GPU device.
+         * @param code shader code.
+         * @param buffers list of GPU buffers that will be passed to the shader.
+         */
+        constructor(gpuDevice, code, buffers) {
+          this.device = gpuDevice;
+          this.gpuBuffers = buffers.map(
+            (buf) => this.device.createBuffer({
+              size: buf.data.length * FLOAT32_SIZE,
+              usage: bufferUsage(buf)
+            })
+          );
+          const bindGroupLayout = this.device.createBindGroupLayout({
+            entries: buffers.map((buf, i) => ({
+              binding: i,
+              visibility: GPUShaderStage.COMPUTE,
+              buffer: { type: buf.type }
+            }))
+          });
+          this.bindGroup = this.device.createBindGroup({
+            layout: bindGroupLayout,
+            entries: this.gpuBuffers.map((buffer, i) => ({
+              binding: i,
+              resource: { buffer }
+            }))
+          });
+          const shaderModule = this.device.createShaderModule({ code });
+          this.computePipeline = this.device.createComputePipeline({
+            layout: this.device.createPipelineLayout({
+              bindGroupLayouts: [bindGroupLayout]
+            }),
+            compute: { module: shaderModule, entryPoint: "main" }
+          });
+          buffers.forEach((buffer, i) => {
+            this.device.queue.writeBuffer(this.gpuBuffers[i], 0, buffer.data);
+          });
+          this.stagingBuffers = buffers.map(
+            (buf) => buf.output ? this.device.createBuffer({
+              size: buf.data.length * FLOAT32_SIZE,
+              usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
+            }) : null
+          );
+        }
+        /**
+         * Run the shader pipeline and get the output.
+         * @param workgroupCount number of workgroups to run.
+         * @returns list of buffers that were marked as 'output' when creating the shader.
+         */
+        async run(workgroupCount) {
+          const commandEncoder = this.device.createCommandEncoder();
+          const passEncoder = commandEncoder.beginComputePass();
+          passEncoder.setPipeline(this.computePipeline);
+          passEncoder.setBindGroup(0, this.bindGroup);
+          passEncoder.dispatchWorkgroups(Math.ceil(workgroupCount / WORKGROUP_SIZE));
+          passEncoder.end();
+          this.stagingBuffers.forEach((stagingBuffer, i) => {
+            if (stagingBuffer) {
+              commandEncoder.copyBufferToBuffer(
+                this.gpuBuffers[i],
+                0,
+                stagingBuffer,
+                0,
+                stagingBuffer.size
+              );
+            }
+          });
+          console.time("run");
+          this.device.queue.submit([commandEncoder.finish()]);
+          await Promise.all(
+            this.stagingBuffers.map(
+              (stagingBuffer) => stagingBuffer && stagingBuffer.mapAsync(GPUMapMode.READ, 0, stagingBuffer.size)
+            )
+          );
+          console.timeEnd("run");
+          const dataOutput = this.stagingBuffers.filter((b) => b !== null).map((stagingBuffer) => {
+            const arrayDataOutput = stagingBuffer.getMappedRange().slice();
+            stagingBuffer.unmap();
+            return new Float32Array(arrayDataOutput);
+          });
+          return dataOutput;
+        }
+        /**
+         * Destroy the shader GPU device, clearing all resources.
+         */
+        destroy() {
+          this.device.destroy();
+        }
+      };
     }
   });
 
@@ -401,10 +458,6 @@
   });
 
   // src/ray_tracing.ts
-  function normalize(v) {
-    const magnitude = Math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2);
-    return [v[0] / magnitude, v[1] / magnitude, v[2] / magnitude];
-  }
   function specularRayIntersectionShaderCode(receivers, materials, bounceCount) {
     return (
       /* wgsl */
@@ -419,7 +472,7 @@
     nx: f32,
     ny: f32,
     nz: f32,
-    distanceTravelled: f32,
+    distance_travelled: f32,
     intensity125: f32,
     intensity250: f32,
     intensity500: f32,
@@ -538,8 +591,6 @@
     let initialRay = rayBuffer[rayIndex];
 
     // This is more or less a line-by-line translation of the M\xF6ller\u2013Trumbore intersection algorithm.
-    // TODO: research triangle intersection algorithms to see if there are others - though this one seems to be really simple so
-    //       I doubt it can be improved much.
     // TODO: one potential idea would be to store u x v with the triangle, which saves on one cross product
     //       per test. The additional memory strain might not actually make this any faster though.
 
@@ -549,7 +600,7 @@
 
     var rayposition = vec3f(initialRay.x, initialRay.y, initialRay.z);
     var raydirection = vec3f(initialRay.dx, initialRay.dy, initialRay.dz);
-    var raydistancetravelled = initialRay.distanceTravelled;
+    var raydistancetravelled = initialRay.distance_travelled;
 
     var intensity_125 = initialRay.intensity125;
     var intensity_250 = initialRay.intensity250;
@@ -657,6 +708,8 @@
 
       for (var j: u32 = 0; j < ${receivers.length}; j++) {
         distances_and_ray_escaped_flags[upperIndex + j] = ${FLAG_ESCAPED};
+
+        // zero all intensities (in case the ray has escaped and these are not set below).
         band_125_and_250[lowerIndex + j] = 0;
         band_125_and_250[upperIndex + j] = 0;
         band_500_and_1000[lowerIndex + j] = 0;
@@ -693,7 +746,6 @@
               // let totalIntensity = (1 - material.scatter) * additionDueToRay + material.scatter * cosNormalAngleToReceiver;
               let totalCoefficient = specularCoefficient + diffuseCoefficient;
 
-              
               band_125_and_250[lowerIndex + j] = intensity_125 * totalCoefficient;
               band_125_and_250[upperIndex + j] = intensity_250 * totalCoefficient;
               band_500_and_1000[lowerIndex + j] = intensity_500 * totalCoefficient;
@@ -767,7 +819,7 @@
     rayBuffer[rayIndex].nx = lastsurfacenormal.x;
     rayBuffer[rayIndex].ny = lastsurfacenormal.y;
     rayBuffer[rayIndex].nz = lastsurfacenormal.z;
-    rayBuffer[rayIndex].distanceTravelled = raydistancetravelled;
+    rayBuffer[rayIndex].distance_travelled = raydistancetravelled;
     rayBuffer[rayIndex].intensity125 = intensity_125;
     rayBuffer[rayIndex].intensity250 = intensity_250;
     rayBuffer[rayIndex].intensity500 = intensity_500;
@@ -778,7 +830,7 @@
 `
     );
   }
-  var STANDARD_MAX_STORAGE_BUFFER_SIZE, AIR_ABSORPTION_COEFF, FLAG_ESCAPED, FLAG_ALIVE, SpecularRayTracer, RayTrace;
+  var STANDARD_MAX_STORAGE_BUFFER_SIZE, AIR_ABSORPTION_COEFF, FLAG_ESCAPED, FLAG_ALIVE, RayTrace;
   var init_ray_tracing = __esm({
     "src/ray_tracing.ts"() {
       "use strict";
@@ -790,171 +842,25 @@
       AIR_ABSORPTION_COEFF = 13e-4;
       FLAG_ESCAPED = 0;
       FLAG_ALIVE = 1;
-      SpecularRayTracer = class {
-        device;
-        computePipeline;
-        bindGroup;
-        outputBuffers;
-        stagingBuffers;
-        constructor(gpuDevice, rays, triangles, materials, outputs, code) {
-          this.device = gpuDevice;
-          const rayBuffer = this.device.createBuffer({
-            size: rays.length * FLOAT32_SIZE,
-            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
-          });
-          const triangleBuffer = this.device.createBuffer({
-            size: triangles.length * FLOAT32_SIZE,
-            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-          });
-          const materialsBuffer = this.device.createBuffer({
-            size: materials.length * FLOAT32_SIZE,
-            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
-          });
-          this.outputBuffers = outputs.map(
-            (output) => this.device.createBuffer({
-              size: output.length * FLOAT32_SIZE,
-              usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
-            })
-          );
-          this.stagingBuffers = outputs.map(
-            (output) => this.device.createBuffer({
-              size: output.length * FLOAT32_SIZE,
-              usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
-            })
-          );
-          const bindGroupLayout = this.device.createBindGroupLayout({
-            entries: [
-              {
-                binding: 0,
-                // ray buffer
-                visibility: GPUShaderStage.COMPUTE,
-                buffer: { type: "storage" }
-              },
-              {
-                binding: 1,
-                // triangle buffer
-                visibility: GPUShaderStage.COMPUTE,
-                buffer: { type: "read-only-storage" }
-              },
-              {
-                binding: 2,
-                // distances
-                visibility: GPUShaderStage.COMPUTE,
-                buffer: { type: "storage" }
-              },
-              {
-                binding: 3,
-                // band 250 and 500
-                visibility: GPUShaderStage.COMPUTE,
-                buffer: { type: "storage" }
-              },
-              {
-                binding: 4,
-                // band 1000 and 2000
-                visibility: GPUShaderStage.COMPUTE,
-                buffer: { type: "storage" }
-              },
-              {
-                binding: 5,
-                // band 2000 and 4000
-                visibility: GPUShaderStage.COMPUTE,
-                buffer: { type: "storage" }
-              },
-              {
-                binding: 6,
-                // x and y
-                visibility: GPUShaderStage.COMPUTE,
-                buffer: { type: "storage" }
-              },
-              {
-                binding: 7,
-                // z and ray intensity
-                visibility: GPUShaderStage.COMPUTE,
-                buffer: { type: "storage" }
-              },
-              {
-                binding: 8,
-                // materials
-                visibility: GPUShaderStage.COMPUTE,
-                buffer: { type: "uniform" }
-              }
-            ]
-          });
-          this.bindGroup = this.device.createBindGroup({
-            layout: bindGroupLayout,
-            entries: [
-              { binding: 0, resource: { buffer: rayBuffer } },
-              { binding: 1, resource: { buffer: triangleBuffer } },
-              ...this.outputBuffers.map((buffer, i) => ({
-                binding: 2 + i,
-                resource: { buffer }
-              })),
-              { binding: 8, resource: { buffer: materialsBuffer } }
-            ]
-          });
-          const shaderModule = this.device.createShaderModule({ code });
-          this.computePipeline = this.device.createComputePipeline({
-            layout: this.device.createPipelineLayout({
-              bindGroupLayouts: [bindGroupLayout]
-            }),
-            compute: { module: shaderModule, entryPoint: "main" }
-          });
-          this.device.queue.writeBuffer(rayBuffer, 0, rays);
-          this.device.queue.writeBuffer(triangleBuffer, 0, triangles);
-          this.device.queue.writeBuffer(materialsBuffer, 0, materials);
-          for (let i = 0; i < outputs.length; i++) {
-            this.device.queue.writeBuffer(this.outputBuffers[i], 0, outputs[i]);
-          }
-        }
-        async runPass(instancesCount) {
-          const commandEncoder = this.device.createCommandEncoder();
-          const passEncoder = commandEncoder.beginComputePass();
-          passEncoder.setPipeline(this.computePipeline);
-          passEncoder.setBindGroup(0, this.bindGroup);
-          passEncoder.dispatchWorkgroups(Math.ceil(instancesCount / WORKGROUP_SIZE));
-          passEncoder.end();
-          for (let i = 0; i < this.outputBuffers.length; i++) {
-            commandEncoder.copyBufferToBuffer(
-              this.outputBuffers[i],
-              0,
-              this.stagingBuffers[i],
-              0,
-              this.stagingBuffers[i].size
-            );
-          }
-          console.time("run");
-          this.device.queue.submit([commandEncoder.finish()]);
-          await Promise.all(
-            this.stagingBuffers.map(
-              (buffer) => buffer.mapAsync(GPUMapMode.READ, 0, buffer.size)
-            )
-          );
-          console.timeEnd("run");
-          const arrayDataOutput = this.stagingBuffers.map(
-            (buffer) => buffer.getMappedRange().slice()
-          );
-          this.stagingBuffers.forEach((buffer) => buffer.unmap());
-          return arrayDataOutput.map((buffer) => new Float32Array(buffer));
-        }
-      };
       RayTrace = class {
         cancelled = false;
         async cancel() {
           this.cancelled = true;
         }
         async run(settings, update) {
+          const startTime = performance.now();
           this.cancelled = false;
           update({
             bounceCount: 0,
             secondsElapsed: 0,
             totalSeconds: settings.audioDuration,
             escapedRayCount: 0,
-            totalRayCount: settings.rayCount
+            totalRayCount: settings.rayCount,
+            runTimeMs: performance.now() - startTime
           });
           console.time("Total (including setup)");
           console.log("Creating geometry");
           const rays = [];
-          const triangles = settings.geometry;
           const directionUnnormalised = settings.sourceDirection?.slice() || null;
           const direction = directionUnnormalised && vNormalise(directionUnnormalised);
           const goldenRatio = (1 + Math.sqrt(5)) / 2;
@@ -968,12 +874,12 @@
             ];
             let intensity = 1;
             if (direction !== null) {
-              const rayDotDirection = ray[0] * direction[0] + ray[1] * direction[1] + ray[2] * direction[2];
+              const rayDotDirection = vDot(ray, direction);
               intensity = (rayDotDirection + 1) / 2;
             }
             rays.push({
               position: settings.sourcePosition,
-              direction: normalize(ray),
+              direction: vNormalise(ray),
               intensity
             });
           }
@@ -993,43 +899,79 @@
           if (outputSize > maxStorageBufferSize) {
             console.log("Output buffer is too large, will not work");
           }
-          const rayTracer = new SpecularRayTracer(
+          const shader = new ComputeShaderPipeline(
             gpuDevice,
-            new Float32Array(
-              rays.flatMap((ray) => [
-                ...ray.position,
-                ...ray.direction,
-                ...[0, 0, 0],
-                0,
-                ray.intensity,
-                ray.intensity,
-                ray.intensity,
-                ray.intensity,
-                ray.intensity,
-                ray.intensity
-              ])
-            ),
-            trianglesToFloatArray(triangles, settings.materials),
-            materialsToFloatArray(settings.materials),
-            [
-              new Float32Array(outputSize),
-              // distance and ray escaped flag
-              new Float32Array(outputSize),
-              // band 125 and 250
-              new Float32Array(outputSize),
-              // band 500 and 1000
-              new Float32Array(outputSize),
-              // band 2000a and 4000
-              new Float32Array(outputSize),
-              // x and y
-              new Float32Array(outputSize)
-              // z and ray intensity
-            ],
             specularRayIntersectionShaderCode(
               settings.receivers,
               settings.materials,
               bouncesPerPass
-            )
+            ),
+            [
+              {
+                data: new Float32Array(
+                  rays.flatMap((ray) => [
+                    ...ray.position,
+                    ...ray.direction,
+                    ...[0, 0, 0],
+                    0,
+                    ray.intensity,
+                    ray.intensity,
+                    ray.intensity,
+                    ray.intensity,
+                    ray.intensity,
+                    ray.intensity
+                  ])
+                ),
+                type: "storage",
+                output: false
+              },
+              {
+                data: trianglesToFloatArray(settings.geometry, settings.materials),
+                type: "read-only-storage",
+                output: false
+              },
+              {
+                data: new Float32Array(outputSize),
+                // distance and ray escaped flag
+                type: "storage",
+                output: true
+              },
+              {
+                data: new Float32Array(outputSize),
+                // band 125 and 250
+                type: "storage",
+                output: true
+              },
+              {
+                data: new Float32Array(outputSize),
+                // band 500 and 1000
+                type: "storage",
+                output: true
+              },
+              {
+                data: new Float32Array(outputSize),
+                // band 2000 and 4000
+                type: "storage",
+                output: true
+              },
+              {
+                data: new Float32Array(outputSize),
+                // x and y
+                type: "storage",
+                output: true
+              },
+              {
+                data: new Float32Array(outputSize),
+                // z and ray intensity
+                type: "storage",
+                output: true
+              },
+              {
+                data: materialsToFloatArray(settings.materials),
+                type: "uniform",
+                output: false
+              }
+            ]
           );
           const receiversCount = settings.receivers.length;
           const sampleCount = Math.ceil(SAMPLE_RATE * settings.audioDuration);
@@ -1068,20 +1010,19 @@
           let bounceCount = 0;
           let escapedRayCount = 0;
           while (!this.cancelled && minIndex < sampleCount) {
-            bounceCount += bouncesPerPass;
             update({
               bounceCount,
               secondsElapsed: minIndex / SAMPLE_RATE,
               totalSeconds: settings.audioDuration,
               escapedRayCount,
-              totalRayCount: settings.rayCount
+              totalRayCount: settings.rayCount,
+              runTimeMs: performance.now() - startTime
             });
-            const result = await rayTracer.runPass(settings.rayCount);
+            const result = await shader.run(settings.rayCount);
             minIndex = sampleCount;
             const halfBufferLength = outputSize / 2;
             escapedRayCount = 0;
             for (let k = 0; k < receiversCount; ++k) {
-              let npp = 10;
               const output = outputs[k];
               for (let j = k; j < halfBufferLength; j += receiversCount) {
                 const index = Math.round(
@@ -1099,12 +1040,8 @@
                 const escaped = result[0][upperIndex] === FLAG_ESCAPED;
                 if (escaped && lowerIndex % (bouncesPerPass * receiversCount) === 0) {
                   escapedRayCount++;
-                } else {
                 }
                 if (!escaped && (lowerIndex + receiversCount - k) % (bouncesPerPass * receiversCount) === 0) {
-                  if (npp-- > 0) {
-                    console.log(lowerIndex, bouncesPerPass, index / SAMPLE_RATE);
-                  }
                   minIndex = Math.min(minIndex, index);
                 }
                 const rayIndex = Math.floor(j / (bouncesPerPass * receiversCount));
@@ -1118,25 +1055,25 @@
                 }
               }
             }
-            console.log(minIndex);
             console.log(
               `Escaped rays: ${escapedRayCount} (${100 * escapedRayCount / settings.rayCount}%)`
             );
+            bounceCount += bouncesPerPass;
           }
           update({
             bounceCount,
             secondsElapsed: minIndex / SAMPLE_RATE,
             totalSeconds: settings.audioDuration,
             escapedRayCount,
-            totalRayCount: settings.rayCount
+            totalRayCount: settings.rayCount,
+            runTimeMs: performance.now() - startTime
           });
           const outputAudio = outputs.map(
             (output) => combineFilteredAudio(...output)
           );
           console.timeEnd("Total (excluding setup)");
           console.timeEnd("Total (including setup)");
-          console.log(outputAudio.join(","));
-          gpuDevice.destroy();
+          shader.destroy();
           return {
             audio: outputAudio,
             bounceCoordinates: plottedRayCoordinates
@@ -32069,10 +32006,10 @@
                   }
                 }
               }
-              function incrementShift(ax, shiftVal, axShifts, normalize3) {
+              function incrementShift(ax, shiftVal, axShifts, normalize2) {
                 var overlay = ax.anchor !== "free" && (ax.overlaying === void 0 || ax.overlaying === false) ? ax._id : ax.overlaying;
                 var shiftValAdj;
-                if (normalize3) {
+                if (normalize2) {
                   shiftValAdj = ax.side === "right" ? shiftVal : -shiftVal;
                 } else {
                   shiftValAdj = shiftVal;
@@ -112833,13 +112770,13 @@
                     (function(module22, __unused_webpack_exports, __webpack_require__2) {
                       module22.exports = angle;
                       var fromValues = __webpack_require__2(2825);
-                      var normalize3 = __webpack_require__2(3536);
+                      var normalize2 = __webpack_require__2(3536);
                       var dot = __webpack_require__2(244);
                       function angle(a, b) {
                         var tempA = fromValues(a[0], a[1], a[2]);
                         var tempB = fromValues(b[0], b[1], b[2]);
-                        normalize3(tempA, tempA);
-                        normalize3(tempB, tempB);
+                        normalize2(tempA, tempA);
+                        normalize2(tempB, tempB);
                         var cosine = dot(tempA, tempB);
                         if (cosine > 1) {
                           return 0;
@@ -113219,8 +113156,8 @@
                   3536: (
                     /***/
                     (function(module22) {
-                      module22.exports = normalize3;
-                      function normalize3(out, a) {
+                      module22.exports = normalize2;
+                      function normalize2(out, a) {
                         var x = a[0], y = a[1], z = a[2];
                         var len = x * x + y * y + z * z;
                         if (len > 0) {
@@ -113699,8 +113636,8 @@
                   5177: (
                     /***/
                     (function(module22) {
-                      module22.exports = normalize3;
-                      function normalize3(out, a) {
+                      module22.exports = normalize2;
+                      function normalize2(out, a) {
                         var x = a[0], y = a[1], z = a[2], w = a[3];
                         var len = x * x + y * y + z * z + w * w;
                         if (len > 0) {
@@ -115547,7 +115484,7 @@
                   2652: (
                     /***/
                     (function(module22, __unused_webpack_exports, __webpack_require__2) {
-                      var normalize3 = __webpack_require__2(4335);
+                      var normalize2 = __webpack_require__2(4335);
                       var create = __webpack_require__2(6864);
                       var clone = __webpack_require__2(1903);
                       var determinant = __webpack_require__2(9921);
@@ -115570,7 +115507,7 @@
                         if (!skew) skew = [0, 0, 0];
                         if (!perspective) perspective = [0, 0, 0, 1];
                         if (!quaternion) quaternion = [0, 0, 0, 1];
-                        if (!normalize3(tmp, matrix))
+                        if (!normalize2(tmp, matrix))
                           return false;
                         clone(perspectiveMatrix, tmp);
                         perspectiveMatrix[3] = 0;
@@ -115663,7 +115600,7 @@
                   4335: (
                     /***/
                     (function(module22) {
-                      module22.exports = function normalize3(out, mat) {
+                      module22.exports = function normalize2(out, mat) {
                         var m44 = mat[15];
                         if (m44 === 0)
                           return false;
@@ -115774,7 +115711,7 @@
                       var lookAt = __webpack_require__2(6582);
                       var translate = __webpack_require__2(7656);
                       var scale = __webpack_require__2(2504);
-                      var normalize3 = __webpack_require__2(3536);
+                      var normalize2 = __webpack_require__2(3536);
                       var DEFAULT_CENTER = [0, 0, 0];
                       module22.exports = createMatrixCameraController;
                       function MatrixCameraController(initialMatrix) {
@@ -115829,7 +115766,7 @@
                         up[0] = mat[1];
                         up[1] = mat[5];
                         up[2] = mat[9];
-                        normalize3(up, up);
+                        normalize2(up, up);
                         var imat = this.computedInverse;
                         invert44(imat, mat);
                         var eye = this.computedEye;
@@ -121820,7 +121757,7 @@
                       function compareZipped(a, b) {
                         return compareCells(a[0], b[0]);
                       }
-                      function normalize3(cells, attr) {
+                      function normalize2(cells, attr) {
                         if (attr) {
                           var len = cells.length;
                           var zipped = new Array(len);
@@ -121838,7 +121775,7 @@
                           return cells;
                         }
                       }
-                      __webpack_unused_export__ = normalize3;
+                      __webpack_unused_export__ = normalize2;
                       function unique(cells) {
                         if (cells.length === 0) {
                           return [];
@@ -121937,7 +121874,7 @@
                             result.push(b);
                           }
                         }
-                        return normalize3(result);
+                        return normalize2(result);
                       }
                       __webpack_unused_export__ = explode;
                       function skeleton(cells, n) {
@@ -121957,7 +121894,7 @@
                             result.push(b);
                           }
                         }
-                        return normalize3(result);
+                        return normalize2(result);
                       }
                       __webpack_unused_export__ = skeleton;
                       function boundary(cells) {
@@ -121974,7 +121911,7 @@
                             res.push(b);
                           }
                         }
-                        return normalize3(res);
+                        return normalize2(res);
                       }
                       __webpack_unused_export__ = boundary;
                       function connectedComponents_dense(cells, vertex_count) {
@@ -122003,7 +121940,7 @@
                         return components;
                       }
                       function connectedComponents_sparse(cells) {
-                        var vertices = unique(normalize3(skeleton(cells, 0))), labels = new UnionFind(vertices.length);
+                        var vertices = unique(normalize2(skeleton(cells, 0))), labels = new UnionFind(vertices.length);
                         for (var i = 0; i < cells.length; ++i) {
                           var c = cells[i];
                           for (var j = 0; j < c.length; ++j) {
@@ -122272,7 +122209,7 @@
                       function compareZipped(a, b) {
                         return compareCells(a[0], b[0]);
                       }
-                      function normalize3(cells, attr) {
+                      function normalize2(cells, attr) {
                         if (attr) {
                           var len = cells.length;
                           var zipped = new Array(len);
@@ -122290,7 +122227,7 @@
                           return cells;
                         }
                       }
-                      exports22.normalize = normalize3;
+                      exports22.normalize = normalize2;
                       function unique(cells) {
                         if (cells.length === 0) {
                           return [];
@@ -122389,7 +122326,7 @@
                             result.push(b);
                           }
                         }
-                        return normalize3(result);
+                        return normalize2(result);
                       }
                       exports22.explode = explode;
                       function skeleton(cells, n) {
@@ -122409,7 +122346,7 @@
                             result.push(b);
                           }
                         }
-                        return normalize3(result);
+                        return normalize2(result);
                       }
                       exports22.skeleton = skeleton;
                       function boundary(cells) {
@@ -122426,7 +122363,7 @@
                             res.push(b);
                           }
                         }
-                        return normalize3(res);
+                        return normalize2(res);
                       }
                       exports22.boundary = boundary;
                       function connectedComponents_dense(cells, vertex_count) {
@@ -122455,7 +122392,7 @@
                         return components;
                       }
                       function connectedComponents_sparse(cells) {
-                        var vertices = unique(normalize3(skeleton(cells, 0))), labels = new UnionFind(vertices.length);
+                        var vertices = unique(normalize2(skeleton(cells, 0))), labels = new UnionFind(vertices.length);
                         for (var i = 0; i < cells.length; ++i) {
                           var c = cells[i];
                           for (var j = 0; j < c.length; ++j) {
@@ -125684,7 +125621,7 @@
               var rgba3 = require_color_rgba();
               var clamp2 = require_clamp();
               var dtype = require_dtype();
-              module2.exports = function normalize3(color2, type) {
+              module2.exports = function normalize2(color2, type) {
                 if (type === "float" || !type) type = "array";
                 if (type === "uint") type = "uint8";
                 if (type === "uint_clamped") type = "uint8_clamped";
@@ -143841,8 +143778,8 @@
           var require_array_bounds = __commonJS2({
             "node_modules/array-bounds/index.js"(exports2, module2) {
               "use strict";
-              module2.exports = normalize3;
-              function normalize3(arr, dim) {
+              module2.exports = normalize2;
+              function normalize2(arr, dim) {
                 if (!arr || arr.length == null) throw Error("Argument should be an array");
                 if (dim == null) dim = 1;
                 else dim = Math.floor(dim);
@@ -143962,7 +143899,7 @@
                 let bounds = defined(options.bounds, getBounds(srcPoints, 2));
                 if (bounds[0] === bounds[2]) bounds[2]++;
                 if (bounds[1] === bounds[3]) bounds[3]++;
-                let points = normalize3(srcPoints, bounds);
+                let points = normalize2(srcPoints, bounds);
                 let n = srcPoints.length >>> 1;
                 let ids;
                 if (!options.dtype) options.dtype = "array";
@@ -144056,7 +143993,7 @@
                     Math.max(box.x, box.x + box.width),
                     Math.max(box.y, box.y + box.height)
                   ];
-                  let [nminX, nminY, nmaxX, nmaxY] = normalize3([minX, minY, maxX, maxY], bounds);
+                  let [nminX, nminY, nmaxX, nmaxY] = normalize2([minX, minY, maxX, maxY], bounds);
                   let maxLevel = defined(options2.level, levels.length);
                   if (options2.d != null) {
                     let d;
@@ -144144,7 +144081,7 @@
                   return group2;
                 }
               };
-              function normalize3(pts, bounds) {
+              function normalize2(pts, bounds) {
                 let [lox, loy, hix, hiy] = bounds;
                 let scaleX = 1 / (hix - lox);
                 let scaleY = 1 / (hiy - loy);
@@ -144372,9 +144309,9 @@
           var require_normalize_svg_path = __commonJS2({
             "node_modules/svg-path-bounds/node_modules/normalize-svg-path/index.js"(exports2, module2) {
               "use strict";
-              module2.exports = normalize3;
+              module2.exports = normalize2;
               var arcToCurve = require_cjs6();
-              function normalize3(path) {
+              function normalize2(path) {
                 var prev;
                 var result = [];
                 var bezierX = 0;
@@ -144495,7 +144432,7 @@
               "use strict";
               var parse2 = require_parse_svg_path();
               var abs = require_abs_svg_path();
-              var normalize3 = require_normalize_svg_path();
+              var normalize2 = require_normalize_svg_path();
               var isSvgPath = require_is_svg_path();
               var assert = require_assert();
               module2.exports = pathBounds;
@@ -144507,7 +144444,7 @@
                 }
                 assert(Array.isArray(path), "Argument should be a string or an array of path segments.");
                 path = abs(path);
-                path = normalize3(path);
+                path = normalize2(path);
                 if (!path.length) return [0, 0, 0, 0];
                 var bounds = [Infinity, Infinity, -Infinity, -Infinity];
                 for (var i = 0, l = path.length; i < l; i++) {
@@ -144527,8 +144464,8 @@
             "node_modules/normalize-svg-path/index.js"(exports2, module2) {
               var \u03C0 = Math.PI;
               var _120 = radians2(120);
-              module2.exports = normalize3;
-              function normalize3(path) {
+              module2.exports = normalize2;
+              function normalize2(path) {
                 var prev;
                 var result = [];
                 var bezierX = 0;
@@ -144699,14 +144636,14 @@
           var require_draw_svg_path = __commonJS2({
             "node_modules/draw-svg-path/index.js"(exports2, module2) {
               var abs = require_abs_svg_path();
-              var normalize3 = require_normalize_svg_path2();
+              var normalize2 = require_normalize_svg_path2();
               var methods = {
                 "M": "moveTo",
                 "C": "bezierCurveTo"
               };
               module2.exports = function(context, segments) {
                 context.beginPath();
-                normalize3(abs(segments)).forEach(
+                normalize2(abs(segments)).forEach(
                   function(segment) {
                     var command = segment[0];
                     var args = segment.slice(1);
@@ -147272,8 +147209,8 @@
             "node_modules/array-normalize/index.js"(exports2, module2) {
               "use strict";
               var getBounds = require_array_bounds();
-              module2.exports = normalize3;
-              function normalize3(arr, dim, bounds) {
+              module2.exports = normalize2;
+              function normalize2(arr, dim, bounds) {
                 if (!arr || arr.length == null) throw Error("Argument should be an array");
                 if (dim == null) dim = 1;
                 if (bounds == null) bounds = getBounds(arr, dim);
@@ -148830,7 +148767,7 @@
               var pick = require_pick_by_alias();
               var flatten2 = require_flatten_vertex_data();
               var triangulate = require_earcut();
-              var normalize3 = require_array_normalize();
+              var normalize2 = require_array_normalize();
               var { float32, fract32 } = require_to_float32();
               var WeakMap2 = require_es6_weak_map();
               var parseRect = require_parse_rect();
@@ -149657,7 +149594,7 @@ void main() {
                       }
                     }
                     let npos = new Float64Array(positions);
-                    normalize3(npos, 2, bounds);
+                    normalize2(npos, 2, bounds);
                     let positionData = new Float64Array(count * 2 + 6);
                     if (state.close) {
                       if (positions[0] === positions[count * 2 - 2] && positions[1] === positions[count * 2 - 1]) {
@@ -190808,7 +190745,7 @@ void main() {
                     out[2] = a[2] * b;
                     return out;
                   }
-                  function normalize3(out, a) {
+                  function normalize2(out, a) {
                     var x = a[0];
                     var y = a[1];
                     var z = a[2];
@@ -199019,7 +198956,7 @@ void main() {
                   exports22.multiply = multiply;
                   exports22.mvt = vectorTile;
                   exports22.nextPowerOfTwo = nextPowerOfTwo;
-                  exports22.normalize = normalize3;
+                  exports22.normalize = normalize2;
                   exports22.number = number;
                   exports22.offscreenCanvasSupported = offscreenCanvasSupported;
                   exports22.ortho = ortho;
@@ -266859,7 +266796,7 @@ uniform ${i3} ${a3} u_${s3};
         throw new Error("Invalid component type.");
     }
   }
-  function normalize2(value, array) {
+  function normalize(value, array) {
     switch (array.constructor) {
       case Float32Array:
         return value;
@@ -267994,7 +267931,7 @@ uniform ${i3} ${a3} u_${s3};
          * @param {TypedArray} array - The typed array that defines the data type of the value.
          * @return {number} The normalize value.
          */
-        normalize: normalize2,
+        normalize,
         /**
          * Denormalizes the given value according to the given typed array.
          *
@@ -277540,7 +277477,7 @@ uniform ${i3} ${a3} u_${s3};
          * @return {BufferAttribute} A reference to this instance.
          */
         setComponent(index, component, value) {
-          if (this.normalized) value = normalize2(value, this.array);
+          if (this.normalized) value = normalize(value, this.array);
           this.array[index * this.itemSize + component] = value;
           return this;
         }
@@ -277563,7 +277500,7 @@ uniform ${i3} ${a3} u_${s3};
          * @return {BufferAttribute} A reference to this instance.
          */
         setX(index, x) {
-          if (this.normalized) x = normalize2(x, this.array);
+          if (this.normalized) x = normalize(x, this.array);
           this.array[index * this.itemSize] = x;
           return this;
         }
@@ -277586,7 +277523,7 @@ uniform ${i3} ${a3} u_${s3};
          * @return {BufferAttribute} A reference to this instance.
          */
         setY(index, y) {
-          if (this.normalized) y = normalize2(y, this.array);
+          if (this.normalized) y = normalize(y, this.array);
           this.array[index * this.itemSize + 1] = y;
           return this;
         }
@@ -277609,7 +277546,7 @@ uniform ${i3} ${a3} u_${s3};
          * @return {BufferAttribute} A reference to this instance.
          */
         setZ(index, z) {
-          if (this.normalized) z = normalize2(z, this.array);
+          if (this.normalized) z = normalize(z, this.array);
           this.array[index * this.itemSize + 2] = z;
           return this;
         }
@@ -277632,7 +277569,7 @@ uniform ${i3} ${a3} u_${s3};
          * @return {BufferAttribute} A reference to this instance.
          */
         setW(index, w) {
-          if (this.normalized) w = normalize2(w, this.array);
+          if (this.normalized) w = normalize(w, this.array);
           this.array[index * this.itemSize + 3] = w;
           return this;
         }
@@ -277647,8 +277584,8 @@ uniform ${i3} ${a3} u_${s3};
         setXY(index, x, y) {
           index *= this.itemSize;
           if (this.normalized) {
-            x = normalize2(x, this.array);
-            y = normalize2(y, this.array);
+            x = normalize(x, this.array);
+            y = normalize(y, this.array);
           }
           this.array[index + 0] = x;
           this.array[index + 1] = y;
@@ -277666,9 +277603,9 @@ uniform ${i3} ${a3} u_${s3};
         setXYZ(index, x, y, z) {
           index *= this.itemSize;
           if (this.normalized) {
-            x = normalize2(x, this.array);
-            y = normalize2(y, this.array);
-            z = normalize2(z, this.array);
+            x = normalize(x, this.array);
+            y = normalize(y, this.array);
+            z = normalize(z, this.array);
           }
           this.array[index + 0] = x;
           this.array[index + 1] = y;
@@ -277688,10 +277625,10 @@ uniform ${i3} ${a3} u_${s3};
         setXYZW(index, x, y, z, w) {
           index *= this.itemSize;
           if (this.normalized) {
-            x = normalize2(x, this.array);
-            y = normalize2(y, this.array);
-            z = normalize2(z, this.array);
-            w = normalize2(w, this.array);
+            x = normalize(x, this.array);
+            y = normalize(y, this.array);
+            z = normalize(z, this.array);
+            w = normalize(w, this.array);
           }
           this.array[index + 0] = x;
           this.array[index + 1] = y;
@@ -280083,7 +280020,7 @@ uniform ${i3} ${a3} u_${s3};
          * @return {InterleavedBufferAttribute} A reference to this instance.
          */
         setComponent(index, component, value) {
-          if (this.normalized) value = normalize2(value, this.array);
+          if (this.normalized) value = normalize(value, this.array);
           this.data.array[index * this.data.stride + this.offset + component] = value;
           return this;
         }
@@ -280095,7 +280032,7 @@ uniform ${i3} ${a3} u_${s3};
          * @return {InterleavedBufferAttribute} A reference to this instance.
          */
         setX(index, x) {
-          if (this.normalized) x = normalize2(x, this.array);
+          if (this.normalized) x = normalize(x, this.array);
           this.data.array[index * this.data.stride + this.offset] = x;
           return this;
         }
@@ -280107,7 +280044,7 @@ uniform ${i3} ${a3} u_${s3};
          * @return {InterleavedBufferAttribute} A reference to this instance.
          */
         setY(index, y) {
-          if (this.normalized) y = normalize2(y, this.array);
+          if (this.normalized) y = normalize(y, this.array);
           this.data.array[index * this.data.stride + this.offset + 1] = y;
           return this;
         }
@@ -280119,7 +280056,7 @@ uniform ${i3} ${a3} u_${s3};
          * @return {InterleavedBufferAttribute} A reference to this instance.
          */
         setZ(index, z) {
-          if (this.normalized) z = normalize2(z, this.array);
+          if (this.normalized) z = normalize(z, this.array);
           this.data.array[index * this.data.stride + this.offset + 2] = z;
           return this;
         }
@@ -280131,7 +280068,7 @@ uniform ${i3} ${a3} u_${s3};
          * @return {InterleavedBufferAttribute} A reference to this instance.
          */
         setW(index, w) {
-          if (this.normalized) w = normalize2(w, this.array);
+          if (this.normalized) w = normalize(w, this.array);
           this.data.array[index * this.data.stride + this.offset + 3] = w;
           return this;
         }
@@ -280190,8 +280127,8 @@ uniform ${i3} ${a3} u_${s3};
         setXY(index, x, y) {
           index = index * this.data.stride + this.offset;
           if (this.normalized) {
-            x = normalize2(x, this.array);
-            y = normalize2(y, this.array);
+            x = normalize(x, this.array);
+            y = normalize(y, this.array);
           }
           this.data.array[index + 0] = x;
           this.data.array[index + 1] = y;
@@ -280209,9 +280146,9 @@ uniform ${i3} ${a3} u_${s3};
         setXYZ(index, x, y, z) {
           index = index * this.data.stride + this.offset;
           if (this.normalized) {
-            x = normalize2(x, this.array);
-            y = normalize2(y, this.array);
-            z = normalize2(z, this.array);
+            x = normalize(x, this.array);
+            y = normalize(y, this.array);
+            z = normalize(z, this.array);
           }
           this.data.array[index + 0] = x;
           this.data.array[index + 1] = y;
@@ -280231,10 +280168,10 @@ uniform ${i3} ${a3} u_${s3};
         setXYZW(index, x, y, z, w) {
           index = index * this.data.stride + this.offset;
           if (this.normalized) {
-            x = normalize2(x, this.array);
-            y = normalize2(y, this.array);
-            z = normalize2(z, this.array);
-            w = normalize2(w, this.array);
+            x = normalize(x, this.array);
+            y = normalize(y, this.array);
+            z = normalize(z, this.array);
+            w = normalize(w, this.array);
           }
           this.data.array[index + 0] = x;
           this.data.array[index + 1] = y;
@@ -304046,28 +303983,29 @@ void main() {
   }
   async function orientTriangles(triangles) {
     removeZeroTriangles(triangles);
-    let result = await runShader(
-      shaderCode,
-      [
-        {
-          data: new Float32Array(
-            triangles.flatMap((tri) => [
-              ...tri.p1,
-              ...tri.p2.map((p, i) => p - tri.p1[i]),
-              ...tri.p3.map((p, i) => p - tri.p1[i])
-            ])
-          ),
-          readonly: true,
-          output: false
-        },
-        {
-          data: new Float32Array(triangles.length),
-          readonly: false,
-          output: true
-        }
-      ],
-      triangles.length
-    );
+    const shader = await ComputeShaderPipeline.tryCreate(shaderCode, [
+      {
+        data: new Float32Array(
+          triangles.flatMap((tri) => [
+            ...tri.p1,
+            ...tri.p2.map((p, i) => p - tri.p1[i]),
+            ...tri.p3.map((p, i) => p - tri.p1[i])
+          ])
+        ),
+        type: "read-only-storage",
+        output: false
+      },
+      {
+        data: new Float32Array(triangles.length),
+        type: "storage",
+        output: true
+      }
+    ]);
+    if (!shader) {
+      throw new Error("Could not create shader.");
+    }
+    const result = await shader.run(triangles.length);
+    shader.destroy();
     let flips = result && result[0];
     if (flips) {
       for (let i = 0; i < flips.length; i++) {
@@ -304955,6 +304893,14 @@ void main() {
         ],
         selectedChannels: [0]
       };
+      var defaultRayTraceProgress = {
+        bounceCount: 0,
+        secondsElapsed: 0,
+        totalSeconds: 0,
+        escapedRayCount: 0,
+        totalRayCount: 0,
+        runTimeMs: 0
+      };
       var state = {
         ...defaultSavedState,
         throttle: isOnMobile ? 0.8 : 0,
@@ -304964,13 +304910,7 @@ void main() {
         raytracedAudio: [],
         ctx: null,
         running: false,
-        progress: {
-          bounceCount: 0,
-          secondsElapsed: 0,
-          totalSeconds: 0,
-          escapedRayCount: 0,
-          totalRayCount: 0
-        },
+        progress: defaultRayTraceProgress,
         source: null,
         rayTrace: new RayTrace(),
         showNormals: false,
@@ -305448,7 +305388,9 @@ void main() {
             const e1 = vSubtract(triangle.p2, triangle.p1);
             const e2 = vSubtract(triangle.p3, triangle.p1);
             const normal = vNormalise(vCross(e1, e2));
-            const centroid = vAdd(vAdd(triangle.p1, triangle.p2), triangle.p3).map((p) => p / 3);
+            const centroid = vAdd(vAdd(triangle.p1, triangle.p2), triangle.p3).map(
+              (p) => p / 3
+            );
             const origin = new Vector3(...centroid);
             const dir = new Vector3(...normal);
             const colour = isSelected ? 65280 : 16711680;
@@ -305458,11 +305400,16 @@ void main() {
           if (state.showNormals) {
             for (let i = 0; i < triangles.length; ++i) {
               const triangle = triangles[i];
-              const arrow = makeNormalArrow(triangle, i === ThreeView.selectedTriangle);
+              const arrow = makeNormalArrow(
+                triangle,
+                i === ThreeView.selectedTriangle
+              );
               ThreeView.normals.push(arrow);
             }
           } else if (triangles[ThreeView.selectedTriangle] !== void 0) {
-            ThreeView.normals.push(makeNormalArrow(triangles[ThreeView.selectedTriangle], true));
+            ThreeView.normals.push(
+              makeNormalArrow(triangles[ThreeView.selectedTriangle], true)
+            );
           }
           ThreeView.normals.forEach((n) => {
             ThreeView.scene?.add(n);
@@ -305867,7 +305814,8 @@ void main() {
                 (0, import_mithril2.default)("th", "500Hz"),
                 (0, import_mithril2.default)("th", "1kHz"),
                 (0, import_mithril2.default)("th", "2kHz"),
-                (0, import_mithril2.default)("th", "4kHz")
+                (0, import_mithril2.default)("th", "4kHz"),
+                (0, import_mithril2.default)("th", "Scatter")
               ]),
               ...state.materials.map(
                 (material) => (0, import_mithril2.default)("tr", [
@@ -305936,6 +305884,17 @@ void main() {
                       step: 0.01,
                       value: material.a4000,
                       onchange: (e) => state.setMaterialBand(e, material, "a4000")
+                    })
+                  ),
+                  (0, import_mithril2.default)(
+                    "td",
+                    (0, import_mithril2.default)("input", {
+                      type: "number",
+                      min: 0,
+                      max: 1,
+                      step: 0.01,
+                      value: material.scatter,
+                      onchange: (e) => state.setMaterialBand(e, material, "scatter")
                     })
                   )
                 ])
@@ -306066,7 +306025,12 @@ void main() {
               " (",
               // || 0 so that division by 0 does not result in NaN being displayed.
               (100 * state.progress.escapedRayCount / state.progress.totalRayCount || 0).toFixed(2),
-              "%)"
+              "%) Elapsed time: ",
+              (state.progress.runTimeMs / 1e3).toFixed(1),
+              " (",
+              // || 0 so that division by 0 does not result in NaN being displayed.
+              (1e3 * state.progress.bounceCount * state.progress.totalRayCount / state.progress.runTimeMs || 0).toFixed(0),
+              " bounces per second)"
             ])
           ]),
           (0, import_mithril2.default)("section", [

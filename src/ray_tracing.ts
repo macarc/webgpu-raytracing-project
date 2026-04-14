@@ -1,4 +1,4 @@
-import { getGPUDevice } from "./webgpu";
+import { getGPUDevice, ComputeShaderPipeline } from "./webgpu";
 import {
   FLOAT32_SIZE,
   Material,
@@ -6,6 +6,7 @@ import {
   SAMPLE_RATE,
   SPEED_OF_SOUND,
   Triangle,
+  vDot,
   Vec3,
   vNormalise,
   WORKGROUP_SIZE,
@@ -41,36 +42,6 @@ export type Settings = {
 const FLAG_ESCAPED = 0.0;
 const FLAG_ALIVE = 1.0;
 
-/**
- *
- * @returns uniform random number between -1 and 1.
- */
-function rand() {
-  return Math.random() * 2 - 1;
-}
-
-// TODO: this works but is rather crude.
-function randomPointOnUnitSphere(): Vec3 {
-  let x = 0;
-  let y = 0;
-  let z = 0;
-  let r = Infinity;
-
-  while (r > 1) {
-    x = rand();
-    y = rand();
-    z = rand();
-    r = Math.sqrt(x ** 2 + y ** 2 + z ** 2);
-  }
-
-  return [x / r, y / r, z / r];
-}
-
-function normalize(v: Vec3): Vec3 {
-  const magnitude = Math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2);
-  return [v[0] / magnitude, v[1] / magnitude, v[2] / magnitude];
-}
-
 function specularRayIntersectionShaderCode(
   receivers: Receiver[],
   materials: Material[],
@@ -87,7 +58,7 @@ function specularRayIntersectionShaderCode(
     nx: f32,
     ny: f32,
     nz: f32,
-    distanceTravelled: f32,
+    distance_travelled: f32,
     intensity125: f32,
     intensity250: f32,
     intensity500: f32,
@@ -174,8 +145,6 @@ function specularRayIntersectionShaderCode(
     let initialRay = rayBuffer[rayIndex];
 
     // This is more or less a line-by-line translation of the Möller–Trumbore intersection algorithm.
-    // TODO: research triangle intersection algorithms to see if there are others - though this one seems to be really simple so
-    //       I doubt it can be improved much.
     // TODO: one potential idea would be to store u x v with the triangle, which saves on one cross product
     //       per test. The additional memory strain might not actually make this any faster though.
 
@@ -185,7 +154,7 @@ function specularRayIntersectionShaderCode(
 
     var rayposition = vec3f(initialRay.x, initialRay.y, initialRay.z);
     var raydirection = vec3f(initialRay.dx, initialRay.dy, initialRay.dz);
-    var raydistancetravelled = initialRay.distanceTravelled;
+    var raydistancetravelled = initialRay.distance_travelled;
 
     var intensity_125 = initialRay.intensity125;
     var intensity_250 = initialRay.intensity250;
@@ -293,6 +262,8 @@ function specularRayIntersectionShaderCode(
 
       for (var j: u32 = 0; j < ${receivers.length}; j++) {
         distances_and_ray_escaped_flags[upperIndex + j] = ${FLAG_ESCAPED};
+
+        // zero all intensities (in case the ray has escaped and these are not set below).
         band_125_and_250[lowerIndex + j] = 0;
         band_125_and_250[upperIndex + j] = 0;
         band_500_and_1000[lowerIndex + j] = 0;
@@ -329,7 +300,6 @@ function specularRayIntersectionShaderCode(
               // let totalIntensity = (1 - material.scatter) * additionDueToRay + material.scatter * cosNormalAngleToReceiver;
               let totalCoefficient = specularCoefficient + diffuseCoefficient;
 
-              
               band_125_and_250[lowerIndex + j] = intensity_125 * totalCoefficient;
               band_125_and_250[upperIndex + j] = intensity_250 * totalCoefficient;
               band_500_and_1000[lowerIndex + j] = intensity_500 * totalCoefficient;
@@ -378,7 +348,7 @@ function specularRayIntersectionShaderCode(
     rayBuffer[rayIndex].nx = lastsurfacenormal.x;
     rayBuffer[rayIndex].ny = lastsurfacenormal.y;
     rayBuffer[rayIndex].nz = lastsurfacenormal.z;
-    rayBuffer[rayIndex].distanceTravelled = raydistancetravelled;
+    rayBuffer[rayIndex].distance_travelled = raydistancetravelled;
     rayBuffer[rayIndex].intensity125 = intensity_125;
     rayBuffer[rayIndex].intensity250 = intensity_250;
     rayBuffer[rayIndex].intensity500 = intensity_500;
@@ -387,184 +357,6 @@ function specularRayIntersectionShaderCode(
     rayBuffer[rayIndex].intensity4000 = intensity_4000;
   }
 `;
-}
-
-class SpecularRayTracer {
-  device: GPUDevice;
-  computePipeline: GPUComputePipeline;
-  bindGroup: GPUBindGroup;
-  outputBuffers: GPUBuffer[];
-  stagingBuffers: GPUBuffer[];
-
-  constructor(
-    gpuDevice: GPUDevice,
-    rays: Float32Array<ArrayBuffer>,
-    triangles: Float32Array<ArrayBuffer>,
-    materials: Float32Array<ArrayBuffer>,
-    outputs: Float32Array<ArrayBuffer>[],
-    code: string,
-  ) {
-    this.device = gpuDevice;
-
-    const rayBuffer = this.device.createBuffer({
-      size: rays.length * FLOAT32_SIZE,
-      usage:
-        GPUBufferUsage.STORAGE |
-        GPUBufferUsage.COPY_SRC |
-        GPUBufferUsage.COPY_DST,
-    });
-    const triangleBuffer = this.device.createBuffer({
-      size: triangles.length * FLOAT32_SIZE,
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-    });
-    const materialsBuffer = this.device.createBuffer({
-      size: materials.length * FLOAT32_SIZE,
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    });
-    this.outputBuffers = outputs.map((output) =>
-      this.device.createBuffer({
-        size: output.length * FLOAT32_SIZE,
-        usage:
-          GPUBufferUsage.STORAGE |
-          GPUBufferUsage.COPY_SRC |
-          GPUBufferUsage.COPY_DST,
-      }),
-    );
-    this.stagingBuffers = outputs.map((output) =>
-      this.device.createBuffer({
-        size: output.length * FLOAT32_SIZE,
-        usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
-      }),
-    );
-
-    // Bind group layout and bind group define how the buffers are passed to the shader.
-    const bindGroupLayout = this.device.createBindGroupLayout({
-      entries: [
-        {
-          binding: 0, // ray buffer
-          visibility: GPUShaderStage.COMPUTE,
-          buffer: { type: "storage" },
-        },
-        {
-          binding: 1, // triangle buffer
-          visibility: GPUShaderStage.COMPUTE,
-          buffer: { type: "read-only-storage" },
-        },
-        {
-          binding: 2, // distances
-          visibility: GPUShaderStage.COMPUTE,
-          buffer: { type: "storage" },
-        },
-        {
-          binding: 3, // band 250 and 500
-          visibility: GPUShaderStage.COMPUTE,
-          buffer: { type: "storage" },
-        },
-        {
-          binding: 4, // band 1000 and 2000
-          visibility: GPUShaderStage.COMPUTE,
-          buffer: { type: "storage" },
-        },
-        {
-          binding: 5, // band 2000 and 4000
-          visibility: GPUShaderStage.COMPUTE,
-          buffer: { type: "storage" },
-        },
-        {
-          binding: 6, // x and y
-          visibility: GPUShaderStage.COMPUTE,
-          buffer: { type: "storage" },
-        },
-        {
-          binding: 7, // z and ray intensity
-          visibility: GPUShaderStage.COMPUTE,
-          buffer: { type: "storage" },
-        },
-        {
-          binding: 8, // materials
-          visibility: GPUShaderStage.COMPUTE,
-          buffer: { type: "uniform" },
-        },
-      ],
-    });
-
-    this.bindGroup = this.device.createBindGroup({
-      layout: bindGroupLayout,
-      entries: [
-        { binding: 0, resource: { buffer: rayBuffer } },
-        { binding: 1, resource: { buffer: triangleBuffer } },
-        ...this.outputBuffers.map((buffer, i) => ({
-          binding: 2 + i,
-          resource: { buffer },
-        })),
-        { binding: 8, resource: { buffer: materialsBuffer } },
-      ],
-    });
-
-    // Create the GPU shader and compute pipeline.
-    const shaderModule = this.device.createShaderModule({ code });
-    this.computePipeline = this.device.createComputePipeline({
-      layout: this.device.createPipelineLayout({
-        bindGroupLayouts: [bindGroupLayout],
-      }),
-      compute: { module: shaderModule, entryPoint: "main" },
-    });
-
-    // Schedule copying data into buffers.
-    this.device.queue.writeBuffer(rayBuffer, 0, rays);
-    this.device.queue.writeBuffer(triangleBuffer, 0, triangles);
-    this.device.queue.writeBuffer(materialsBuffer, 0, materials);
-    for (let i = 0; i < outputs.length; i++) {
-      this.device.queue.writeBuffer(this.outputBuffers[i], 0, outputs[i]);
-    }
-  }
-
-  async runPass(instancesCount: number): Promise<Float32Array[]> {
-    // Schedule the GPU shader pass.
-    const commandEncoder = this.device.createCommandEncoder();
-    const passEncoder = commandEncoder.beginComputePass();
-
-    passEncoder.setPipeline(this.computePipeline);
-    passEncoder.setBindGroup(0, this.bindGroup);
-
-    passEncoder.dispatchWorkgroups(Math.ceil(instancesCount / WORKGROUP_SIZE));
-    passEncoder.end();
-
-    for (let i = 0; i < this.outputBuffers.length; i++) {
-      commandEncoder.copyBufferToBuffer(
-        this.outputBuffers[i],
-        0,
-        this.stagingBuffers[i],
-        0,
-        this.stagingBuffers[i].size,
-      );
-    }
-
-    console.time("run");
-
-    // Execute the scheduled commands.
-    this.device.queue.submit([commandEncoder.finish()]);
-
-    // Map output buffers back to staging buffers (which can be read in JS).
-    await Promise.all(
-      this.stagingBuffers.map((buffer) =>
-        buffer.mapAsync(GPUMapMode.READ, 0, buffer.size),
-      ),
-    );
-
-    console.timeEnd("run");
-
-    // Get the data from the staging buffers, and unmap the staging buffers.
-    const arrayDataOutput = this.stagingBuffers.map((buffer) =>
-      buffer.getMappedRange().slice(),
-    );
-
-    // TODO: do we need a cleanup method for this class.
-    this.stagingBuffers.forEach((buffer) => buffer.unmap());
-
-    // Convert to the correct type, and display the output.
-    return arrayDataOutput.map((buffer) => new Float32Array(buffer));
-  }
 }
 
 export type RayTraceOutput = {
@@ -578,6 +370,7 @@ export type RayTraceProgress = {
   totalSeconds: number;
   escapedRayCount: number;
   totalRayCount: number;
+  runTimeMs: number;
 };
 
 export type UpdateFunction = (progress: RayTraceProgress) => void;
@@ -593,6 +386,8 @@ export class RayTrace {
     settings: Settings,
     update: UpdateFunction,
   ): Promise<RayTraceOutput | null> {
+    const startTime = performance.now();
+
     this.cancelled = false;
 
     update({
@@ -601,15 +396,17 @@ export class RayTrace {
       totalSeconds: settings.audioDuration,
       escapedRayCount: 0,
       totalRayCount: settings.rayCount,
+      runTimeMs: performance.now() - startTime,
     });
 
     console.time("Total (including setup)");
     console.log("Creating geometry");
     const rays: Ray[] = [];
-    const triangles = settings.geometry;
 
-    const directionUnnormalised = settings.sourceDirection?.slice() as Vec3 || null;
-    const direction = directionUnnormalised && vNormalise(directionUnnormalised);
+    const directionUnnormalised =
+      (settings.sourceDirection?.slice() as Vec3) || null;
+    const direction =
+      directionUnnormalised && vNormalise(directionUnnormalised);
 
     // Create the rays.
     const goldenRatio = (1 + Math.sqrt(5)) / 2;
@@ -625,14 +422,13 @@ export class RayTrace {
       let intensity = 1.0;
 
       if (direction !== null) {
-        const rayDotDirection =
-          ray[0] * direction[0] + ray[1] * direction[1] + ray[2] * direction[2];
+        const rayDotDirection = vDot(ray, direction);
         intensity = (rayDotDirection + 1) / 2;
       }
 
       rays.push({
         position: settings.sourcePosition,
-        direction: normalize(ray),
+        direction: vNormalise(ray),
         intensity,
       });
     }
@@ -666,37 +462,79 @@ export class RayTrace {
       console.log("Output buffer is too large, will not work");
     }
 
-    const rayTracer = new SpecularRayTracer(
+    const shader = new ComputeShaderPipeline(
       gpuDevice,
-      new Float32Array(
-        rays.flatMap((ray) => [
-          ...ray.position,
-          ...ray.direction,
-          ...[0, 0, 0],
-          0,
-          ray.intensity,
-          ray.intensity,
-          ray.intensity,
-          ray.intensity,
-          ray.intensity,
-          ray.intensity,
-        ]),
-      ),
-      trianglesToFloatArray(triangles, settings.materials),
-      materialsToFloatArray(settings.materials),
-      [
-        new Float32Array(outputSize), // distance and ray escaped flag
-        new Float32Array(outputSize), // band 125 and 250
-        new Float32Array(outputSize), // band 500 and 1000
-        new Float32Array(outputSize), // band 2000a and 4000
-        new Float32Array(outputSize), // x and y
-        new Float32Array(outputSize), // z and ray intensity
-      ],
       specularRayIntersectionShaderCode(
         settings.receivers,
         settings.materials,
         bouncesPerPass,
       ),
+      [
+        {
+          data: new Float32Array(
+            rays.flatMap((ray) => [
+              ...ray.position,
+              ...ray.direction,
+              ...[0, 0, 0],
+              0,
+              ray.intensity,
+              ray.intensity,
+              ray.intensity,
+              ray.intensity,
+              ray.intensity,
+              ray.intensity,
+            ]),
+          ),
+          type: "storage",
+          output: false,
+        },
+        {
+          data: trianglesToFloatArray(settings.geometry, settings.materials),
+          type: "read-only-storage",
+          output: false,
+        },
+        {
+          data: new Float32Array(outputSize), // distance and ray escaped flag
+
+          type: "storage",
+          output: true,
+        },
+        {
+          data: new Float32Array(outputSize), // band 125 and 250
+
+          type: "storage",
+          output: true,
+        },
+        {
+          data: new Float32Array(outputSize), // band 500 and 1000
+
+          type: "storage",
+          output: true,
+        },
+        {
+          data: new Float32Array(outputSize), // band 2000 and 4000
+
+          type: "storage",
+          output: true,
+        },
+        {
+          data: new Float32Array(outputSize), // x and y
+
+          type: "storage",
+          output: true,
+        },
+        {
+          data: new Float32Array(outputSize), // z and ray intensity
+
+          type: "storage",
+          output: true,
+        },
+        {
+          data: materialsToFloatArray(settings.materials),
+          type: "uniform",
+          output: false,
+        },
+      ],
     );
 
     const receiversCount = settings.receivers.length;
@@ -759,17 +597,17 @@ export class RayTrace {
     let escapedRayCount = 0;
 
     while (!this.cancelled && minIndex < sampleCount) {
-      bounceCount += bouncesPerPass;
       update({
         bounceCount,
         secondsElapsed: minIndex / SAMPLE_RATE,
         totalSeconds: settings.audioDuration,
         escapedRayCount,
         totalRayCount: settings.rayCount,
+        runTimeMs: performance.now() - startTime,
       });
 
       // Run the shader and get the result.
-      const result = await rayTracer.runPass(settings.rayCount);
+      const result = await shader.run(settings.rayCount);
 
       minIndex = sampleCount;
 
@@ -778,7 +616,6 @@ export class RayTrace {
       escapedRayCount = 0;
 
       for (let k = 0; k < receiversCount; ++k) {
-        let npp = 10;
         const output = outputs[k];
 
         for (let j = k; j < halfBufferLength; j += receiversCount) {
@@ -801,10 +638,6 @@ export class RayTrace {
 
           if (escaped && lowerIndex % (bouncesPerPass * receiversCount) === 0) {
             escapedRayCount++;
-          } else {
-            // if (result[1][lowerIndex] === 0) {
-            //   console.log(j, index);
-            // }
           }
 
           if (
@@ -813,10 +646,6 @@ export class RayTrace {
               (bouncesPerPass * receiversCount) ===
               0
           ) {
-            if (npp-- > 0) {
-              console.log(lowerIndex, bouncesPerPass, index / SAMPLE_RATE);
-            }
-            // BUG: this sometimes goes DOWN, which it should never do.
             minIndex = Math.min(minIndex, index);
           }
 
@@ -850,10 +679,10 @@ export class RayTrace {
           }
         }
       }
-      console.log(minIndex);
       console.log(
         `Escaped rays: ${escapedRayCount} (${(100 * escapedRayCount) / settings.rayCount}%)`,
       );
+      bounceCount += bouncesPerPass;
     }
 
     update({
@@ -862,6 +691,7 @@ export class RayTrace {
       totalSeconds: settings.audioDuration,
       escapedRayCount,
       totalRayCount: settings.rayCount,
+      runTimeMs: performance.now() - startTime,
     });
 
     const outputAudio = outputs.map((output) =>
@@ -871,10 +701,8 @@ export class RayTrace {
     console.timeEnd("Total (excluding setup)");
     console.timeEnd("Total (including setup)");
 
-    console.log(outputAudio.join(","));
-
     // Free all resources on the GPU.
-    gpuDevice.destroy();
+    shader.destroy();
 
     return {
       audio: outputAudio,

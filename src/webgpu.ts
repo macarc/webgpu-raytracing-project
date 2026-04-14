@@ -1,8 +1,13 @@
 import { FLOAT32_SIZE, WORKGROUP_SIZE } from "./constants";
 
+type ShaderBufferType =
+  | "read-only-storage" // Read-only storage buffer.
+  | "storage" // Read-write storage buffer.
+  | "uniform"; // (Read-only) uniform.
+
 type ShaderBuffer = {
   data: Float32Array<ArrayBuffer>;
-  readonly: boolean;
+  type: ShaderBufferType;
   output: boolean;
 };
 
@@ -45,130 +50,182 @@ export async function getGPUDevice(): Promise<GPUDevice | null> {
 }
 
 /**
- * Run a compute shader.
- *
- * The buffers will be bound as storage buffers, in the order given
- * (group 0, binding i for the i'th buffer).
- *
- * @param code shader source code.
- * @param buffers data buffers to map.
- * @param instancesCount number of times to run the shader.
- * @param workgroupSize number of threads per workgroup.
- * @returns
+ * Get the GPUBufferUsage flags for a shader buffer.
+ * @param buf
+ * @returns GPUBufferUsage flags OR'd together
  */
-export async function runShader(
-  code: string,
-  buffers: ShaderBuffer[],
-  instancesCount: number,
-): Promise<Float32Array[] | null> {
-  const device = await getGPUDevice();
-
-  if (!device) {
-    console.log("Aborted due to null GPUDevice.");
-    return null;
-  }
-
-  // Buffers on GPU to hold data, passed to shader.
-  const gpuBuffers = buffers.map((buf) =>
-    device.createBuffer({
-      size: buf.data.length * FLOAT32_SIZE,
-      usage:
+function bufferUsage(buf: ShaderBuffer): number {
+  if (buf.type === "uniform") {
+    return GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST;
+  } else if (buf.type === "read-only-storage") {
+    return GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST;
+  } else if (buf.type === "storage") {
+    if (buf.output) {
+      return (
         GPUBufferUsage.STORAGE |
         GPUBufferUsage.COPY_SRC |
-        GPUBufferUsage.COPY_DST,
-    }),
-  );
-
-  // Bind group layout and bind group define how the buffers are passed to the shader.
-  const bindGroupLayout = device.createBindGroupLayout({
-    entries: buffers.map((buf, i) => ({
-      binding: i,
-      visibility: GPUShaderStage.COMPUTE,
-      buffer: { type: buf.readonly ? "read-only-storage" : "storage" },
-    })),
-  });
-
-  const bindGroup = device.createBindGroup({
-    layout: bindGroupLayout,
-    entries: gpuBuffers.map((buffer, i) => ({
-      binding: i,
-      resource: { buffer },
-    })),
-  });
-
-  // Create the GPU shader and compute pipeline.
-  const shaderModule = device.createShaderModule({ code });
-  const computePipeline = device.createComputePipeline({
-    layout: device.createPipelineLayout({
-      bindGroupLayouts: [bindGroupLayout],
-    }),
-    compute: { module: shaderModule, entryPoint: "main" },
-  });
-
-  // Schedule copying data into buffers.
-  buffers.forEach((buffer, i) => {
-    device.queue.writeBuffer(gpuBuffers[i], 0, buffer.data);
-  });
-
-  // Schedule the GPU shader pass.
-  const commandEncoder = device.createCommandEncoder();
-  const passEncoder = commandEncoder.beginComputePass();
-
-  passEncoder.setPipeline(computePipeline);
-  passEncoder.setBindGroup(0, bindGroup);
-
-  passEncoder.dispatchWorkgroups(Math.ceil(instancesCount / WORKGROUP_SIZE));
-  passEncoder.end();
-
-  // Schedule copying output buffers to staging buffers (which can be read in JS).
-  const stagingBuffers = buffers.map((buf) =>
-    buf.output
-      ? device.createBuffer({
-          size: buf.data.length * FLOAT32_SIZE,
-          usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
-        })
-      : null,
-  );
-  stagingBuffers.forEach((stagingBuffer, i) => {
-    if (stagingBuffer) {
-      commandEncoder.copyBufferToBuffer(
-        gpuBuffers[i],
-        0,
-        stagingBuffer,
-        0,
-        stagingBuffer.size,
+        GPUBufferUsage.COPY_DST
       );
+    } else {
+      return GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST;
     }
-  });
+  }
 
-  console.time("run");
+  // Never
+  return buf.type;
+}
 
-  // Execute the scheduled commands.
-  device.queue.submit([commandEncoder.finish()]);
+/**
+ * ComputeShaderPipeline manages WebGPU resources for a compute shader.
+ */
+export class ComputeShaderPipeline {
+  private device: GPUDevice;
+  private computePipeline: GPUComputePipeline;
+  private bindGroup: GPUBindGroup;
+  private gpuBuffers: GPUBuffer[];
+  private stagingBuffers: (GPUBuffer | null)[];
 
-  // Map output buffers back to staging buffers (which can be read in JS).
-  await Promise.all(
-    stagingBuffers.map(
-      (stagingBuffer) =>
-        stagingBuffer &&
-        stagingBuffer.mapAsync(GPUMapMode.READ, 0, stagingBuffer.size),
-    ),
-  );
+  /**
+   * Create a compute shader pipeline.
+   * @param code shader code.
+   * @param buffers list of GPU buffers that will be passed to the shader.
+   * @returns the shader pipeline.
+   */
+  static async tryCreate(
+    code: string,
+    buffers: ShaderBuffer[],
+  ): Promise<ComputeShaderPipeline | null> {
+    const device = await getGPUDevice();
 
-  console.timeEnd("run");
+    if (!device) {
+      console.log("Aborted due to null GPUDevice.");
+      return null;
+    }
 
-  // Get the data from the staging buffers, and unmap the staging buffers.
-  const dataOutput = stagingBuffers
-    .filter((b) => b !== null)
-    .map((stagingBuffer) => {
-      const arrayDataOutput = stagingBuffer.getMappedRange().slice();
-      stagingBuffer.unmap();
-      return new Float32Array(arrayDataOutput);
+    return new ComputeShaderPipeline(device, code, buffers);
+  }
+
+  /**
+   * Create a shader pipeline from an existing GPU device.
+   * @param gpuDevice the GPU device.
+   * @param code shader code.
+   * @param buffers list of GPU buffers that will be passed to the shader.
+   */
+  constructor(gpuDevice: GPUDevice, code: string, buffers: ShaderBuffer[]) {
+    this.device = gpuDevice;
+
+    // Buffers on GPU to hold data, passed to shader.
+    this.gpuBuffers = buffers.map((buf) =>
+      this.device.createBuffer({
+        size: buf.data.length * FLOAT32_SIZE,
+        usage: bufferUsage(buf),
+      }),
+    );
+
+    // Bind group layout and bind group define how the buffers are passed to the shader.
+    const bindGroupLayout = this.device.createBindGroupLayout({
+      entries: buffers.map((buf, i) => ({
+        binding: i,
+        visibility: GPUShaderStage.COMPUTE,
+        buffer: { type: buf.type },
+      })),
     });
 
-  // Free all resources on the GPU.
-  device.destroy();
+    this.bindGroup = this.device.createBindGroup({
+      layout: bindGroupLayout,
+      entries: this.gpuBuffers.map((buffer, i) => ({
+        binding: i,
+        resource: { buffer },
+      })),
+    });
 
-  // Convert to the correct type, and display the output.
-  return dataOutput;
+    // Create the GPU shader and compute pipeline.
+    const shaderModule = this.device.createShaderModule({ code });
+    this.computePipeline = this.device.createComputePipeline({
+      layout: this.device.createPipelineLayout({
+        bindGroupLayouts: [bindGroupLayout],
+      }),
+      compute: { module: shaderModule, entryPoint: "main" },
+    });
+
+    // Schedule copying data into buffers.
+    buffers.forEach((buffer, i) => {
+      this.device.queue.writeBuffer(this.gpuBuffers[i], 0, buffer.data);
+    });
+
+    this.stagingBuffers = buffers.map((buf) =>
+      buf.output
+        ? this.device.createBuffer({
+            size: buf.data.length * FLOAT32_SIZE,
+            usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+          })
+        : null,
+    );
+  }
+
+  /**
+   * Run the shader pipeline and get the output.
+   * @param workgroupCount number of workgroups to run.
+   * @returns list of buffers that were marked as 'output' when creating the shader.
+   */
+  async run(workgroupCount: number) {
+    // Schedule the GPU shader pass.
+    const commandEncoder = this.device.createCommandEncoder();
+    const passEncoder = commandEncoder.beginComputePass();
+
+    passEncoder.setPipeline(this.computePipeline);
+    passEncoder.setBindGroup(0, this.bindGroup);
+
+    passEncoder.dispatchWorkgroups(Math.ceil(workgroupCount / WORKGROUP_SIZE));
+    passEncoder.end();
+
+    // Schedule copying output buffers to staging buffers (which can be read in JS).
+    this.stagingBuffers.forEach((stagingBuffer, i) => {
+      if (stagingBuffer) {
+        commandEncoder.copyBufferToBuffer(
+          this.gpuBuffers[i],
+          0,
+          stagingBuffer,
+          0,
+          stagingBuffer.size,
+        );
+      }
+    });
+
+    console.time("run");
+
+    // Execute the scheduled commands.
+    this.device.queue.submit([commandEncoder.finish()]);
+
+    // Map output buffers back to staging buffers (which can be read in JS).
+    await Promise.all(
+      this.stagingBuffers.map(
+        (stagingBuffer) =>
+          stagingBuffer &&
+          stagingBuffer.mapAsync(GPUMapMode.READ, 0, stagingBuffer.size),
+      ),
+    );
+
+    console.timeEnd("run");
+
+    // Get the data from the staging buffers, and unmap the staging buffers.
+    const dataOutput = this.stagingBuffers
+      .filter((b) => b !== null)
+      .map((stagingBuffer) => {
+        const arrayDataOutput = stagingBuffer.getMappedRange().slice();
+        stagingBuffer.unmap();
+        return new Float32Array(arrayDataOutput);
+      });
+
+    // Convert to the correct type, and display the output.
+    return dataOutput;
+  }
+
+  /**
+   * Destroy the shader GPU device, clearing all resources.
+   */
+  destroy() {
+    // Free all resources on the GPU.
+    this.device.destroy();
+  }
 }
