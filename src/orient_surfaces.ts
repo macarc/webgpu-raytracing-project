@@ -1,7 +1,12 @@
-import { ComputeShaderPipeline } from "./webgpu";
+import { ComputeShaderPipeline } from "./compute_shader";
 import { WORKGROUP_SIZE } from "./constants";
 import { Triangle } from "./constants";
+import { error } from "./log";
+import { vEquals } from "./vectors";
 
+// WGSL code for orienting triangles.
+// If you're in VSCode, you can install the vscode-wgsl-literal plugin
+// to enable syntax highlighting.
 const shaderCode = /* wgsl */ `
   struct Triangle {
     x: f32, y: f32, z: f32,
@@ -129,24 +134,16 @@ const shaderCode = /* wgsl */ `
   }
 `;
 
+/**
+ * Remove triangles where all vertices have the same coordinates. This
+ * can sometimes occur for imported models.
+ * @param triangles array to remove triangles from.
+ */
 function removeZeroTriangles(triangles: Triangle[]) {
   const indicesToRemove: number[] = [];
   for (let i = 0; i < triangles.length; ++i) {
     const tri = triangles[i];
-    const p1 = new Float32Array(tri.p1);
-    const p2 = new Float32Array(tri.p2);
-    const p3 = new Float32Array(tri.p3);
-    if (
-      (tri.p1[0] === tri.p2[0] &&
-        tri.p1[1] === tri.p2[1] &&
-        tri.p1[2] === tri.p2[2]) ||
-      (tri.p2[0] === tri.p3[0] &&
-        tri.p2[1] === tri.p3[1] &&
-        tri.p2[2] === tri.p3[2]) ||
-      (tri.p1[0] === tri.p3[0] &&
-        tri.p1[1] === tri.p3[1] &&
-        tri.p1[2] === tri.p3[2])
-    ) {
+    if (vEquals(tri.p1, tri.p2) && vEquals(tri.p2, tri.p3)) {
       indicesToRemove.push(i);
     }
   }
@@ -157,8 +154,8 @@ function removeZeroTriangles(triangles: Triangle[]) {
   }
 }
 
-/** Orient triangles so that their normal vectors point outwards.
- *
+/**
+ * Orient triangles so that their normal vectors point outwards.
  * @param triangles triangles to orient - must form a closed surface.
  */
 export async function orientTriangles(
@@ -198,8 +195,8 @@ export async function orientTriangles(
     for (let i = 0; i < flips.length; i++) {
       const sign = flips[i];
       if (sign !== 1 && sign !== -1) {
-        console.error(
-          `Received invalid output ${sign} from triangle orientation shader at index ${i}.`,
+        error(
+          `received invalid output ${sign} from triangle orientation shader at index ${i}.`,
         );
       } else if (sign === -1) {
         // Swap the triangle direction.

@@ -123,6 +123,10 @@ button.stop {
   border-left-color: darkred;
 }
 
+button.flip-normal {
+  margin-top: 1rem;
+}
+
 * > button:not(:last-child) {
   margin-right: 1rem;
 }

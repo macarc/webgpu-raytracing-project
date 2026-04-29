@@ -1,3 +1,8 @@
+// Helper DSP functions for combining multiple octave bands into a single band.
+
+import FFT from "fft.js";
+import { ensure } from "./log";
+
 // NOTE: these filter coefficients depend on SAMPLE_RATE.
 //       They are calculated from MATLAB:
 //       [B0,A0] = octdsgn(125, fs);
@@ -63,25 +68,21 @@ const B5 = [
 ];
 
 /**
- * Assert that a value is true. Throws an error if t is not true.
- * @param t the value to check.
- */
-function ensure(t: boolean) {
-  if (t !== true) {
-    throw new Error("Ensure failed!");
-  }
-}
-
-/**
  * Apply a filter to the Float32Array.
- * @param B filter coefficients TODO better documentation
- * @param A filter coefficients TODO better documentation
+ * @param B feedforward filter coefficients
+ * @param A feedback filter coefficients
  * @param input input audio.
  * @returns output filtered audio.
  */
 function filter(B: number[], A: number[], input: Float32Array): Float64Array {
-  ensure(A.length === B.length);
-  ensure(A[0] === 1); // Ensure that the filter is normalised.
+  ensure(
+    A.length === B.length,
+    "filter applied to invalid array lengths ",
+    B.length,
+    " and ",
+    A.length,
+  );
+  ensure(A[0] === 1, "filter is not normalised");
 
   // Using a 32-bit array causes instability, so convert to 64-bit.
   const x = new Float64Array(input);
@@ -122,8 +123,10 @@ export function combineFilteredAudio(
   band_2000: Float32Array,
   band_4000: Float32Array,
 ): Float32Array<ArrayBuffer> {
-  // Ensure each array has the same length
-  ensure(new Set([...arguments].map((i) => i.length)).size === 1);
+  ensure(
+    new Set([...arguments].map((i) => i.length)).size === 1,
+    "not all frequency bands have the same duration",
+  );
 
   const audio_125 = filter(B0, A0, band_125);
   const audio_250 = filter(B1, A1, band_250);
@@ -169,4 +172,89 @@ export function pad(data: Float32Array, length: number): Float32Array {
   }
 
   return output;
+}
+
+/**
+ * Get the length of the output when convolving input1 by input2.
+ * @param input1
+ * @param input2
+ * @returns
+ */
+export function fftConvolvedSize(input1: AudioBuffer, input2: AudioBuffer) {
+  const length = Math.max(input1.length, input2.length);
+  return Math.pow(2, Math.ceil(Math.log(length) / Math.log(2)));
+}
+
+/**
+ * Convolve input1 by input2.
+ * @param input1
+ * @param input2
+ * @param output array to write output to, must have length >= fftConvolvedSize(input1, input2).
+ * @returns the maximum value of the output.
+ */
+export function fftConvolve(
+  input1: AudioBuffer,
+  input2: AudioBuffer,
+  output: AudioBuffer,
+): number {
+  if (input1.numberOfChannels === 0 || input2.numberOfChannels === 0) {
+    return 0;
+  }
+
+  let maxOutputValue = 0;
+
+  const fftSize = fftConvolvedSize(input1, input2);
+  ensure(
+    output.length >= fftSize,
+    "convolution called with invalid output argument (too short)",
+  );
+
+  const f = new FFT(fftSize);
+
+  // Create Fourier-domain arrays.
+  const Y1 = f.createComplexArray();
+  const Y2 = f.createComplexArray();
+
+  for (let i = 0; i < input1.numberOfChannels; ++i) {
+    // Zero-pad data up to fftSize.
+    const padded1 = Array.from(pad(input1.getChannelData(i), fftSize));
+    const padded2 = Array.from(pad(input2.getChannelData(i), fftSize));
+
+    // DFT.
+    // Y/irFFT contain interleaved (real, imaginary) samples.
+    f.realTransform(Y1, padded1);
+    f.realTransform(Y2, padded2);
+
+    // Multiply (complex interleaved) Y1 by Y2.
+    // Only need to multiply up to size/2 since the other half is
+    // empty and populated by completeSpectrum() below.
+    for (let i = 0; i <= fftSize / 2; i += 2) {
+      const r1 = Y1[i];
+      const i1 = Y1[i + 1];
+      const r2 = Y2[i];
+      const i2 = Y2[i + 1];
+
+      Y1[i] = r1 * r2 - i1 * i2;
+      Y1[i + 1] = r1 * i2 + r2 * i1;
+    }
+
+    // Complete Y using Hermitian symmetry (for real audio).
+    f.completeSpectrum(Y1);
+
+    // Inverse transform audio.
+    const outputBuf = f.createComplexArray();
+    f.inverseTransform(outputBuf, Y1);
+
+    // Get output channel.
+    const outputChannel = output.getChannelData(i);
+
+    // Store every second sample (skipping imaginary samples).
+    for (let j = 0; j < fftSize; ++j) {
+      outputChannel[j] = outputBuf[j * 2];
+
+      maxOutputValue = Math.max(Math.abs(outputChannel[j]), maxOutputValue);
+    }
+  }
+
+  return maxOutputValue;
 }

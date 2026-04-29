@@ -8,8 +8,9 @@ import {
   Format3D,
   loadGeometry,
   rotate,
-} from "./geometry_helpers";
+} from "./helpers/geometry";
 import { SphereGeometry } from "three";
+import { log } from "./log";
 
 export type SavedGeometry =
   | Triangle[]
@@ -40,7 +41,7 @@ export abstract class Geometry {
   /**
    * Get the triangles that make up the geometry.
    * This should return the same array if the geometry has not changed,
-   * and a different array if the geometry has changed. TODO is this true.
+   * and a different array if the geometry has changed.
    */
   abstract triangles(): Triangle[];
 
@@ -98,9 +99,7 @@ export class BoxRoomGeometry extends Geometry {
   geometry: Triangle[] = [];
 
   async initialise() {
-    // TODO: check this works
     await this.updateGeometry();
-    // this.geometry = await boxRoom(this.config);
   }
 
   setTriangleMaterial(index: number, material: string) {
@@ -198,9 +197,19 @@ export class LoadedGeometry extends Geometry {
       const data = await resp.arrayBuffer();
       const filetype = pathToFormat3D(this.path);
       this.geometry = await loadGeometry(data, filetype);
+
+      // Initially rotate the geometry, since in GLTF applications Y is up (not Z).
+      if (filetype === "gltf") {
+        rotate(this.geometry, "x");
+      }
     } else {
       const data = await open3DModel();
       this.geometry = await loadGeometry(data.data, data.filetype);
+
+      // Initially rotate the geometry, since in GLTF applications Y is up (not Z).
+      if (data.filetype === "gltf") {
+        rotate(this.geometry, "x");
+      }
     }
 
     const hasHoles = checkForHoles(this.geometry);
@@ -210,10 +219,6 @@ export class LoadedGeometry extends Geometry {
           hasHoles,
       );
     }
-
-    // Initially rotate the geometry, since in most applications Y is up (not Z).
-    // TODO: don't do this for 3dm files.
-    rotate(this.geometry, "x");
 
     // Create the scaled geometry (the actual geometry which is used).
     this.updateScaledGeometry();
@@ -328,9 +333,7 @@ export class RoundGeometry extends Geometry {
   private generateSphere() {
     const widthSegments = Math.ceil(Math.sqrt(this.minTriangleCount / 2));
     const heightSegments = Math.ceil(Math.sqrt(this.minTriangleCount / 2));
-    console.log(
-      "sphere with " + widthSegments * heightSegments * 2 + " triangles",
-    );
+    log("sphere with ", widthSegments * heightSegments * 2, " triangles");
     this.actualTriangleCount = widthSegments * heightSegments * 2;
     const sphere = new SphereGeometry(
       this.radius,

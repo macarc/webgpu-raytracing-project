@@ -1,24 +1,35 @@
-import { getGPUDevice, ComputeShaderPipeline } from "./webgpu";
 import {
+  getGPUDevice,
+  ComputeShaderPipeline,
+  ShaderBuffer,
+} from "./compute_shader";
+import {
+  FLAG_ALIVE,
+  FLAG_ESCAPED,
   FLOAT32_SIZE,
   Material,
   Ray,
   SAMPLE_RATE,
   SPEED_OF_SOUND,
+  STANDARD_MAX_STORAGE_BUFFER_SIZE,
+  STANDARD_MAX_UNIFORM_BUFFER_SIZE,
   Triangle,
-  vDot,
-  Vec3,
-  vNormalise,
+  WASM_MAX_STORAGE_BUFFER_SIZE,
+  WASM_MAX_UNIFORM_BUFFER_SIZE,
   WORKGROUP_SIZE,
 } from "./constants";
-import { materialsToFloatArray, trianglesToFloatArray } from "./floatarrays";
+import { vDot, Vec3, vNormalise } from "./vectors";
+import {
+  materialsToFloatArray,
+  raysToFloatArray,
+  SIZEOF_MATERIAL,
+  SIZEOF_RAY,
+  trianglesToFloatArray,
+} from "./floatarrays";
 import { combineFilteredAudio } from "./dsp";
+import { error, log } from "./log";
+import { WasmPipeline } from "./wasm";
 
-// From WebGPU specification
-const STANDARD_MAX_STORAGE_BUFFER_SIZE = 134217728;
-const STANDARD_MAX_UNIFORM_BUFFER_SIZE = 65536;
-
-// TODO: frequency dependent.
 const AIR_ABSORPTION_COEFF = 0.0013;
 
 export type Receiver = {
@@ -26,10 +37,11 @@ export type Receiver = {
   radius: number;
 };
 
-export type Settings = {
+export type RayTraceOptions = {
   sourcePosition: Vec3;
   sourceDirection: Vec3 | null;
   receivers: Receiver[];
+  useWasm: boolean;
   rayCount: number;
   throttle: number;
   rayPlotCount: number;
@@ -39,15 +51,23 @@ export type Settings = {
   materials: Material[];
 };
 
-const FLAG_ESCAPED = 0.0;
-const FLAG_ALIVE = 1.0;
-
+/**
+ * Generate the shader code. This is written in WGSL.
+ * If you're in VSCode, you can install the vscode-wgsl-literal plugin
+ * to enable syntax highlighting.
+ * @param receivers
+ * @param materials
+ * @param bounceCount bounces per shader pass.
+ * @returns the WGSL code to be run on the compute shader.
+ */
 function specularRayIntersectionShaderCode(
   receivers: Receiver[],
   materials: Material[],
   bounceCount: number,
 ) {
   return /* wgsl */ `
+  // Struct definitions.
+
   struct Ray {
     x: f32,
     y: f32,
@@ -67,20 +87,16 @@ function specularRayIntersectionShaderCode(
     intensity4000: f32,
   }
 
-  struct Point {
-    x: f32,
-    y: f32,
-    z: f32,
-  }
-
   struct Triangle {
-    material: f32,  // Index into materials array.
+    // Index into materials array.
+    // All types must be a float, but this will be converted to an integer.
+    // Only 2,048 materials can be stored and f32 can accurately store integers up to 2,048.
+    material: f32,
     x: f32, y: f32, z: f32,
     u1: f32, u2: f32, u3: f32,
     v1: f32, v2: f32, v3: f32,
   }
 
-  // TODO: could this just be part of the Triangle.
   struct Material {
     r125: f32,
     r250: f32,
@@ -93,6 +109,8 @@ function specularRayIntersectionShaderCode(
     // Padding - required since the uniform must be a multiple of 16 bytes long.
     _1: f32,
   }
+
+  // Storage/uniform definitions.
 
   @group(0) @binding(0)
   var<storage, read_write> rayBuffer: array<Ray>;
@@ -125,6 +143,8 @@ function specularRayIntersectionShaderCode(
   // Implementations may assume that overflow, infinities, and NaNs are not present during shader execution.
   // Therefore we define infinity to be the largest positive finite instead.
   const INFINITY: f32 = 0x1.fffffep+127f;
+
+  // Shader code.
   
   @compute @workgroup_size(${WORKGROUP_SIZE})
   fn main(
@@ -143,10 +163,6 @@ function specularRayIntersectionShaderCode(
     }
 
     let initialRay = rayBuffer[rayIndex];
-
-    // This is more or less a line-by-line translation of the Möller–Trumbore intersection algorithm.
-    // TODO: one potential idea would be to store u x v with the triangle, which saves on one cross product
-    //       per test. The additional memory strain might not actually make this any faster though.
 
     let smallestPositiveNormal = 1.17549435082228750797e-38f;
     let eps = smallestPositiveNormal;
@@ -193,20 +209,16 @@ function specularRayIntersectionShaderCode(
       for (var i = 0; i < triangleCount; i++) {
         let triangle = triangleBuffer[i];
 
-        // TODO: don't create a vec every time through the loop.
         let edge1 = vec3f(triangle.u1, triangle.u2, triangle.u3);
         let edge2 = vec3f(triangle.v1, triangle.v2, triangle.v3);
         let offset = vec3f(rayposition.x - triangle.x, rayposition.y - triangle.y, rayposition.z - triangle.z);
 
         let offset_cross_e1 = cross(offset, edge1);
 
-        // Ray-trace to receivers.
+        // Ray-trace (diffuse rain) to receivers.
         for (var j = 0; j < ${receivers.length}; j++) {
-          // TODO: negative?
+          // Möller–Trumbore.
           let ray_cross_e2 = cross(directionToReceivers[j], edge2);
-
-          // NOTE: greater than 0 iff ray is incident on backface.
-          let dir = -dot(edge1, ray_cross_e2);  // directionToReceiver.(e1 x e2)
 
           let det = dot(edge1, ray_cross_e2);
           let inv_det = 1.0 / det;
@@ -221,7 +233,7 @@ function specularRayIntersectionShaderCode(
             (abs(det) >= eps) && (u >= -eps) && (v >= -eps) && (u + v <= eps1)
 
             // Ray intercepts the triangle in the positive direction.
-            && t >= eps && dir >= 0
+            && t >= eps && det < 0
           ) {
             receiverRayTriangleDistances[j] = min(receiverRayTriangleDistances[j], t);
           }
@@ -229,10 +241,8 @@ function specularRayIntersectionShaderCode(
 
         // Ray-trace specular ray.
 
+        // Möller–Trumbore.
         let ray_cross_e2 = cross(raydirection, edge2);
-
-        // NOTE: greater than 0 iff ray is incident on backface.
-        let dir = -dot(edge1, ray_cross_e2);  // raydirection.(e1 x e2)
 
         let det = dot(edge1, ray_cross_e2);
         let inv_det = 1.0 / det;
@@ -250,7 +260,7 @@ function specularRayIntersectionShaderCode(
           (abs(det) >= eps) && (u >= -eps) && (v >= -eps) && (u + v <= eps1)
 
           // Ray intercepts the triangle in the positive direction.
-          && t >= eps && dir >= 0
+          && t >= eps && det < 0
 
           // Ray intercepts the triangle before the previously-closest triangle.
           && t < rayTriangleDistance
@@ -277,7 +287,6 @@ function specularRayIntersectionShaderCode(
         let triangle = triangleBuffer[closestTriangleIndex];
         let material = materials[u32(triangle.material)];
 
-        // TODO: unroll this loop (and all the other receivers loops).
         for (var j: u32 = 0; j < ${receivers.length}; j++) {
           distances_and_ray_escaped_flags[upperIndex + j] = ${FLAG_ALIVE};
           distances_and_ray_escaped_flags[lowerIndex + j] = raydistancetravelled + distanceToReceivers[j];
@@ -292,12 +301,10 @@ function specularRayIntersectionShaderCode(
               let rayVecToClosestReceiverPoint = dot(vecToReceivers[j], raydirection) * raydirection;
               let distanceFromRayToReceiver = length(vecToReceivers[j] - rayVecToClosestReceiverPoint);
 
-              let specularCoefficient = (1 - material.scatter) * f32(distanceFromRayToReceiver <= receiverRadii[j]);
-              // let diffuseCoefficient = material.scatter * (1 - 1 / sqrt(pow(receiverRadii[j] / distanceFromRayToReceiver, 2) + 1)) * 2 * cosNormalAngleToReceiver;
-              let diffuseCoefficient = material.scatter * cosNormalAngleToReceiver;// / (2.0*3.14159265);
+              let receiverRadius = receiverRadii[j];
 
-              // let totalIntensity = additionDueToRay + cosNormalAngleToReceiver;
-              // let totalIntensity = (1 - material.scatter) * additionDueToRay + material.scatter * cosNormalAngleToReceiver;
+              let specularCoefficient = (1 - material.scatter) * f32(distanceFromRayToReceiver <= receiverRadius);
+              let diffuseCoefficient = material.scatter * (1 - 1 / sqrt(pow(receiverRadius / distanceFromRayToReceiver, 2) + 1)) * 2 * cosNormalAngleToReceiver;
               let totalCoefficient = specularCoefficient + diffuseCoefficient;
 
               band_125_and_250[lowerIndex + j] = intensity_125 * totalCoefficient;
@@ -329,11 +336,10 @@ function specularRayIntersectionShaderCode(
         intensity_2000 *= material.r2000;
         intensity_4000 *= material.r4000;
 
-        // NOTE: if there is more than 1 receiver, then this is wasteful.
         x_and_y[lowerIndex] = newposition.x;
         x_and_y[upperIndex] = newposition.y;
         z_and_ray_intensity[lowerIndex] = newposition.z;
-        z_and_ray_intensity[upperIndex] = (intensity_125 + intensity_250 + intensity_500 + intensity_1000 + intensity_2000 + intensity_4000) / 6;
+        z_and_ray_intensity[upperIndex] = 0.25 * (intensity_250 + intensity_500 + intensity_1000 + intensity_2000);
       }
     }
 
@@ -375,6 +381,55 @@ export type RayTraceProgress = {
 
 export type UpdateFunction = (progress: RayTraceProgress) => void;
 
+/**
+ * Generate rayCount rays, equally spaced in a Fibonacci spiral.
+ * @param rayCount 
+ * @param sourcePosition 
+ * @param sourceDirection 
+ * @returns 
+ */
+export function evenlyDistributedRays(
+  rayCount: number,
+  sourcePosition: Vec3,
+  sourceDirection: Vec3 | null,
+): Ray[] {
+  const rays: Ray[] = [];
+
+  const direction = sourceDirection && vNormalise(sourceDirection);
+
+  // Golden ratio.
+  const GOLDEN_RATIO = (1 + Math.sqrt(5)) / 2;
+
+  // Create the rays.
+  for (let i = 0; i < rayCount; ++i) {
+    const theta = (2 * Math.PI * i) / GOLDEN_RATIO;
+    const phi = Math.acos(1 - (2 * i) / rayCount);
+    const ray: Vec3 = [
+      Math.cos(theta) * Math.sin(phi),
+      Math.sin(theta) * Math.sin(phi),
+      Math.cos(phi),
+    ];
+
+    let intensity = 1.0;
+
+    if (direction !== null) {
+      const rayDotDirection = vDot(ray, direction);
+      intensity = (rayDotDirection + 1) / 2;
+    }
+
+    // const randomVariation: Vec3 = vScale(0.1, [Math.random()*2-1, Math.random()*2-1, Math.random()*2-1]);
+    // const dir = vNormalise(vAdd(randomVariation, vNormalise(ray)))
+
+    rays.push({
+      position: sourcePosition,
+      direction: vNormalise(ray), // dir
+      intensity,
+    });
+  }
+
+  return rays;
+}
+
 export class RayTrace {
   private cancelled = false;
 
@@ -383,7 +438,7 @@ export class RayTrace {
   }
 
   async run(
-    settings: Settings,
+    options: RayTraceOptions,
     update: UpdateFunction,
   ): Promise<RayTraceOutput | null> {
     const startTime = performance.now();
@@ -393,153 +448,151 @@ export class RayTrace {
     update({
       bounceCount: 0,
       secondsElapsed: 0,
-      totalSeconds: settings.audioDuration,
+      totalSeconds: options.audioDuration,
       escapedRayCount: 0,
-      totalRayCount: settings.rayCount,
+      totalRayCount: options.rayCount,
       runTimeMs: performance.now() - startTime,
     });
 
-    console.time("Total (including setup)");
-    console.log("Creating geometry");
-    const rays: Ray[] = [];
+    log("creating geometry");
 
-    const directionUnnormalised =
-      (settings.sourceDirection?.slice() as Vec3) || null;
-    const direction =
-      directionUnnormalised && vNormalise(directionUnnormalised);
-
-    // Create the rays.
-    const goldenRatio = (1 + Math.sqrt(5)) / 2;
-    for (let i = 0; i < settings.rayCount; ++i) {
-      const theta = (2 * Math.PI * i) / goldenRatio;
-      const phi = Math.acos(1 - (2 * i) / settings.rayCount);
-      const ray: Vec3 = [
-        Math.cos(theta) * Math.sin(phi),
-        Math.sin(theta) * Math.sin(phi),
-        Math.cos(phi),
-      ];
-
-      let intensity = 1.0;
-
-      if (direction !== null) {
-        const rayDotDirection = vDot(ray, direction);
-        intensity = (rayDotDirection + 1) / 2;
-      }
-
-      rays.push({
-        position: settings.sourcePosition,
-        direction: vNormalise(ray),
-        intensity,
-      });
-    }
+    const rays = evenlyDistributedRays(
+      options.rayCount,
+      options.sourcePosition,
+      options.sourceDirection,
+    );
 
     const gpuDevice = await getGPUDevice();
 
     if (!gpuDevice) {
-      throw new Error("Aborted due to null GPU device");
+      error("no GPU device");
+      return null;
     }
 
-    const maxStorageBufferSize =
-      gpuDevice.limits.maxStorageBufferBindingSize ||
-      STANDARD_MAX_STORAGE_BUFFER_SIZE;
+    const maxStorageBufferSize = options.useWasm
+      ? WASM_MAX_STORAGE_BUFFER_SIZE
+      : gpuDevice.limits.maxStorageBufferBindingSize ||
+        STANDARD_MAX_STORAGE_BUFFER_SIZE;
+    const maxUniformBufferSize = options.useWasm
+      ? WASM_MAX_UNIFORM_BUFFER_SIZE
+      : gpuDevice.limits.maxUniformBufferBindingSize ||
+        STANDARD_MAX_UNIFORM_BUFFER_SIZE;
 
     // Number of bounces per pass is limited by how large the output buffer is allowed to be.
     // Each ray outputs 2 floats (distance and intensity) per bounce.
     const bouncesPerPass = Math.max(
       1,
       Math.floor(
-        ((1 - settings.throttle) * maxStorageBufferSize) /
-          (2 * FLOAT32_SIZE * settings.rayCount * settings.receivers.length),
+        ((1 - options.throttle) * maxStorageBufferSize) /
+          (2 * FLOAT32_SIZE * options.rayCount * options.receivers.length),
       ),
     );
 
-    console.log("bouncesPerPass", bouncesPerPass);
+    log("bouncesPerPass", bouncesPerPass);
 
-    const outputSize =
-      2 * bouncesPerPass * settings.rayCount * settings.receivers.length;
+    const bufferSize =
+      2 * bouncesPerPass * options.rayCount * options.receivers.length;
+    const halfBufferSize = bufferSize / 2;
 
-    if (outputSize > maxStorageBufferSize) {
-      console.log("Output buffer is too large, will not work");
+    if (rays.length * SIZEOF_RAY > maxStorageBufferSize) {
+      error(
+        "ray buffer is too large, will not work! Try reducing the ray count.",
+      );
+      return null;
     }
 
-    const shader = new ComputeShaderPipeline(
-      gpuDevice,
-      specularRayIntersectionShaderCode(
-        settings.receivers,
-        settings.materials,
-        bouncesPerPass,
-      ),
-      [
-        {
-          data: new Float32Array(
-            rays.flatMap((ray) => [
-              ...ray.position,
-              ...ray.direction,
-              ...[0, 0, 0],
-              0,
-              ray.intensity,
-              ray.intensity,
-              ray.intensity,
-              ray.intensity,
-              ray.intensity,
-              ray.intensity,
-            ]),
+    if (bufferSize * FLOAT32_SIZE > maxStorageBufferSize) {
+      error(
+        "output buffer is too large, will not work! Try reducing the ray count.",
+      );
+      return null;
+    }
+
+    if (options.materials.length * SIZEOF_MATERIAL >= maxUniformBufferSize) {
+      error(
+        "materials buffer is too large, will not work! Try reducing the number of materials.",
+      );
+      return null;
+    }
+
+    const buffers: ShaderBuffer[] = [
+      {
+        data: raysToFloatArray(rays),
+        type: "storage",
+        output: false,
+      },
+      {
+        data: trianglesToFloatArray(options.geometry, options.materials),
+        type: "read-only-storage",
+        output: false,
+      },
+      {
+        data: new Float32Array(bufferSize), // distance and ray escaped flag
+
+        type: "storage",
+        output: true,
+      },
+      {
+        data: new Float32Array(bufferSize), // band 125 and 250
+
+        type: "storage",
+        output: true,
+      },
+      {
+        data: new Float32Array(bufferSize), // band 500 and 1000
+
+        type: "storage",
+        output: true,
+      },
+      {
+        data: new Float32Array(bufferSize), // band 2000 and 4000
+
+        type: "storage",
+        output: true,
+      },
+      {
+        data: new Float32Array(bufferSize), // x and y
+
+        type: "storage",
+        output: true,
+      },
+      {
+        data: new Float32Array(bufferSize), // z and ray intensity
+
+        type: "storage",
+        output: true,
+      },
+      {
+        data: materialsToFloatArray(options.materials),
+        type: "uniform",
+        output: false,
+      },
+    ];
+
+    const shader: ComputeShaderPipeline | WasmPipeline = options.useWasm
+      ? new WasmPipeline(
+          bouncesPerPass,
+          options.geometry.length,
+          options.receivers,
+          buffers,
+        )
+      : new ComputeShaderPipeline(
+          gpuDevice,
+          specularRayIntersectionShaderCode(
+            options.receivers,
+            options.materials,
+            bouncesPerPass,
           ),
-          type: "storage",
-          output: false,
-        },
-        {
-          data: trianglesToFloatArray(settings.geometry, settings.materials),
-          type: "read-only-storage",
-          output: false,
-        },
-        {
-          data: new Float32Array(outputSize), // distance and ray escaped flag
+          buffers,
+        );
 
-          type: "storage",
-          output: true,
-        },
-        {
-          data: new Float32Array(outputSize), // band 125 and 250
+    if (shader instanceof WasmPipeline) {
+      await shader.initialise();
+    }
 
-          type: "storage",
-          output: true,
-        },
-        {
-          data: new Float32Array(outputSize), // band 500 and 1000
+    const receiversCount = options.receivers.length;
 
-          type: "storage",
-          output: true,
-        },
-        {
-          data: new Float32Array(outputSize), // band 2000 and 4000
-
-          type: "storage",
-          output: true,
-        },
-        {
-          data: new Float32Array(outputSize), // x and y
-
-          type: "storage",
-          output: true,
-        },
-        {
-          data: new Float32Array(outputSize), // z and ray intensity
-
-          type: "storage",
-          output: true,
-        },
-        {
-          data: materialsToFloatArray(settings.materials),
-          type: "uniform",
-          output: false,
-        },
-      ],
-    );
-
-    const receiversCount = settings.receivers.length;
-
-    const sampleCount = Math.ceil(SAMPLE_RATE * settings.audioDuration);
+    const sampleCount = Math.ceil(SAMPLE_RATE * options.audioDuration);
 
     const outputs: [
       Float32Array<ArrayBuffer>,
@@ -551,7 +604,6 @@ export class RayTrace {
     ][] = [];
 
     for (let i = 0; i < receiversCount; ++i) {
-      // TODO BUG this could be a non-integer
       outputs.push([
         new Float32Array(sampleCount), // 125Hz
         new Float32Array(sampleCount), // 250Hz
@@ -563,26 +615,23 @@ export class RayTrace {
     }
 
     const gapBetweenIndicesToCount = Math.floor(
-      settings.rayCount / settings.rayPlotCount,
+      options.rayCount / options.rayPlotCount,
     );
 
     const plottedRayCoordinates: Float32Array<ArrayBuffer>[] = [];
 
-    for (let i = 0; i < settings.rayPlotCount; ++i) {
-      plottedRayCoordinates.push(
-        new Float32Array(4 * settings.bouncePlotCount),
-      );
+    for (let i = 0; i < options.rayPlotCount; ++i) {
+      plottedRayCoordinates.push(new Float32Array(4 * options.bouncePlotCount));
       plottedRayCoordinates[i][0] =
         rays[gapBetweenIndicesToCount * i].intensity;
-      plottedRayCoordinates[i][1] = settings.sourcePosition[0];
-      plottedRayCoordinates[i][2] = settings.sourcePosition[1];
-      plottedRayCoordinates[i][3] = settings.sourcePosition[2];
+      plottedRayCoordinates[i][1] = options.sourcePosition[0];
+      plottedRayCoordinates[i][2] = options.sourcePosition[1];
+      plottedRayCoordinates[i][3] = options.sourcePosition[2];
     }
-
-    console.time("Total (excluding setup)");
 
     // TODO BUG: number of bounces to plot does not line up with actual number plotted.
 
+    let minDistanceTravelled = 0;
     let minIndex = 0;
     let bounceCount = 0;
 
@@ -600,39 +649,50 @@ export class RayTrace {
       update({
         bounceCount,
         secondsElapsed: minIndex / SAMPLE_RATE,
-        totalSeconds: settings.audioDuration,
+        totalSeconds: options.audioDuration,
         escapedRayCount,
-        totalRayCount: settings.rayCount,
+        totalRayCount: options.rayCount,
         runTimeMs: performance.now() - startTime,
       });
 
       // Run the shader and get the result.
-      const result = await shader.run(settings.rayCount);
+      const result = await shader.run(options.rayCount);
 
       minIndex = sampleCount;
-
-      const halfBufferLength = outputSize / 2;
+      minDistanceTravelled = SPEED_OF_SOUND * sampleCount / SAMPLE_RATE;
 
       escapedRayCount = 0;
 
       for (let k = 0; k < receiversCount; ++k) {
         const output = outputs[k];
 
-        for (let j = k; j < halfBufferLength; j += receiversCount) {
-          const index = Math.round(
-            SAMPLE_RATE * (result[0][j] / SPEED_OF_SOUND),
-          );
-          const air_absorption = Math.exp(-result[0][j] * AIR_ABSORPTION_COEFF);
-
+        for (let j = k; j < halfBufferSize; j += receiversCount) {
           const lowerIndex = j;
-          const upperIndex = halfBufferLength + j;
+          const upperIndex = halfBufferSize + j;
 
-          output[0][index] += result[1][lowerIndex] * air_absorption;
-          output[1][index] += result[1][upperIndex] * air_absorption;
-          output[2][index] += result[2][lowerIndex] * air_absorption;
-          output[3][index] += result[2][upperIndex] * air_absorption;
-          output[4][index] += result[3][lowerIndex] * air_absorption;
-          output[5][index] += result[3][upperIndex] * air_absorption;
+          const rayIndex = Math.floor(j / (bouncesPerPass * receiversCount));
+          const bounceIndex =
+            bounceCount +
+            (j - bouncesPerPass * receiversCount * rayIndex) / receiversCount;
+
+          const distanceTravelled = result[0][lowerIndex];
+
+          const index = Math.round(
+            SAMPLE_RATE * (distanceTravelled / SPEED_OF_SOUND),
+          );
+
+          const airAbsorption = Math.exp(
+            -distanceTravelled * AIR_ABSORPTION_COEFF,
+          );
+
+          // if (rayIndex === 1209343) {
+          output[0][index] += result[1][lowerIndex] * airAbsorption;
+          output[1][index] += result[1][upperIndex] * airAbsorption;
+          output[2][index] += result[2][lowerIndex] * airAbsorption;
+          output[3][index] += result[2][upperIndex] * airAbsorption;
+          output[4][index] += result[3][lowerIndex] * airAbsorption;
+          output[5][index] += result[3][upperIndex] * airAbsorption;
+          // }
 
           const escaped = result[0][upperIndex] === FLAG_ESCAPED;
 
@@ -647,19 +707,16 @@ export class RayTrace {
               0
           ) {
             minIndex = Math.min(minIndex, index);
+            minDistanceTravelled = Math.min(minDistanceTravelled, distanceTravelled)
           }
 
-          const rayIndex = Math.floor(j / (bouncesPerPass * receiversCount));
-          const bounceIndex =
-            bounceCount -
-            bouncesPerPass +
-            (j - bouncesPerPass * receiversCount * rayIndex) / receiversCount;
+          // TODO: plot better rays.
           if (
             k === 0 &&
             rayIndex % gapBetweenIndicesToCount === 0 &&
             rayIndex / gapBetweenIndicesToCount <
               plottedRayCoordinates.length &&
-            bounceIndex < settings.bouncePlotCount
+            bounceIndex < options.bouncePlotCount
           ) {
             // Plus 1 so we skip the initial location.
             const pointIndex = (bounceIndex + 1) * 4;
@@ -679,27 +736,21 @@ export class RayTrace {
           }
         }
       }
-      console.log(
-        `Escaped rays: ${escapedRayCount} (${(100 * escapedRayCount) / settings.rayCount}%)`,
-      );
       bounceCount += bouncesPerPass;
     }
 
     update({
       bounceCount,
       secondsElapsed: minIndex / SAMPLE_RATE,
-      totalSeconds: settings.audioDuration,
+      totalSeconds: options.audioDuration,
       escapedRayCount,
-      totalRayCount: settings.rayCount,
+      totalRayCount: options.rayCount,
       runTimeMs: performance.now() - startTime,
     });
 
     const outputAudio = outputs.map((output) =>
       combineFilteredAudio(...output),
     );
-
-    console.timeEnd("Total (excluding setup)");
-    console.timeEnd("Total (including setup)");
 
     // Free all resources on the GPU.
     shader.destroy();

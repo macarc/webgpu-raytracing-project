@@ -1,4 +1,25 @@
-import { materialNameToIndex, Triangle, Material } from "./constants";
+import { Triangle, Material, Ray, FLOAT32_SIZE } from "./constants";
+import { materialNameToIndex } from "./helpers/common";
+
+export const SIZEOF_RAY = 16 * FLOAT32_SIZE; // 16 floats per ray.
+export const SIZEOF_MATERIAL = 8 * FLOAT32_SIZE; // 8 floats per material.
+
+export function raysToFloatArray(rays: Ray[]): Float32Array<ArrayBuffer> {
+  return new Float32Array(
+    rays.flatMap((ray) => [
+      ...ray.position,
+      ...ray.direction,
+      ...[0, 0, 0],
+      0,
+      ray.intensity,
+      ray.intensity,
+      ray.intensity,
+      ray.intensity,
+      ray.intensity,
+      ray.intensity,
+    ]),
+  );
+}
 
 /**
  * Convert triangles to a Float32Array to be passed to a shader.
